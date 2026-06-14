@@ -4,17 +4,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CIAggregate } from '../types/aggregates'
+import type { DashboardWindowDay } from '../types/snapshot'
 
 const props = defineProps<{
-  data: CIAggregate[]
+  data: DashboardWindowDay[]
 }>()
 
 const chartOption = computed(() => {
-  const periods = props.data.map(d => formatPeriod(d.periodStart, d.periodEnd)).reverse()
-  const passCount = props.data.map(d => d.passCount).reverse()
-  const failCount = props.data.map(d => d.failCount).reverse()
-  const passRate = props.data.map(d => d.passRate * 100).reverse()
+  const labels = props.data.map(d => formatDayLabel(d.day))
+  const passCount = props.data.map(d => d.isGap ? null : (d.metrics?.ciPassCount ?? 0))
+  const failCount = props.data.map(d => d.isGap ? null : (d.metrics?.ciFailCount ?? 0))
+  const passRate = props.data.map(d => d.isGap || d.metrics?.ciPassRate == null ? null : d.metrics.ciPassRate * 100)
+
+  const labelRotation = labels.length > 14 ? 45 : (labels.length > 6 ? 30 : 0)
+  const labelInterval = labels.length > 14 ? 'auto' as const : 0
 
   return {
     tooltip: {
@@ -32,11 +35,11 @@ const chartOption = computed(() => {
       itemWidth: 10,
       itemHeight: 10,
     },
-    grid: { left: 44, right: 44, top: 32, bottom: 28 },
+    grid: { left: 44, right: 44, top: 32, bottom: 32 },
     xAxis: {
       type: 'category' as const,
-      data: periods,
-      axisLabel: { color: '#64748b', fontSize: 10, rotate: periods.length > 6 ? 30 : 0 },
+      data: labels,
+      axisLabel: { color: '#64748b', fontSize: 10, rotate: labelRotation, interval: labelInterval },
       axisLine: { lineStyle: { color: '#334155' } },
     },
     yAxis: [
@@ -60,7 +63,7 @@ const chartOption = computed(() => {
         stack: 'runs',
         data: passCount,
         itemStyle: { color: '#4ade80' },
-        barMaxWidth: 24,
+        barMaxWidth: 18,
       },
       {
         name: 'Failed',
@@ -68,16 +71,17 @@ const chartOption = computed(() => {
         stack: 'runs',
         data: failCount,
         itemStyle: { color: '#f87171' },
-        barMaxWidth: 24,
+        barMaxWidth: 18,
       },
       {
         name: 'Pass rate',
         type: 'line',
         yAxisIndex: 1,
         data: passRate,
+        connectNulls: false,
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 5,
         lineStyle: { color: '#c084fc', width: 2 },
         itemStyle: { color: '#c084fc' },
       },
@@ -85,10 +89,5 @@ const chartOption = computed(() => {
   }
 })
 
-function formatPeriod(start: string, end: string): string {
-  const s = new Date(start)
-  const e = new Date(end)
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
-  return `${s.toLocaleDateString('en-US', opts)}-${e.toLocaleDateString('en-US', { day: 'numeric' })}`
-}
+
 </script>

@@ -69,12 +69,9 @@
       />
       <MetricCard
         label="Stale PRs"
-        :value="staleWork?.stalePRs"
+        :value="staleWork?.stalePrs"
         :trend="stalePRsTrend"
       />
-      <p v-if="staleWork?.oldestItemDays != null" class="summary-oldest">
-        Oldest: {{ staleWork.oldestItemDays.toFixed(0) }} days
-      </p>
     </UiCard>
 
     <UiCard title="Session Usage">
@@ -85,35 +82,22 @@
       />
       <MetricCard
         label="Error count"
-        :value="sessionUsage?.errorCount"
-        :trend="sessionErrorTrend(sessionUsage?.errorCount)"
+        :value="sessionUsage?.sessionErrorCount"
+        :trend="sessionErrorTrend(sessionUsage?.sessionErrorCount)"
       />
-      <p v-if="sessionUsage && sessionUsage.uniqueTools.length > 0" class="summary-oldest">
-        Tools: {{ sessionUsage.uniqueTools.join(', ') }}
-      </p>
-      <div v-if="sessionUsage && sessionUsage.topActions.length > 0" class="summary-top-actions">
-        <p class="summary-section-label">Top actions:</p>
-        <span
-          v-for="a in sessionUsage.topActions.slice(0, 4)"
-          :key="a.action"
-          class="summary-action-tag"
-        >
-          {{ a.action }} ({{ a.count }})
-        </span>
-      </div>
     </UiCard>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate } from '../types/aggregates'
+import type { DashboardWindowThroughputSummary, DashboardWindowCycleTimeSummary, DashboardWindowCISummary, DashboardWindowStaleWorkSummary, DashboardWindowSessionSummary } from '../types/snapshot'
 
 const props = defineProps<{
-  throughput: ThroughputAggregate | null
-  cycleTime: CycleTimeAggregate | null
-  ci: CIAggregate | null
-  staleWork: StaleWorkAggregate | null
-  sessionUsage: SessionUsageAggregate | null
+  throughput: DashboardWindowThroughputSummary | null
+  cycleTime: DashboardWindowCycleTimeSummary | null
+  ci: DashboardWindowCISummary | null
+  staleWork: DashboardWindowStaleWorkSummary | null
+  sessionUsage: DashboardWindowSessionSummary | null
 }>()
 
 function throughputTrend(val: number | undefined): 'up' | 'down' | 'neutral' {
@@ -138,37 +122,6 @@ function sessionErrorTrend(val: number | undefined): 'up' | 'down' | 'neutral' {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
-}
-
-.summary-oldest {
-  margin-top: 0.3rem;
-  font-size: 0.75rem;
-  color: #94a3b8;
-}
-
-.summary-section-label {
-  margin-top: 0.3rem;
-  font-size: 0.7rem;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.summary-top-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-top: 0.3rem;
-}
-
-.summary-action-tag {
-  display: inline-block;
-  padding: 0.1rem 0.4rem;
-  font-size: 0.7rem;
-  color: #e2e8f0;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 0.25rem;
 }
 
 @media (max-width: 1100px) {

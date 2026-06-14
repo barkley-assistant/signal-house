@@ -3,7 +3,10 @@
     <div class="page-header">
       <div>
         <h2 class="page-title">Overview</h2>
-        <p class="page-subtitle">Engineering health at a glance</p>
+        <p class="page-subtitle">
+          28-day rolling window
+          <template v-if="windowRange">· {{ windowRange }}</template>
+        </p>
       </div>
       <div class="page-actions">
         <button
@@ -20,6 +23,17 @@
           {{ refreshing ? 'Refreshing...' : 'Refresh' }}
         </button>
       </div>
+    </div>
+
+    <!-- Coverage / window info -->
+    <div v-if="coverage && !loading && !error" class="coverage-row">
+      <svg class="coverage-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+      <span v-if="coverage.isComplete" class="coverage-ok">{{ coverage.daysWithData }}/{{ coverage.totalDays }} days</span>
+      <span v-else class="coverage-gap">{{ coverage.daysWithData }}/{{ coverage.totalDays }} days{{ coverage.hasGaps ? ' · ' + coverage.missingDays + ' missing' : '' }}</span>
+      <span v-if="coverage.hasSourceWarnings" class="coverage-gap">· source warnings</span>
     </div>
 
     <!-- Error state (initial load) -->
@@ -86,22 +100,31 @@
         <span>Data may be incomplete: {{ snapshot.metadata.errors[0] }}</span>
       </div>
 
+      <!-- Dashboard window warnings -->
+      <div v-for="w in windowWarnings" :key="w" class="banner banner--warning">
+        <svg class="banner__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <path d="M12 9v4M12 17h.01" />
+        </svg>
+        <span>{{ w }}</span>
+      </div>
+
       <div class="sections">
         <div class="section section-large section-summary">
           <SummaryCards
-            :throughput="snapshot.aggregates.throughput"
-            :cycle-time="snapshot.aggregates.cycleTime"
-            :ci="snapshot.aggregates.ci"
-            :stale-work="snapshot.aggregates.staleWork"
-            :session-usage="snapshot.aggregates.sessionUsage"
+            :throughput="cards?.throughput ?? null"
+            :cycle-time="cards?.cycleTime ?? null"
+            :ci="cards?.ci ?? null"
+            :stale-work="cards?.staleWork ?? null"
+            :session-usage="cards?.sessionUsage ?? null"
           />
         </div>
 
         <div class="section section-chart">
           <UiCard title="Throughput">
             <ThroughputChart
-              v-if="throughputData.length > 0"
-              :data="throughputData"
+              v-if="hasDataDays"
+              :data="dashboardDays"
             />
             <EmptyState v-else message="No throughput data yet" />
           </UiCard>
@@ -110,8 +133,8 @@
         <div class="section section-chart">
           <UiCard title="Cycle Time">
             <CycleTimeChart
-              v-if="cycleTimeData.length > 0"
-              :data="cycleTimeData"
+              v-if="hasDataDays"
+              :data="dashboardDays"
             />
             <EmptyState v-else message="No cycle time data yet" />
           </UiCard>
@@ -120,8 +143,8 @@
         <div class="section section-chart">
           <UiCard title="CI Health">
             <CIHealthChart
-              v-if="ciData.length > 0"
-              :data="ciData"
+              v-if="hasDataDays"
+              :data="dashboardDays"
             />
             <EmptyState v-else message="No CI data yet" />
           </UiCard>
@@ -139,31 +162,36 @@
     </template>
 
     <footer class="last-refresh" v-if="lastRefresh">
-      <p>Last updated: {{ lastRefresh }}</p>
+      <p>28-day window: {{ windowRange }} · Last refreshed: {{ lastRefresh }}</p>
     </footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { LatestState } from '../types/snapshot'
-import type { ThroughputAggregate, CycleTimeAggregate, CIAggregate } from '../types/aggregates'
+import type { LatestState, DashboardWindow } from '../types/snapshot'
 
 const fetchOpts = { cache: 'no-store' as const }
 const { data: stateData, pending: statePending, error: stateError, refresh: refreshState } = useFetch<LatestState>('/api/state', fetchOpts)
-const { data: throughputRaw, pending: throughputPending, refresh: refreshThroughput } = useFetch<ThroughputAggregate[]>('/api/trends/throughput', fetchOpts)
-const { data: cycleTimeRaw, pending: cycleTimePending, refresh: refreshCycleTime } = useFetch<CycleTimeAggregate[]>('/api/trends/cycleTime', fetchOpts)
-const { data: ciRaw, pending: ciPending, refresh: refreshCI } = useFetch<CIAggregate[]>('/api/trends/ci', fetchOpts)
 
-const loading = computed(() => statePending.value || throughputPending.value || cycleTimePending.value || ciPending.value)
+const loading = computed(() => statePending.value)
 const error = computed(() => stateError.value)
 const snapshot = computed(() => stateData.value?.snapshot ?? null)
 const isStale = computed(() => stateData.value?.isStale ?? false)
 const refreshing = ref(false)
 const refreshError = ref<string | null>(null)
 
-const throughputData = computed<ThroughputAggregate[]>(() => throughputRaw.value ?? [])
-const cycleTimeData = computed<CycleTimeAggregate[]>(() => cycleTimeRaw.value ?? [])
-const ciData = computed<CIAggregate[]>(() => ciRaw.value ?? [])
+const dashboardWindow = computed<DashboardWindow | null>(() => stateData.value?.dashboardWindow ?? null)
+const cards = computed(() => dashboardWindow.value?.cards ?? null)
+const dashboardDays = computed(() => dashboardWindow.value?.days ?? [])
+const coverage = computed(() => dashboardWindow.value?.coverage ?? null)
+const windowWarnings = computed(() => dashboardWindow.value?.warnings ?? [])
+const hasDataDays = computed(() => dashboardDays.value.some(d => !d.isGap))
+
+const windowRange = computed(() => {
+  const dw = dashboardWindow.value
+  if (!dw) return ''
+  return formatWindowRange(dw.startDay, dw.endDay)
+})
 
 const lastRefresh = computed(() => {
   const ts = stateData.value?.lastSuccessfulRefreshAt
@@ -191,12 +219,7 @@ async function doRefresh() {
   try {
     await $fetch('/api/refresh', { method: 'POST' })
     await pollForRefreshComplete()
-    await Promise.all([
-      refreshState(),
-      refreshThroughput(),
-      refreshCycleTime(),
-      refreshCI(),
-    ])
+    await refreshState()
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'statusCode' in err && (err as any).statusCode === 409) {
       refreshError.value = 'A refresh is already in progress'
@@ -376,6 +399,33 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
   font-size: 0.75rem;
   color: #475569;
   text-align: right;
+}
+
+.coverage-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.375rem;
+  background: #1e293b;
+  border: 1px solid #334155;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.coverage-row__icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+}
+
+.coverage-ok {
+  color: #4ade80;
+}
+
+.coverage-gap {
+  color: #fbbf24;
 }
 
 @media (max-width: 1100px) {

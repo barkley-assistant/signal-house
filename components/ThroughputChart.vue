@@ -4,17 +4,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ThroughputAggregate } from '../types/aggregates'
+import type { DashboardWindowDay } from '../types/snapshot'
 
 const props = defineProps<{
-  data: ThroughputAggregate[]
+  data: DashboardWindowDay[]
 }>()
 
 const chartOption = computed(() => {
-  const periods = props.data.map(d => formatPeriod(d.periodStart, d.periodEnd)).reverse()
-  const opened = props.data.map(d => d.issuesOpened).reverse()
-  const closed = props.data.map(d => d.issuesClosed).reverse()
-  const merged = props.data.map(d => d.prsMerged).reverse()
+  const labels = props.data.map(d => formatDayLabel(d.day))
+  const opened = props.data.map(d => d.isGap ? null : (d.metrics?.issuesOpened ?? 0))
+  const closed = props.data.map(d => d.isGap ? null : (d.metrics?.issuesClosed ?? 0))
+  const merged = props.data.map(d => d.isGap ? null : (d.metrics?.prsMerged ?? 0))
+
+  const labelRotation = labels.length > 14 ? 45 : (labels.length > 6 ? 30 : 0)
+  const labelInterval = labels.length > 14 ? 'auto' as const : 0
 
   return {
     tooltip: { trigger: 'axis' as const },
@@ -24,11 +27,11 @@ const chartOption = computed(() => {
       itemWidth: 10,
       itemHeight: 10,
     },
-    grid: { left: 40, right: 16, top: 32, bottom: 28 },
+    grid: { left: 40, right: 16, top: 32, bottom: 32 },
     xAxis: {
       type: 'category' as const,
-      data: periods,
-      axisLabel: { color: '#64748b', fontSize: 10, rotate: periods.length > 6 ? 30 : 0 },
+      data: labels,
+      axisLabel: { color: '#64748b', fontSize: 10, rotate: labelRotation, interval: labelInterval },
       axisLine: { lineStyle: { color: '#334155' } },
       axisTick: { alignWithLabel: true },
     },
@@ -44,7 +47,7 @@ const chartOption = computed(() => {
         stack: 'total',
         data: opened,
         itemStyle: { color: '#60a5fa' },
-        barMaxWidth: 24,
+        barMaxWidth: 18,
       },
       {
         name: 'Closed',
@@ -52,26 +55,22 @@ const chartOption = computed(() => {
         stack: 'total',
         data: closed,
         itemStyle: { color: '#4ade80' },
-        barMaxWidth: 24,
+        barMaxWidth: 18,
       },
       {
         name: 'Merged',
         type: 'line',
         data: merged,
+        connectNulls: false,
         lineStyle: { color: '#c084fc', width: 2 },
         itemStyle: { color: '#c084fc' },
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 5,
       },
     ],
   }
 })
 
-function formatPeriod(start: string, end: string): string {
-  const s = new Date(start)
-  const e = new Date(end)
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
-  return `${s.toLocaleDateString('en-US', opts)}-${e.toLocaleDateString('en-US', { day: 'numeric' })}`
-}
+
 </script>
