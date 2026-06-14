@@ -107,8 +107,8 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
 
       emit('deriving', 'Computing aggregate signals...')
 
-      const config = { staleThresholdDays, lookbackDays }
-      const aggregates = deriveAll(issues, prs, checkRuns, config)
+      const deriveConfig = { staleThresholdDays, lookbackDays }
+      const aggregates = deriveAll(issues, prs, checkRuns, deriveConfig)
 
       const captureTime = new Date()
       const capturedAt = captureTime.toISOString()
@@ -133,6 +133,7 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         checkRuns,
         repositories: repo ? [repo] : [],
         sessions: [],
+        localGit: [],
         errors: errorMetrics,
         aggregates: {
           ...aggregates,
@@ -146,33 +147,35 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         },
       }
 
-      emit('caching', 'Persisting snapshot to local cache...')
-      try {
-        await initDb()
-        insertSnapshot(snapshot)
+      if (!config.skipPersist) {
+        emit('caching', 'Persisting snapshot to local cache...')
+        try {
+          await initDb()
+          insertSnapshot(snapshot)
 
-        const aggTypes: Array<{ type: AggregateType; data: unknown }> = [
-          { type: 'throughput', data: aggregates.throughput },
-          { type: 'cycleTime', data: aggregates.cycleTime },
-          { type: 'ci', data: aggregates.ci },
-          { type: 'staleWork', data: aggregates.staleWork },
-        ]
+          const aggTypes: Array<{ type: AggregateType; data: unknown }> = [
+            { type: 'throughput', data: aggregates.throughput },
+            { type: 'cycleTime', data: aggregates.cycleTime },
+            { type: 'ci', data: aggregates.ci },
+            { type: 'staleWork', data: aggregates.staleWork },
+          ]
 
-        for (const { type, data } of aggTypes) {
-          if (data !== null) {
-            insertAggregate(
-              `${type}-${capturedAt}`,
-              type,
-              aggregates.throughput.periodStart,
-              aggregates.throughput.periodEnd,
-              data,
-              snapshotId,
-            )
+          for (const { type, data } of aggTypes) {
+            if (data !== null) {
+              insertAggregate(
+                `${type}-${capturedAt}`,
+                type,
+                aggregates.throughput.periodStart,
+                aggregates.throughput.periodEnd,
+                data,
+                snapshotId,
+              )
+            }
           }
+        } catch (err) {
+          const msg = `Failed to cache snapshot: ${err instanceof Error ? err.message : String(err)}`
+          allErrors.push(msg)
         }
-      } catch (err) {
-        const msg = `Failed to cache snapshot: ${err instanceof Error ? err.message : String(err)}`
-        allErrors.push(msg)
       }
 
       emit('done', 'Collection complete.')
@@ -186,6 +189,7 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         errors: allErrors,
         partialData,
         durationMs: Date.now() - startTime,
+        ...(config.skipPersist ? { snapshot } : {}),
       }
     },
   }

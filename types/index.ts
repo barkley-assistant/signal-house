@@ -4,6 +4,7 @@ export type {
   CheckRunMetric,
   RepositoryMetric,
   SessionMetric,
+  LocalGitRepoMetric,
   ErrorMetric,
   MetricDomain,
   MetricRecord,

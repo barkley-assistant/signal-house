@@ -1,0 +1,24 @@
+export interface LocalGitRepoConfig {
+  path: string
+}
+
+export interface LocalGitCollectorConfig {
+  repos: LocalGitRepoConfig[]
+  lookbackDays?: number
+}
+
+export interface LocalGitCollectorResult {
+  repos: LocalGitRepoInfo[]
+  errors: string[]
+}
+
+export interface LocalGitRepoInfo {
+  path: string
+  repoName: string
+  defaultBranch: string | null
+  isGitRepo: boolean
+  recentCommits: number
+  authors: string[]
+  latestCommitAt: string | null
+  error: string | null
+}

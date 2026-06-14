@@ -75,6 +75,17 @@ export interface ErrorMetric {
   metadata: Record<string, unknown>
 }
 
-export type MetricDomain = 'issues' | 'pullRequests' | 'checkRuns' | 'repositories' | 'sessions' | 'errors'
+export interface LocalGitRepoMetric {
+  path: string
+  repoName: string
+  defaultBranch: string | null
+  isGitRepo: boolean
+  recentCommits: number
+  authors: string[]
+  latestCommitAt: string | null
+  error: string | null
+}
 
-export type MetricRecord = IssueMetric | PullRequestMetric | CheckRunMetric | RepositoryMetric | SessionMetric | ErrorMetric
+export type MetricDomain = 'issues' | 'pullRequests' | 'checkRuns' | 'repositories' | 'sessions' | 'localGit' | 'errors'
+
+export type MetricRecord = IssueMetric | PullRequestMetric | CheckRunMetric | RepositoryMetric | SessionMetric | LocalGitRepoMetric | ErrorMetric

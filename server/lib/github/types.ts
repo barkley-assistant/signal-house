@@ -5,6 +5,7 @@ export interface GitHubCollectorConfig {
   baseUrl?: string
   staleThresholdDays?: number
   lookbackDays?: number
+  skipPersist?: boolean
 }
 
 export interface GHIssueRaw {
@@ -89,4 +90,5 @@ export interface CollectorResult {
   errors: string[]
   partialData: boolean
   durationMs: number
+  snapshot?: import('../../../types/snapshot').MetricSnapshot
 }

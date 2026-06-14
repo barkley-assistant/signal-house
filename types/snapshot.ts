@@ -4,6 +4,7 @@ import type {
   CheckRunMetric,
   RepositoryMetric,
   SessionMetric,
+  LocalGitRepoMetric,
   ErrorMetric,
 } from './metrics'
 import type { DashboardAggregates } from './aggregates'
@@ -16,10 +17,11 @@ export interface MetricSnapshot {
   checkRuns: CheckRunMetric[]
   repositories: RepositoryMetric[]
   sessions: SessionMetric[]
+  localGit: LocalGitRepoMetric[]
   errors: ErrorMetric[]
   aggregates: DashboardAggregates
   metadata: {
-    source: 'github' | 'local' | 'manual'
+    source: 'github' | 'local' | 'manual' | 'orchestrated'
     refreshDurationMs: number
     partialData: boolean
     errors: string[]
