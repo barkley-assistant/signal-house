@@ -148,10 +148,11 @@
 import type { LatestState } from '../types/snapshot'
 import type { ThroughputAggregate, CycleTimeAggregate, CIAggregate } from '../types/aggregates'
 
-const { data: stateData, pending: statePending, error: stateError, refresh: refreshState } = useFetch<LatestState>('/api/state')
-const { data: throughputRaw, pending: throughputPending, refresh: refreshThroughput } = useFetch<ThroughputAggregate[]>('/api/trends/throughput')
-const { data: cycleTimeRaw, pending: cycleTimePending, refresh: refreshCycleTime } = useFetch<CycleTimeAggregate[]>('/api/trends/cycleTime')
-const { data: ciRaw, pending: ciPending, refresh: refreshCI } = useFetch<CIAggregate[]>('/api/trends/ci')
+const fetchOpts = { cache: 'no-store' as const }
+const { data: stateData, pending: statePending, error: stateError, refresh: refreshState } = useFetch<LatestState>('/api/state', fetchOpts)
+const { data: throughputRaw, pending: throughputPending, refresh: refreshThroughput } = useFetch<ThroughputAggregate[]>('/api/trends/throughput', fetchOpts)
+const { data: cycleTimeRaw, pending: cycleTimePending, refresh: refreshCycleTime } = useFetch<CycleTimeAggregate[]>('/api/trends/cycleTime', fetchOpts)
+const { data: ciRaw, pending: ciPending, refresh: refreshCI } = useFetch<CIAggregate[]>('/api/trends/ci', fetchOpts)
 
 const loading = computed(() => statePending.value || throughputPending.value || cycleTimePending.value || ciPending.value)
 const error = computed(() => stateError.value)
@@ -212,7 +213,7 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
   while (Date.now() - start < timeoutMs) {
     await new Promise(resolve => setTimeout(resolve, intervalMs))
     try {
-      const state = await $fetch<LatestState>('/api/state')
+      const state = await $fetch<LatestState>(`/api/state?_t=${Date.now()}`)
       if (!state.refreshInProgress) return
     } catch {
       // ignore poll errors
