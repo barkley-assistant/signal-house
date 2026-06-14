@@ -1,0 +1,56 @@
+export interface ThroughputAggregate {
+  periodStart: string
+  periodEnd: string
+  issuesClosed: number
+  issuesOpened: number
+  prsMerged: number
+  prsCreated: number
+  totalCommits: number
+}
+
+export interface CycleTimeAggregate {
+  periodStart: string
+  periodEnd: string
+  averageDays: number
+  medianDays: number
+  p95Days: number
+  sampleSize: number
+}
+
+export interface CIAggregate {
+  periodStart: string
+  periodEnd: string
+  totalRuns: number
+  passCount: number
+  failCount: number
+  passRate: number
+  averageDurationMs: number | null
+}
+
+export interface StaleWorkAggregate {
+  asOf: string
+  staleIssues: number
+  stalePRs: number
+  staleThresholdDays: number
+  oldestItemDays: number | null
+}
+
+export interface SessionUsageAggregate {
+  periodStart: string
+  periodEnd: string
+  totalSessions: number
+  uniqueTools: string[]
+  topActions: Array<{ action: string; count: number }>
+  errorCount: number
+}
+
+export interface DashboardAggregates {
+  throughput: ThroughputAggregate
+  cycleTime: CycleTimeAggregate | null
+  ci: CIAggregate | null
+  staleWork: StaleWorkAggregate
+  sessionUsage: SessionUsageAggregate | null
+  computedAt: string
+}
+
+export type AggregateType = 'throughput' | 'cycleTime' | 'ci' | 'staleWork' | 'sessionUsage'

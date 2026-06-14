@@ -1,0 +1,80 @@
+export interface IssueMetric {
+  id: string
+  title: string
+  state: 'open' | 'closed'
+  createdAt: string
+  updatedAt: string
+  closedAt: string | null
+  repo: string
+  labels: string[]
+  assignee: string | null
+  milestone: string | null
+  url: string
+}
+
+export interface PullRequestMetric {
+  id: string
+  title: string
+  state: 'open' | 'closed' | 'merged'
+  createdAt: string
+  updatedAt: string
+  mergedAt: string | null
+  closedAt: string | null
+  repo: string
+  author: string
+  labels: string[]
+  additions: number
+  deletions: number
+  changedFiles: number
+  url: string
+  ciStatus: 'pending' | 'success' | 'failure' | 'cancelled' | null
+}
+
+export interface CheckRunMetric {
+  id: string
+  name: string
+  status: 'queued' | 'in_progress' | 'completed'
+  conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null
+  createdAt: string
+  completedAt: string | null
+  repo: string
+  branch: string
+  workflowName: string
+  url: string | null
+}
+
+export interface RepositoryMetric {
+  id: string
+  name: string
+  owner: string
+  description: string | null
+  defaultBranch: string
+  isPrivate: boolean
+  updatedAt: string
+  pushedAt: string
+  url: string
+}
+
+export interface SessionMetric {
+  id: string
+  toolName: string
+  action: string
+  timestamp: string
+  durationMs: number | null
+  metadata: Record<string, unknown>
+  success: boolean
+}
+
+export interface ErrorMetric {
+  id: string
+  source: string
+  level: 'error' | 'warning' | 'info'
+  message: string
+  timestamp: string
+  stackTrace: string | null
+  metadata: Record<string, unknown>
+}
+
+export type MetricDomain = 'issues' | 'pullRequests' | 'checkRuns' | 'repositories' | 'sessions' | 'errors'
+
+export type MetricRecord = IssueMetric | PullRequestMetric | CheckRunMetric | RepositoryMetric | SessionMetric | ErrorMetric
