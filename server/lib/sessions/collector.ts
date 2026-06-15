@@ -14,6 +14,34 @@ function isCommandNotFound(err: unknown): boolean {
   return false
 }
 
+function parseNumber(value: string | undefined): number | null {
+  if (!value) return null
+  const normalized = value.replace(/[$,]/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function extractOverviewValue(lines: string[], label: string): number | null {
+  const pattern = new RegExp(`│\\s*${escapeRegExp(label)}\\s+([^│]+?)\\s*│`, 'i')
+  for (const line of lines) {
+    const match = line.match(pattern)
+    if (!match) continue
+    const valueMatch = match[1]?.match(/-?\$?[\d,]+(?:\.\d+)?/)
+    return parseNumber(valueMatch?.[0])
+  }
+  return null
+}
+
+function parseToolPercentage(value: string | undefined): number | null {
+  if (!value) return null
+  const match = value.match(/([\d.]+)\s*%/)
+  return match ? parseNumber(match[1]) : null
+}
+
 export function createSessionCollector(config: SessionCollectorConfig = {}) {
   const periodDays = config.periodDays ?? 30
 
@@ -38,30 +66,32 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
           })
 
           const lines = stdout.split('\n')
+          const foundOverview = lines.some(line => line.includes('OVERVIEW'))
+          const totalSessions = extractOverviewValue(lines, 'Sessions') ?? 0
+          const messages = extractOverviewValue(lines, 'Messages')
+          const activeDays = extractOverviewValue(lines, 'Days')
+          const totalCost = extractOverviewValue(lines, 'Total Cost')
+          const averageCostPerDay = extractOverviewValue(lines, 'Average Cost / Day')
+          const averageTokensPerSession = extractOverviewValue(lines, 'Average Tokens / Session')
+          const medianTokensPerSession = extractOverviewValue(lines, 'Median Tokens / Session')
+          const inputTokens = extractOverviewValue(lines, 'Input Tokens')
+          const outputTokens = extractOverviewValue(lines, 'Output Tokens')
+          const cacheReadTokens = extractOverviewValue(lines, 'Cache Read')
+          const cacheWriteTokens = extractOverviewValue(lines, 'Cache Write')
 
-          let totalSessions = 0
-          let foundOverview = false
-          for (const line of lines) {
-            if (line.includes('OVERVIEW')) { foundOverview = true; continue }
-            const sessionMatch = line.match(/│\s*Sessions\s+(\d+)/)
-            if (sessionMatch) {
-              totalSessions = parseInt(sessionMatch[1]!, 10)
-              break
-            }
-          }
-
-          const tools: Array<{ toolName: string; count: number }> = []
+          const tools: Array<{ toolName: string; count: number; percentage: number | null }> = []
           let inToolSection = false
           for (const line of lines) {
             if (line.includes('TOOL USAGE')) { inToolSection = true; continue }
             if (!inToolSection) continue
             if (line.includes('└')) break
 
-            const toolMatch = line.match(/│\s+(\S+)\s+.*?(\d+)\s+\(/)
+            const toolMatch = line.match(/│\s+(.+?)\s+.*?(\d+)\s+\(([\d.]+%)\)\s*│?/)
             if (toolMatch) {
               tools.push({
-                toolName: toolMatch[1]!,
+                toolName: toolMatch[1]!.trim(),
                 count: parseInt(toolMatch[2]!, 10),
+                percentage: parseToolPercentage(toolMatch[3]),
               })
             }
           }
@@ -83,7 +113,18 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
             periodStart,
             periodEnd,
             totalSessions,
+            messages,
+            activeDays,
+            totalCost,
+            averageCostPerDay,
+            averageTokensPerSession,
+            medianTokensPerSession,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
             uniqueTools: tools.map(t => t.toolName),
+            toolUsage: tools,
             topActions,
             errorCount: 0,
           }

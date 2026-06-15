@@ -39,7 +39,18 @@ export interface SessionUsageAggregate {
   periodStart: string
   periodEnd: string
   totalSessions: number
+  messages: number | null
+  activeDays: number | null
+  totalCost: number | null
+  averageCostPerDay: number | null
+  averageTokensPerSession: number | null
+  medianTokensPerSession: number | null
+  inputTokens: number | null
+  outputTokens: number | null
+  cacheReadTokens: number | null
+  cacheWriteTokens: number | null
   uniqueTools: string[]
+  toolUsage: Array<{ toolName: string; count: number; percentage: number | null }>
   topActions: Array<{ action: string; count: number }>
   errorCount: number
 }

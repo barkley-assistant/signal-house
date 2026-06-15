@@ -148,6 +148,7 @@ export GIT_REPOS=/path/to/repo1,/path/to/repo2
 # Optional: Session / OpenCode CLI metrics
 # Resolved in order: config.opencodeBin > OPENCODE_BIN > $PATH 'opencode' > $HOME/.opencode/bin/opencode > fallback path > config.opencodeCommand > OPENCODE_COMMAND
 # OPENCODE_COMMAND and config.opencodeCommand are compatibility-only fallbacks.
+# The collector runs `opencode stats --days <period>` and parses the overview + tool usage tables.
 export OPENCODE_BIN=
 export OPENCODE_COMMAND=opencode
 export SESSIONS_PERIOD_DAYS=30
