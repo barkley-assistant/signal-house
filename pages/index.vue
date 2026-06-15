@@ -25,6 +25,33 @@
       </div>
     </div>
 
+    <UiCard v-if="stateData" class="service-status" title="Service Status">
+      <div class="service-status__grid">
+        <div class="service-status__item">
+          <span class="service-status__label">Current state</span>
+          <span class="service-status__value" :class="`service-status__value--${serviceStateTone}`">{{ serviceStateLabel }}</span>
+        </div>
+        <div class="service-status__item">
+          <span class="service-status__label">Last updated</span>
+          <span class="service-status__value">{{ lastRefresh ?? 'No data yet' }}</span>
+        </div>
+        <div class="service-status__item">
+          <span class="service-status__label">Next refresh</span>
+          <span class="service-status__value">{{ nextRefreshLabel }}</span>
+        </div>
+        <div class="service-status__item">
+          <span class="service-status__label">Poller</span>
+          <span class="service-status__value">{{ stateData.pollerEnabled ? 'Enabled' : 'Disabled' }}</span>
+        </div>
+      </div>
+      <p v-if="statusMessage" class="service-status__message">{{ statusMessage }}</p>
+      <div v-if="sourceHealthEntries.length" class="source-health">
+        <span v-for="entry in sourceHealthEntries" :key="entry.name" class="source-health__pill" :class="`source-health__pill--${entry.status}`">
+          {{ entry.name }}: {{ entry.status }}
+        </span>
+      </div>
+    </UiCard>
+
     <!-- Coverage / window info -->
     <div v-if="coverage && !loading && !error" class="coverage-row">
       <svg class="coverage-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -58,7 +85,7 @@
     <UiCard v-else-if="!snapshot" full>
       <EmptyState
         message="No metrics collected yet"
-        hint="Check that data collectors are configured, then click Refresh"
+        hint="Check that data collectors are configured, then click Refresh to generate the first snapshot"
       />
     </UiCard>
 
@@ -165,7 +192,7 @@
 import type { LatestState, DashboardWindow } from '../types/snapshot'
 
 const fetchOpts = { cache: 'no-store' as const }
-const { data: stateData, pending: statePending, error: stateError, refresh: refreshState } = useFetch<LatestState>('/api/state', fetchOpts)
+const { data: stateData, pending: statePending, error: stateError, refresh: refreshDashboardData } = useFetch<LatestState>('/api/state', fetchOpts)
 
 const loading = computed(() => statePending.value)
 const error = computed(() => stateError.value)
@@ -180,6 +207,42 @@ const dashboardDays = computed(() => dashboardWindow.value?.days ?? [])
 const coverage = computed(() => dashboardWindow.value?.coverage ?? null)
 const windowWarnings = computed(() => dashboardWindow.value?.warnings ?? [])
 const hasDataDays = computed(() => dashboardDays.value.some(d => !d.isGap))
+const refreshHealth = computed(() => stateData.value?.refreshState ?? null)
+
+const serviceStateLabel = computed(() => {
+  if (refreshing.value || stateData.value?.refreshInProgress || refreshHealth.value?.status === 'running') return 'Refreshing'
+  if (!snapshot.value) return 'No data'
+  if (refreshHealth.value?.status === 'failed') return 'Failed'
+  if (stateData.value?.isStale) return 'Stale'
+  return 'Fresh'
+})
+
+const serviceStateTone = computed(() => {
+  if (refreshing.value || stateData.value?.refreshInProgress || refreshHealth.value?.status === 'running') return 'running'
+  if (!snapshot.value) return 'empty'
+  if (refreshHealth.value?.status === 'failed') return 'failed'
+  if (stateData.value?.isStale) return 'stale'
+  return 'fresh'
+})
+
+const statusMessage = computed(() => {
+  if (refreshHealth.value?.lastError) return refreshHealth.value.lastError
+  if (stateData.value?.staleReason) return stateData.value.staleReason
+  if (stateData.value?.refreshInProgress) return 'A refresh is running in the background'
+  if (!snapshot.value) return 'No refresh has completed yet. Use Refresh to load the first dashboard snapshot.'
+  return null
+})
+
+const sourceHealthEntries = computed(() => {
+  const health = refreshHealth.value?.sourceHealth ?? {}
+  return Object.entries(health).map(([name, value]) => ({ name, ...value }))
+})
+
+const nextRefreshLabel = computed(() => {
+  if (!stateData.value?.pollerEnabled) return 'Manual only'
+  if (!stateData.value.nextRunAt) return 'Soon'
+  return new Date(stateData.value.nextRunAt).toLocaleString()
+})
 
 const windowRange = computed(() => {
   const dw = dashboardWindow.value
@@ -213,7 +276,7 @@ async function doRefresh() {
   try {
     await $fetch('/api/refresh', { method: 'POST' })
     await pollForRefreshComplete()
-    await refreshState()
+    await refreshDashboardData()
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'statusCode' in err && (err as any).statusCode === 409) {
       refreshError.value = 'A refresh is already in progress'
@@ -250,6 +313,93 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
 
 .page-actions {
   flex-shrink: 0;
+}
+
+.service-status {
+  margin-bottom: 1rem;
+}
+
+.service-status__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.service-status__item {
+  min-width: 0;
+}
+
+.service-status__label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 0.2rem;
+}
+
+.service-status__value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.service-status__value--fresh {
+  color: #4ade80;
+}
+
+.service-status__value--running {
+  color: #38bdf8;
+}
+
+.service-status__value--stale {
+  color: #fbbf24;
+}
+
+.service-status__value--failed {
+  color: #f87171;
+}
+
+.service-status__value--empty {
+  color: #94a3b8;
+}
+
+.service-status__message {
+  margin-top: 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+
+.source-health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.source-health__pill {
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  border: 1px solid #1e293b;
+}
+
+.source-health__pill--healthy {
+  border-color: rgba(74, 222, 128, 0.35);
+  color: #86efac;
+}
+
+.source-health__pill--degraded,
+.source-health__pill--failed {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.source-health__pill--unknown {
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
 }
 
 .page-title {
