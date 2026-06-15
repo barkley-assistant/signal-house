@@ -16,7 +16,10 @@ function enoentErr(): Error {
   return err
 }
 
-function cliOutput(overview: Record<string, number>, tools: Array<{ name: string; count: number; pct: string }>): string {
+function cliOutput(
+  overview: Record<string, number | string>,
+  tools: Array<{ name: string; count: number; pct: string }>,
+): string {
   const section = (title: string, rows: string[]) => [
     '┌────────────────────────────────────────────────────────┐',
     `│${title}│`,
@@ -26,7 +29,7 @@ function cliOutput(overview: Record<string, number>, tools: Array<{ name: string
   ].join('\n')
 
   const overviewRows = Object.entries(overview).map(
-    ([k, v]) => `│${k.padEnd(48)}${String(v).padStart(6)} │`,
+    ([k, v]) => `│ ${k.padEnd(28)} ${String(v).padStart(12)} │`,
   )
 
   const toolRows = tools.map(
@@ -43,7 +46,19 @@ function cliOutput(overview: Record<string, number>, tools: Array<{ name: string
 describe('createSessionCollector', () => {
   it('parses opencode stats output into sessions and aggregate', async () => {
     const mockOutput = cliOutput(
-      { Sessions: 2, Messages: 0, Days: 1 },
+      {
+        Sessions: 2,
+        Messages: 4,
+        Days: 1,
+        'Total Cost': '$12.34',
+        'Average Cost / Day': '$12.34',
+        'Average Tokens / Session': 100,
+        'Median Tokens / Session': 80,
+        'Input Tokens': 60,
+        'Output Tokens': 30,
+        'Cache Read': 5,
+        'Cache Write': 10,
+      },
       [
         { name: 'edit', count: 1, pct: '50%' },
         { name: 'search', count: 1, pct: '50%' },
@@ -59,7 +74,12 @@ describe('createSessionCollector', () => {
     expect(result.sessions).toHaveLength(0)
     expect(result.sessionUsage).not.toBeNull()
     expect(result.sessionUsage!.totalSessions).toBe(2)
+    expect(result.sessionUsage!.messages).toBe(4)
+    expect(result.sessionUsage!.totalCost).toBe(12.34)
+    expect(result.sessionUsage!.averageTokensPerSession).toBe(100)
+    expect(result.sessionUsage!.inputTokens).toBe(60)
     expect(result.sessionUsage!.uniqueTools).toEqual(['edit', 'search'])
+    expect(result.sessionUsage!.toolUsage[0]).toMatchObject({ toolName: 'edit', count: 1, percentage: 50 })
     expect(result.sessionUsage!.topActions).toHaveLength(2)
     expect(result.sessionUsage!.topActions[0]!.action).toBe('edit')
     expect(result.sessionUsage!.topActions[0]!.count).toBe(1)
@@ -81,6 +101,7 @@ describe('createSessionCollector', () => {
     expect(result.sessions).toHaveLength(0)
     expect(result.sessionUsage).not.toBeNull()
     expect(result.sessionUsage!.totalSessions).toBe(0)
+    expect(result.sessionUsage!.messages).toBe(0)
     expect(result.sessionUsage!.uniqueTools).toEqual([])
     expect(result.sessionUsage!.topActions).toEqual([])
   })
