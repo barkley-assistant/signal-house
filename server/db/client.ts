@@ -2,7 +2,7 @@ import initSqlJs, { type Database as SqlJsDatabase } from 'sql.js'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { SQL, SCHEMA_VERSION } from './schema'
-import type { MetricSnapshot, SnapshotRow, LatestState } from '../../types/snapshot'
+import type { MetricSnapshot, SnapshotRow, LatestState, RefreshRunRecord, RefreshRunState, RefreshSourceHealth, RefreshRunStatus } from '../../types/snapshot'
 import type { AggregateType } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
 
@@ -14,6 +14,62 @@ function getDbDir(): string {
 
 function getDbPath(): string {
   return join(getDbDir(), 'metrics.db')
+}
+
+const REFRESH_STATE_KEY = 'refresh_state'
+const MAX_REFRESH_HISTORY = 10
+
+function emptyRefreshState(): RefreshRunState {
+  return {
+    status: 'idle',
+    lastRunStartedAt: null,
+    lastRunFinishedAt: null,
+    lastSuccessAt: null,
+    lastFailureAt: null,
+    nextRunAt: null,
+    lastError: null,
+    durationMs: null,
+    sourceHealth: {},
+    runHistory: [],
+  }
+}
+
+function parseRefreshState(value: string | null): RefreshRunState {
+  if (!value) return emptyRefreshState()
+  try {
+    const parsed = JSON.parse(value) as Partial<RefreshRunState>
+    return {
+      ...emptyRefreshState(),
+      ...parsed,
+      sourceHealth: parsed.sourceHealth ?? {},
+      runHistory: Array.isArray(parsed.runHistory) ? parsed.runHistory.slice(0, MAX_REFRESH_HISTORY) as RefreshRunRecord[] : [],
+    }
+  } catch {
+    return emptyRefreshState()
+  }
+}
+
+function saveRefreshState(state: RefreshRunState): void {
+  const db = getDb()
+  db.run(SQL.upsertLatestState, {
+    '@key': REFRESH_STATE_KEY,
+    '@value': JSON.stringify({
+      ...state,
+      runHistory: state.runHistory.slice(0, MAX_REFRESH_HISTORY),
+    }),
+  })
+  save()
+}
+
+function buildSourceHealth(sources: string[], status: RefreshRunStatus, errorSummary: string | null): Record<string, RefreshSourceHealth> {
+  const health: Record<string, RefreshSourceHealth> = {}
+  for (const source of sources) {
+    health[source] = {
+      status: status === 'success' ? 'healthy' : status === 'skipped' ? 'unknown' : 'degraded',
+      message: errorSummary,
+    }
+  }
+  return health
 }
 
 export async function initDb(): Promise<SqlJsDatabase> {
@@ -164,6 +220,11 @@ export function getLatestState(): LatestState {
   keyStmt.free()
 
   const refreshInProgress = getRefreshInProgress()
+  const refreshStateStmt = db.prepare(SQL.getLatestState)
+  refreshStateStmt.bind({ '@key': REFRESH_STATE_KEY })
+  const refreshStateValue = refreshStateStmt.step() ? String(refreshStateStmt.getAsObject().value) : null
+  refreshStateStmt.free()
+  const refreshState = parseRefreshState(refreshStateValue)
 
   const STALE_THRESHOLD_MS = 15 * 60 * 1000
   let isStale = true
@@ -179,7 +240,45 @@ export function getLatestState(): LatestState {
     refreshInProgress,
     isStale,
     dashboardWindow: null,
+    refreshState,
   }
+}
+
+export function setRefreshRunState(record: RefreshRunRecord): void {
+  const previous = getRefreshRunState()
+  const nextState: RefreshRunState = {
+    ...previous,
+    status: record.skipped ? 'skipped' : record.success ? 'success' : 'failed',
+    lastRunStartedAt: record.startedAt,
+    lastRunFinishedAt: record.finishedAt,
+    lastSuccessAt: record.success ? record.finishedAt : previous.lastSuccessAt,
+    lastFailureAt: record.success ? previous.lastFailureAt : record.finishedAt,
+    nextRunAt: null,
+    lastError: record.errorSummary,
+    durationMs: record.durationMs,
+    sourceHealth: buildSourceHealth(record.sources, record.skipped ? 'skipped' : record.success ? 'success' : 'failed', record.errorSummary),
+    runHistory: [record, ...previous.runHistory].slice(0, MAX_REFRESH_HISTORY),
+  }
+
+  saveRefreshState(nextState)
+}
+
+export function setRefreshRunStatus(status: RefreshRunStatus, nextRunAt: string | null = null): void {
+  const previous = getRefreshRunState()
+  saveRefreshState({
+    ...previous,
+    status,
+    nextRunAt,
+  })
+}
+
+export function getRefreshRunState(): RefreshRunState {
+  const db = getDb()
+  const stmt = db.prepare(SQL.getLatestState)
+  stmt.bind({ '@key': REFRESH_STATE_KEY })
+  const value = stmt.step() ? String(stmt.getAsObject().value) : null
+  stmt.free()
+  return parseRefreshState(value)
 }
 
 export function upsertDailyMetrics(row: DailyMetricsInsert): void {

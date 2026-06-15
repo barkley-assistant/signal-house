@@ -1,4 +1,4 @@
-import { initDb, setRefreshInProgress, getRefreshInProgress } from '../../db/client'
+import { initDb, setRefreshInProgress, getRefreshInProgress, setRefreshRunState, setRefreshRunStatus } from '../../db/client'
 import { createOrchestrator } from '../orchestrator'
 import type { OrchestratorConfig, OrchestratorResult } from '../orchestrator/types'
 import type { SessionCollectorConfig } from '../sessions/types'
@@ -64,7 +64,7 @@ export async function runRefresh(): Promise<RefreshRunResult> {
   await initDb()
 
   if (getRefreshInProgress()) {
-    return {
+    const result: RefreshRunResult = {
       startedAt,
       finishedAt: new Date().toISOString(),
       durationMs: Date.now() - startedMs,
@@ -77,16 +77,29 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       skippedReason: 'refresh-in-progress',
       orchestratorResult: null,
     }
+    setRefreshRunState({
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      durationMs: result.durationMs,
+      success: result.success,
+      partialData: result.partialData,
+      sources: result.sources,
+      errorSummary: result.errorSummary,
+      skipped: result.skipped,
+      skippedReason: result.skippedReason,
+    })
+    return result
   }
 
   setRefreshInProgress(true)
+  setRefreshRunStatus('running')
 
   try {
     const orchestrator = createOrchestrator(buildRefreshConfig())
     const orchestratorResult = await orchestrator.collect()
     const success = orchestratorResult.errors.length === 0
 
-    return {
+    const result: RefreshRunResult = {
       startedAt,
       finishedAt: new Date().toISOString(),
       durationMs: Date.now() - startedMs,
@@ -99,9 +112,21 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       skippedReason: null,
       orchestratorResult,
     }
+    setRefreshRunState({
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      durationMs: result.durationMs,
+      success: result.success,
+      partialData: result.partialData,
+      sources: result.sources,
+      errorSummary: result.errorSummary,
+      skipped: result.skipped,
+      skippedReason: result.skippedReason,
+    })
+    return result
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return {
+    const result: RefreshRunResult = {
       startedAt,
       finishedAt: new Date().toISOString(),
       durationMs: Date.now() - startedMs,
@@ -114,6 +139,18 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       skippedReason: null,
       orchestratorResult: null,
     }
+    setRefreshRunState({
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      durationMs: result.durationMs,
+      success: result.success,
+      partialData: result.partialData,
+      sources: result.sources,
+      errorSummary: result.errorSummary,
+      skipped: result.skipped,
+      skippedReason: result.skippedReason,
+    })
+    return result
   } finally {
     setRefreshInProgress(false)
   }

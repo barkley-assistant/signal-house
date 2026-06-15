@@ -157,4 +157,37 @@ export interface LatestState {
   refreshInProgress: boolean
   isStale: boolean
   dashboardWindow: DashboardWindow | null
+  refreshState: RefreshRunState
+}
+
+export type RefreshRunStatus = 'idle' | 'running' | 'success' | 'failed' | 'skipped'
+
+export interface RefreshSourceHealth {
+  status: 'healthy' | 'degraded' | 'failed' | 'unknown'
+  message: string | null
+}
+
+export interface RefreshRunRecord {
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  success: boolean
+  partialData: boolean
+  sources: string[]
+  errorSummary: string | null
+  skipped: boolean
+  skippedReason: string | null
+}
+
+export interface RefreshRunState {
+  status: RefreshRunStatus
+  lastRunStartedAt: string | null
+  lastRunFinishedAt: string | null
+  lastSuccessAt: string | null
+  lastFailureAt: string | null
+  nextRunAt: string | null
+  lastError: string | null
+  durationMs: number | null
+  sourceHealth: Record<string, RefreshSourceHealth>
+  runHistory: RefreshRunRecord[]
 }

@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   mockInitDb: vi.fn().mockResolvedValue(undefined),
   mockGetRefreshInProgress: vi.fn(),
   mockSetRefreshInProgress: vi.fn(),
+  mockSetRefreshRunState: vi.fn(),
+  mockSetRefreshRunStatus: vi.fn(),
   mockCollect: vi.fn(),
 }))
 
@@ -11,6 +13,8 @@ vi.mock('../../../db/client', () => ({
   initDb: mocks.mockInitDb,
   getRefreshInProgress: mocks.mockGetRefreshInProgress,
   setRefreshInProgress: mocks.mockSetRefreshInProgress,
+  setRefreshRunState: mocks.mockSetRefreshRunState,
+  setRefreshRunStatus: mocks.mockSetRefreshRunStatus,
 }))
 
 vi.mock('../../orchestrator', () => ({
