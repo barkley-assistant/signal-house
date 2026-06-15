@@ -228,9 +228,11 @@ export function getLatestState(): LatestState {
 
   const STALE_THRESHOLD_MS = 15 * 60 * 1000
   let isStale = true
+  let staleReason: string | null = 'no successful refresh has completed yet'
   if (lastRefresh) {
     const elapsed = Date.now() - new Date(lastRefresh).getTime()
     isStale = elapsed > STALE_THRESHOLD_MS
+    staleReason = isStale ? 'last successful refresh is older than the stale threshold' : null
   }
 
   return {
@@ -239,6 +241,12 @@ export function getLatestState(): LatestState {
     lastSuccessfulRefreshAt: lastRefresh,
     refreshInProgress,
     isStale,
+    staleReason,
+    pollerEnabled: process.env.METRICS_POLLER_ENABLED === 'true',
+    refreshStatus: refreshState.status,
+    lastFailureAt: refreshState.lastFailureAt,
+    lastSuccessAt: refreshState.lastSuccessAt,
+    nextRunAt: refreshState.nextRunAt,
     dashboardWindow: null,
     refreshState,
   }
