@@ -16,7 +16,15 @@ function isCommandNotFound(err: unknown): boolean {
 
 function parseNumber(value: string | undefined): number | null {
   if (!value) return null
-  const normalized = value.replace(/[$,]/g, '')
+  const normalized = value.replace(/[$,]/g, '').trim()
+  const compactMatch = normalized.match(/^(-?\d+(?:\.\d+)?)([KMB])$/i)
+  if (compactMatch) {
+    const base = Number(compactMatch[1])
+    if (!Number.isFinite(base)) return null
+    const suffix = compactMatch[2]!.toUpperCase()
+    const multiplier = suffix === 'K' ? 1_000 : suffix === 'M' ? 1_000_000 : 1_000_000_000
+    return base * multiplier
+  }
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : null
 }
@@ -30,8 +38,16 @@ function extractOverviewValue(lines: string[], label: string): number | null {
   for (const line of lines) {
     const match = line.match(pattern)
     if (!match) continue
-    const valueMatch = match[1]?.match(/-?\$?[\d,]+(?:\.\d+)?/)
+    const valueMatch = match[1]?.match(/-?\$?[\d,]+(?:\.\d+)?(?:[KMB])?/i)
     return parseNumber(valueMatch?.[0])
+  }
+  return null
+}
+
+function extractOverviewValueFromLabels(lines: string[], labels: string[]): number | null {
+  for (const label of labels) {
+    const value = extractOverviewValue(lines, label)
+    if (value != null) return value
   }
   return null
 }
@@ -72,13 +88,13 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
           const messages = extractOverviewValue(lines, 'Messages')
           const activeDays = extractOverviewValue(lines, 'Days')
           const totalCost = extractOverviewValue(lines, 'Total Cost')
-          const averageCostPerDay = extractOverviewValue(lines, 'Average Cost / Day')
-          const averageTokensPerSession = extractOverviewValue(lines, 'Average Tokens / Session')
-          const medianTokensPerSession = extractOverviewValue(lines, 'Median Tokens / Session')
-          const inputTokens = extractOverviewValue(lines, 'Input Tokens')
-          const outputTokens = extractOverviewValue(lines, 'Output Tokens')
-          const cacheReadTokens = extractOverviewValue(lines, 'Cache Read')
-          const cacheWriteTokens = extractOverviewValue(lines, 'Cache Write')
+          const averageCostPerDay = extractOverviewValueFromLabels(lines, ['Average Cost / Day', 'Avg Cost/Day'])
+          const averageTokensPerSession = extractOverviewValueFromLabels(lines, ['Average Tokens / Session', 'Avg Tokens/Session'])
+          const medianTokensPerSession = extractOverviewValueFromLabels(lines, ['Median Tokens / Session'])
+          const inputTokens = extractOverviewValueFromLabels(lines, ['Input Tokens', 'Input'])
+          const outputTokens = extractOverviewValueFromLabels(lines, ['Output Tokens', 'Output'])
+          const cacheReadTokens = extractOverviewValueFromLabels(lines, ['Cache Read'])
+          const cacheWriteTokens = extractOverviewValueFromLabels(lines, ['Cache Write'])
 
           const tools: Array<{ toolName: string; count: number; percentage: number | null }> = []
           let inToolSection = false

@@ -48,11 +48,11 @@ describe('createSessionCollector', () => {
         Messages: 4,
         Days: 1,
         'Total Cost': '$12.34',
-        'Average Cost / Day': '$12.34',
-        'Average Tokens / Session': 100,
+        'Avg Cost/Day': '$12.34',
+        'Avg Tokens/Session': 100,
         'Median Tokens / Session': 80,
-        'Input Tokens': 60,
-        'Output Tokens': 30,
+        Input: '60',
+        Output: '30',
         'Cache Read': 5,
         'Cache Write': 10,
       },
@@ -75,12 +75,45 @@ describe('createSessionCollector', () => {
     expect(result.sessionUsage!.totalCost).toBe(12.34)
     expect(result.sessionUsage!.averageTokensPerSession).toBe(100)
     expect(result.sessionUsage!.inputTokens).toBe(60)
+    expect(result.sessionUsage!.outputTokens).toBe(30)
+    expect(result.sessionUsage!.cacheReadTokens).toBe(5)
+    expect(result.sessionUsage!.cacheWriteTokens).toBe(10)
     expect(result.sessionUsage!.uniqueTools).toEqual(['edit', 'search'])
     expect(result.sessionUsage!.toolUsage[0]).toMatchObject({ toolName: 'edit', count: 1, percentage: 50 })
     expect(result.sessionUsage!.topActions).toHaveLength(2)
     expect(result.sessionUsage!.topActions[0]!.action).toBe('edit')
     expect(result.sessionUsage!.topActions[0]!.count).toBe(1)
     expect(result.errors).toHaveLength(0)
+  })
+
+  it('falls back to short token labels used by current opencode stats output', async () => {
+    const mockOutput = cliOutput(
+      {
+        Sessions: 2,
+        Messages: 4,
+        Days: 1,
+        'Total Cost': '$12.34',
+        'Avg Cost/Day': '$12.34',
+        'Avg Tokens/Session': 100,
+        'Median Tokens/Session': 80,
+        Input: '3.8M',
+        Output: '597.2K',
+        'Cache Read': '29.3M',
+        'Cache Write': 0,
+      },
+      [],
+    )
+
+    mockExecFileSync.mockReturnValueOnce(mockOutput + '\n')
+
+    const collector = createSessionCollector()
+    const result = await collector.collect()
+
+    expect(result.sessionUsage).not.toBeNull()
+    expect(result.sessionUsage!.inputTokens).toBe(3_800_000)
+    expect(result.sessionUsage!.outputTokens).toBe(597_200)
+    expect(result.sessionUsage!.cacheReadTokens).toBe(29_300_000)
+    expect(result.sessionUsage!.cacheWriteTokens).toBe(0)
   })
 
   it('handles zero sessions from CLI', async () => {

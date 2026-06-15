@@ -104,9 +104,12 @@
             :cycle-time="cards?.cycleTime ?? null"
             :ci="cards?.ci ?? null"
             :stale-work="cards?.staleWork ?? null"
-            :session-usage="cards?.sessionUsage ?? null"
             :is-stale="isStale"
           />
+        </div>
+
+        <div class="section section-large section-session">
+          <SessionUsageSection :session-usage="dashboardWindow?.sessionUsage ?? null" />
         </div>
 
         <div class="section section-chart">
@@ -372,6 +375,10 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
 }
 
 .section-summary {
+  grid-column: span 12;
+}
+
+.section-session {
   grid-column: span 12;
 }
 

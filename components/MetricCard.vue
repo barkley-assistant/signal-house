@@ -7,6 +7,8 @@
 </template>
 
 <script setup lang="ts">
+import { formatCompactNumber } from '../utils/format'
+
 const props = withDefaults(defineProps<{
   label: string
   value: number | string | null | undefined
@@ -23,7 +25,7 @@ function formatValue(val: number | string | null | undefined, fmt: string): stri
   if (typeof val === 'string') return val
   if (fmt === 'percent') return `${(val * 100).toFixed(0)}%`
   if (fmt === 'days') return `${val.toFixed(1)}d`
-  return val.toLocaleString()
+  return formatCompactNumber(val)
 }
 
 const displayValue = formatValue(props.value, props.format)

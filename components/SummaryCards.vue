@@ -106,38 +106,17 @@
       />
     </UiCard>
 
-    <UiCard title="Session Usage">
-      <template v-if="sessionUsage && !isBlockedState(sessionUsage.status)">
-        <MetricCard
-          label="Total sessions"
-          :value="sessionUsage.totalSessions"
-          :trend="sessionTrend"
-        />
-        <MetricCard
-          label="Error count"
-          :value="sessionUsage.sessionErrorCount"
-          :trend="sessionErrorTrend(sessionUsage.sessionErrorCount)"
-        />
-        <p v-if="sessionUsage.message" class="panel-note">{{ sessionUsage.message }}</p>
-      </template>
-      <EmptyState
-        v-else
-        :message="sessionUsage?.message ?? 'Session usage unavailable'"
-        hint="Configure OpenCode stats collection"
-      />
-    </UiCard>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { DashboardWindowThroughputSummary, DashboardWindowCycleTimeSummary, DashboardWindowCISummary, DashboardWindowStaleWorkSummary, DashboardWindowSessionSummary, DashboardPanelStatus } from '../types/snapshot'
+import type { DashboardWindowThroughputSummary, DashboardWindowCycleTimeSummary, DashboardWindowCISummary, DashboardWindowStaleWorkSummary, DashboardPanelStatus } from '../types/snapshot'
 
 const props = defineProps<{
   throughput: DashboardWindowThroughputSummary | null
   cycleTime: DashboardWindowCycleTimeSummary | null
   ci: DashboardWindowCISummary | null
   staleWork: DashboardWindowStaleWorkSummary | null
-  sessionUsage: DashboardWindowSessionSummary | null
   isStale?: boolean
 }>()
 
@@ -154,12 +133,6 @@ const ciPassRateTrend = 'up'
 const ciFailTrend = 'down'
 const staleIssuesTrend = 'down'
 const stalePRsTrend = 'down'
-const sessionTrend = 'up'
-
-function sessionErrorTrend(val: number | undefined): 'up' | 'down' | 'neutral' {
-  if (val == null || val === 0) return 'down'
-  return 'up'
-}
 </script>
 
 <style scoped>
