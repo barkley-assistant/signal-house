@@ -156,6 +156,12 @@ export interface LatestState {
   lastSuccessfulRefreshAt: string | null
   refreshInProgress: boolean
   isStale: boolean
+  staleReason: string | null
+  pollerEnabled: boolean
+  refreshStatus: RefreshRunStatus
+  lastFailureAt: string | null
+  lastSuccessAt: string | null
+  nextRunAt: string | null
   dashboardWindow: DashboardWindow | null
   refreshState: RefreshRunState
 }

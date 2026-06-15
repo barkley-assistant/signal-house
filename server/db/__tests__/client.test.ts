@@ -31,6 +31,12 @@ describe('initDb on fresh database', () => {
     expect(state.lastSuccessfulRefreshAt).toBeNull()
     expect(state.refreshInProgress).toBe(false)
     expect(state.isStale).toBe(true)
+    expect(state.staleReason).toBe('no successful refresh has completed yet')
+    expect(state.pollerEnabled).toBe(false)
+    expect(state.refreshStatus).toBe('idle')
+    expect(state.lastFailureAt).toBeNull()
+    expect(state.lastSuccessAt).toBeNull()
+    expect(state.nextRunAt).toBeNull()
     expect(state.refreshState).toEqual({
       status: 'idle',
       lastRunStartedAt: null,
