@@ -59,8 +59,6 @@ Signal House uses:
 * Nuxt 3
 * Vue 3
 * TypeScript
-* Nuxt UI
-* Pinia
 * ECharts
 * SQLite
 
@@ -201,18 +199,26 @@ It parses the overview and tool usage output when available. If OpenCode is unav
 
 ### Poller configuration
 
-| Variable                                  | Purpose                                     |
-| ----------------------------------------- | ------------------------------------------- |
-| `SECRET_HOUSE_POLLER_ENABLED`             | Enables the background refresh loop         |
-| `SECRET_HOUSE_POLL_INTERVAL_SECONDS`      | Poll interval in seconds                    |
-| `SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS` | Delay before the first scheduled run        |
-| `SECRET_HOUSE_RUN_ON_STARTUP`             | Runs a refresh shortly after server startup |
+| Variable                                  | Purpose                                            | Default |
+| ----------------------------------------- | -------------------------------------------------- | ------- |
+| `SECRET_HOUSE_POLLER_ENABLED`             | Enables the background refresh loop                | `false` |
+| `SECRET_HOUSE_POLL_INTERVAL_SECONDS`      | Poll interval in seconds (clamped 15–3600)         | `300`   |
+| `SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS` | Delay before the first scheduled run               | `5`     |
+| `SECRET_HOUSE_RUN_ON_STARTUP`             | Runs a refresh shortly after server startup        | `true`  |
 
 The poller is intended for a single local server process. Do not run multiple poller-enabled instances against the same local state unless locking is explicitly designed for it.
 
+### Database
+
+| Variable  | Purpose                                                          | Default |
+| --------- | ---------------------------------------------------------------- | ------- |
+| `DB_DIR`  | Directory for the SQLite database file (no `SECRET_HOUSE_` prefix) | `.data` |
+
 ### Legacy env names
 
-Legacy `METRICS_*`, `GITHUB_*`, `GIT_REPOS`, and `OPENCODE_*` names may still work for compatibility, but new configuration should use the `SECRET_HOUSE_*` names currently supported by the app.
+Each `SECRET_HOUSE_*` variable has a legacy fallback name for backward compatibility. The preferred name takes precedence when both are set. Legacy names:
+
+`GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`, `GIT_REPOS`, `OPENCODE_BIN`, `OPENCODE_COMMAND`, `SESSIONS_PERIOD_DAYS`, `METRICS_POLLER_ENABLED`, `METRICS_POLL_INTERVAL_SECONDS`, `METRICS_POLL_STARTUP_DELAY_SECONDS`, `METRICS_RUN_ON_STARTUP`
 
 ## Manual refresh
 
@@ -253,6 +259,14 @@ GET /api/state
 ```
 
 It returns the latest cached dashboard state, refresh metadata, and the rolling 28-day dashboard window.
+
+A manual refresh is triggered via:
+
+```text
+POST /api/refresh
+```
+
+Returns HTTP 409 if a refresh is already in progress.
 
 The response includes:
 
@@ -325,7 +339,6 @@ Run the local verification commands before merging changes:
 
 ```bash
 npm ci
-npm exec nuxi prepare
 npm test
 npm run typecheck
 npm run build
