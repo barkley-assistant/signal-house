@@ -20,7 +20,7 @@ describe('createLocalGitCollector', () => {
     mockExecSync
       .mockReturnValueOnce('.git')          // rev-parse --git-dir
       .mockReturnValueOnce('main\n')         // rev-parse --abbrev-ref HEAD
-      .mockReturnValueOnce('abc123\ndef456\n') // log --oneline --format="%H"
+      .mockReturnValueOnce('2025-05-30T10:00:00Z\n2025-06-01T12:00:00Z\n') // log --format="%cI"
       .mockReturnValueOnce('alice@example.com\nbob@example.com\n') // log --format=%aE
       .mockReturnValueOnce('2025-06-01T12:00:00Z\n') // log -1 --format=%cI
 
@@ -35,6 +35,7 @@ describe('createLocalGitCollector', () => {
     expect(result.repos[0]!.repoName).toBe('repo')
     expect(result.repos[0]!.defaultBranch).toBe('main')
     expect(result.repos[0]!.recentCommits).toBe(2)
+    expect(result.repos[0]!.commitsByDay).toEqual({ '2025-05-30': 1, '2025-06-01': 1 })
     expect(result.repos[0]!.authors).toEqual(['alice@example.com', 'bob@example.com'])
     expect(result.repos[0]!.latestCommitAt).toBe('2025-06-01T12:00:00Z')
     expect(result.repos[0]!.error).toBeNull()
@@ -103,7 +104,7 @@ describe('createLocalGitCollector', () => {
       // Repo 1: valid
       .mockReturnValueOnce('.git')
       .mockReturnValueOnce('main\n')
-      .mockReturnValueOnce('abc\n')
+      .mockReturnValueOnce('2025-06-01T10:00:00Z\n')
       .mockReturnValueOnce('alice@example.com\n')
       .mockReturnValueOnce('2025-06-01T12:00:00Z\n')
       // Repo 2: not a git repo

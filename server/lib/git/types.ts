@@ -18,6 +18,7 @@ export interface LocalGitRepoInfo {
   defaultBranch: string | null
   isGitRepo: boolean
   recentCommits: number
+  commitsByDay: Record<string, number>
   authors: string[]
   latestCommitAt: string | null
   error: string | null

@@ -64,6 +64,14 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
   const useAggregateSessionFallback = snapshot.sessions.length === 0 && sessionUsageAggregate != null
 
   const totalCommits = snapshot.localGit.reduce((sum, r) => sum + r.recentCommits, 0)
+  const commitsByDay = new Map<string, number>()
+  for (const repo of snapshot.localGit) {
+    if (repo.commitsByDay) {
+      for (const [day, count] of Object.entries(repo.commitsByDay)) {
+        commitsByDay.set(day, (commitsByDay.get(day) || 0) + count)
+      }
+    }
+  }
 
   const allDays = new Set<string>()
   for (const day of issuesOpenedByDay.keys()) allDays.add(day)
@@ -72,6 +80,7 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
   for (const day of prsMergedByDay.keys()) allDays.add(day)
   for (const day of ciCompletedByDay.keys()) allDays.add(day)
   for (const day of sessionsByDay.keys()) allDays.add(day)
+  for (const day of commitsByDay.keys()) allDays.add(day)
 
   if (snapshot.aggregates) {
     const aggDays = extractDaysFromRange(
@@ -115,7 +124,7 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
       issuesClosed: issuesClosedByDay.get(day) || 0,
       prsCreated: prsCreatedByDay.get(day) || 0,
       prsMerged: prsMergedByDay.get(day) || 0,
-      totalCommits,
+      totalCommits: commitsByDay.size > 0 ? (commitsByDay.get(day) || 0) : totalCommits,
       avgCycleTimeDays: cycleTime?.averageDays ?? null,
       medianCycleTimeDays: cycleTime?.medianDays ?? null,
       p95CycleTimeDays: cycleTime?.p95Days ?? null,

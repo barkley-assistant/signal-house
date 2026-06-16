@@ -28,6 +28,7 @@ export function createLocalGitCollector(config: LocalGitCollectorConfig) {
         defaultBranch: null,
         isGitRepo: false,
         recentCommits: 0,
+        commitsByDay: {},
         authors: [],
         latestCommitAt: null,
         error: `Path does not exist: ${resolvedPath}`,
@@ -45,6 +46,7 @@ export function createLocalGitCollector(config: LocalGitCollectorConfig) {
         defaultBranch: null,
         isGitRepo: false,
         recentCommits: 0,
+        commitsByDay: {},
         authors: [],
         latestCommitAt: null,
         error: 'Not a git repository',
@@ -60,15 +62,24 @@ export function createLocalGitCollector(config: LocalGitCollectorConfig) {
 
     const sinceDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
     let recentCommits = 0
+    let commitsByDay: Record<string, number> = {}
     let authors: string[] = []
     let latestCommitAt: string | null = null
 
     try {
-      const countOutput = runGit(
-        ['log', `--since="${sinceDate}"`, '--oneline', '--format="%H"'],
+      const dateOutput = runGit(
+        ['log', `--since="${sinceDate}"`, '--format="%cI"'],
         resolvedPath,
       )
-      recentCommits = countOutput ? countOutput.split('\n').length : 0
+      const lines = dateOutput ? dateOutput.split('\n') : []
+      recentCommits = lines.length
+      for (const line of lines) {
+        const clean = line.replace(/^"|"$/g, '').trim()
+        if (clean) {
+          const day = clean.slice(0, 10)
+          commitsByDay[day] = (commitsByDay[day] || 0) + 1
+        }
+      }
 
       const authorsOutput = runGit(
         ['log', `--since="${sinceDate}"`, '--format=%aE'],
@@ -89,6 +100,7 @@ export function createLocalGitCollector(config: LocalGitCollectorConfig) {
       defaultBranch,
       isGitRepo,
       recentCommits,
+      commitsByDay,
       authors,
       latestCommitAt,
       error: null,

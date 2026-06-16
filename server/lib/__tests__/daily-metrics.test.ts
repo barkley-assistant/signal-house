@@ -187,11 +187,27 @@ describe('computeDailyMetrics', () => {
     }
   })
 
-  it('returns totalCommits from localGit repos', () => {
+  it('distributes totalCommits by day using commitsByDay from localGit repos', () => {
     const snapshot = makeSnapshot({
       localGit: [
-        { path: '/a', repoName: 'a', defaultBranch: 'main', isGitRepo: true, recentCommits: 10, authors: ['x'], latestCommitAt: null, error: null },
-        { path: '/b', repoName: 'b', defaultBranch: 'main', isGitRepo: true, recentCommits: 5, authors: ['y'], latestCommitAt: null, error: null },
+        { path: '/a', repoName: 'a', defaultBranch: 'main', isGitRepo: true, recentCommits: 10, commitsByDay: { '2026-06-01': 4, '2026-06-03': 6 }, authors: ['x'], latestCommitAt: null, error: null },
+        { path: '/b', repoName: 'b', defaultBranch: 'main', isGitRepo: true, recentCommits: 5, commitsByDay: { '2026-06-02': 2, '2026-06-03': 3 }, authors: ['y'], latestCommitAt: null, error: null },
+      ],
+    })
+
+    const rows = computeDailyMetrics(snapshot)
+    expect(rows.find(r => r.day === '2026-06-01')!.totalCommits).toBe(4)
+    expect(rows.find(r => r.day === '2026-06-02')!.totalCommits).toBe(2)
+    expect(rows.find(r => r.day === '2026-06-03')!.totalCommits).toBe(9)
+    expect(rows.find(r => r.day === '2026-06-04')!.totalCommits).toBe(0)
+    expect(rows.find(r => r.day === '2026-06-05')!.totalCommits).toBe(0)
+  })
+
+  it('falls back to flat totalCommits when no per-day breakdown is available', () => {
+    const snapshot = makeSnapshot({
+      localGit: [
+        { path: '/a', repoName: 'a', defaultBranch: 'main', isGitRepo: true, recentCommits: 10, commitsByDay: {}, authors: ['x'], latestCommitAt: null, error: null },
+        { path: '/b', repoName: 'b', defaultBranch: 'main', isGitRepo: true, recentCommits: 5, commitsByDay: {}, authors: ['y'], latestCommitAt: null, error: null },
       ],
     })
 

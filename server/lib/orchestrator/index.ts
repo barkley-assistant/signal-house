@@ -27,6 +27,7 @@ function toLocalGitRepoMetric(info: LocalGitRepoInfo): LocalGitRepoMetric {
     defaultBranch: info.defaultBranch,
     isGitRepo: info.isGitRepo,
     recentCommits: info.recentCommits,
+    commitsByDay: info.commitsByDay,
     authors: info.authors,
     latestCommitAt: info.latestCommitAt,
     error: info.error,
