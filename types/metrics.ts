@@ -6,6 +6,7 @@ export interface IssueMetric {
   updatedAt: string
   closedAt: string | null
   repo: string
+  repoKey: string
   labels: string[]
   assignee: string | null
   milestone: string | null
@@ -21,6 +22,7 @@ export interface PullRequestMetric {
   mergedAt: string | null
   closedAt: string | null
   repo: string
+  repoKey: string
   author: string
   labels: string[]
   additions: number
@@ -38,14 +40,24 @@ export interface CheckRunMetric {
   createdAt: string
   completedAt: string | null
   repo: string
+  repoKey: string
   branch: string
   workflowName: string
   url: string | null
 }
 
-export interface RepositoryMetric {
-  id: string
+export interface RepositoryIdentity {
+  repoKey: string
   name: string
+  localPath: string | null
+  remoteUrl: string | null
+  githubOwner: string | null
+  githubRepo: string | null
+  source: 'local' | 'github' | 'both'
+}
+
+export interface RepositoryMetric extends RepositoryIdentity {
+  id: string
   owner: string
   description: string | null
   defaultBranch: string
@@ -76,8 +88,13 @@ export interface ErrorMetric {
 }
 
 export interface LocalGitRepoMetric {
+  repoKey: string
+  source: 'local' | 'github' | 'both'
   path: string
   repoName: string
+  remoteUrl: string | null
+  githubOwner: string | null
+  githubRepo: string | null
   defaultBranch: string | null
   isGitRepo: boolean
   recentCommits: number

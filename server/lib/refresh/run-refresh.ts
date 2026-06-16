@@ -4,7 +4,7 @@ import { getEnv } from '../env'
 import { discoverGitRepos } from '../discovery/discovery'
 import type { OrchestratorConfig, OrchestratorResult } from '../orchestrator/types'
 import type { SessionCollectorConfig } from '../sessions/types'
-import type { RepoDiscoveryConfig } from '../git/types'
+import type { RepoDiscoveryConfig, RepoDiscoveryRepo, LocalGitRepoConfig } from '../git/types'
 
 export interface RefreshRunResult {
   startedAt: string
@@ -25,6 +25,10 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
 
   function normalizeDiscoveredPath(entry: string | { path: string }): string {
     return typeof entry === 'string' ? entry : entry.path
+  }
+
+  function repoKeyForPath(path: string): string {
+    return `local:${path}`
   }
 
   const githubToken = getEnv(env, 'SECRET_HOUSE_GITHUB_TOKEN', 'GITHUB_TOKEN')
@@ -48,7 +52,15 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
   const maxDepthRaw = getEnv(env, 'SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH', 'GIT_REPO_MAX_DEPTH')
   const excludesRaw = getEnv(env, 'SECRET_HOUSE_GIT_EXCLUDE', 'GIT_REPO_EXCLUDES')
 
-  const allPaths = [...explicitPaths]
+  const repoConfigs: LocalGitRepoConfig[] = explicitPaths.map(path => ({
+    path,
+    repoKey: repoKeyForPath(path),
+    name: path.split('/').pop() || path,
+    remoteUrl: null,
+    githubOwner: null,
+    githubRepo: null,
+    source: 'local',
+  }))
 
   if (rootsRaw) {
     const roots = rootsRaw.split(',').map(r => r.trim()).filter(Boolean)
@@ -74,16 +86,25 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
       }
       for (const repo of discovered.repos) {
         const p = normalizeDiscoveredPath(repo)
-        if (!allPaths.includes(p)) {
-          allPaths.push(p)
+        const repoConfig: LocalGitRepoConfig = {
+          path: p,
+          repoKey: repo.repoKey,
+          name: repo.name,
+          remoteUrl: repo.remoteUrl,
+          githubOwner: repo.githubOwner,
+          githubRepo: repo.githubRepo,
+          source: repo.source,
+        }
+        if (!repoConfigs.some(existing => existing.repoKey === repoConfig.repoKey || existing.path === repoConfig.path)) {
+          repoConfigs.push(repoConfig)
         }
       }
     }
   }
 
-  if (allPaths.length > 0) {
+  if (repoConfigs.length > 0) {
     config.localGit = {
-      repos: allPaths.map(path => ({ path })),
+      repos: repoConfigs,
     }
   }
 

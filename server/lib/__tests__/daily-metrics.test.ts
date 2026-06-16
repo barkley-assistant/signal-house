@@ -2,6 +2,66 @@ import { describe, it, expect } from 'vitest'
 import { computeDailyMetrics } from '../daily-metrics'
 import type { MetricSnapshot } from '../../../types/snapshot'
 
+function makeIssue(overrides: Partial<MetricSnapshot['issues'][number]> = {}): MetricSnapshot['issues'][number] {
+  return {
+    id: '1',
+    title: 'a',
+    state: 'open',
+    createdAt: '2026-06-01T10:00:00Z',
+    updatedAt: '2026-06-01T10:00:00Z',
+    closedAt: null,
+    repo: 'r',
+    repoKey: 'github:r',
+    labels: [],
+    assignee: null,
+    milestone: null,
+    url: '',
+    ...overrides,
+  }
+}
+
+function makePullRequest(overrides: Partial<MetricSnapshot['pullRequests'][number]> = {}): MetricSnapshot['pullRequests'][number] {
+  return {
+    id: '1',
+    title: 'a',
+    state: 'merged',
+    createdAt: '2026-06-01T10:00:00Z',
+    updatedAt: '2026-06-01T10:00:00Z',
+    mergedAt: '2026-06-02T10:00:00Z',
+    closedAt: null,
+    repo: 'r',
+    repoKey: 'github:r',
+    author: 'x',
+    labels: [],
+    additions: 0,
+    deletions: 0,
+    changedFiles: 0,
+    url: '',
+    ciStatus: null,
+    ...overrides,
+  }
+}
+
+function makeLocalRepo(overrides: Partial<MetricSnapshot['localGit'][number]> = {}): MetricSnapshot['localGit'][number] {
+  return {
+    repoKey: 'local:/a',
+    source: 'local',
+    path: '/a',
+    repoName: 'a',
+    remoteUrl: null,
+    githubOwner: null,
+    githubRepo: null,
+    defaultBranch: 'main',
+    isGitRepo: true,
+    recentCommits: 0,
+    commitsByDay: {},
+    authors: [],
+    latestCommitAt: null,
+    error: null,
+    ...overrides,
+  }
+}
+
 function makeSnapshot(overrides: Partial<MetricSnapshot> = {}): MetricSnapshot {
   return {
     id: 'snap-1',
@@ -46,12 +106,12 @@ function makeSnapshot(overrides: Partial<MetricSnapshot> = {}): MetricSnapshot {
 }
 
 describe('computeDailyMetrics', () => {
-  it('returns daily rows from issues bucket by createdAt/closedAt', () => {
+    it('returns daily rows from issues bucket by createdAt/closedAt', () => {
     const snapshot = makeSnapshot({
       issues: [
-        { id: '1', title: 'a', state: 'open', createdAt: '2026-06-01T10:00:00Z', updatedAt: '', closedAt: null, repo: 'r', labels: [], assignee: null, milestone: null, url: '' },
-        { id: '2', title: 'b', state: 'closed', createdAt: '2026-06-01T11:00:00Z', updatedAt: '', closedAt: '2026-06-03T10:00:00Z', repo: 'r', labels: [], assignee: null, milestone: null, url: '' },
-        { id: '3', title: 'c', state: 'open', createdAt: '2026-06-02T10:00:00Z', updatedAt: '', closedAt: null, repo: 'r', labels: [], assignee: null, milestone: null, url: '' },
+        makeIssue({ id: '1' }),
+        makeIssue({ id: '2', title: 'b', state: 'closed', closedAt: '2026-06-03T10:00:00Z' }),
+        makeIssue({ id: '3', title: 'c', createdAt: '2026-06-02T10:00:00Z' }),
       ],
     })
 
@@ -70,7 +130,7 @@ describe('computeDailyMetrics', () => {
   it('returns daily rows from PRs bucket by createdAt/mergedAt', () => {
     const snapshot = makeSnapshot({
       pullRequests: [
-        { id: '1', title: 'a', state: 'merged', createdAt: '2026-06-01T10:00:00Z', updatedAt: '', mergedAt: '2026-06-02T10:00:00Z', closedAt: null, repo: 'r', author: 'x', labels: [], additions: 0, deletions: 0, changedFiles: 0, url: '', ciStatus: null },
+        makePullRequest({ id: '1' }),
       ],
     })
 
@@ -190,8 +250,8 @@ describe('computeDailyMetrics', () => {
   it('distributes totalCommits by day using commitsByDay from localGit repos', () => {
     const snapshot = makeSnapshot({
       localGit: [
-        { path: '/a', repoName: 'a', defaultBranch: 'main', isGitRepo: true, recentCommits: 10, commitsByDay: { '2026-06-01': 4, '2026-06-03': 6 }, authors: ['x'], latestCommitAt: null, error: null },
-        { path: '/b', repoName: 'b', defaultBranch: 'main', isGitRepo: true, recentCommits: 5, commitsByDay: { '2026-06-02': 2, '2026-06-03': 3 }, authors: ['y'], latestCommitAt: null, error: null },
+        makeLocalRepo({ repoKey: 'local:/a', path: '/a', repoName: 'a', recentCommits: 10, commitsByDay: { '2026-06-01': 4, '2026-06-03': 6 }, authors: ['x'] }),
+        makeLocalRepo({ repoKey: 'local:/b', path: '/b', repoName: 'b', recentCommits: 5, commitsByDay: { '2026-06-02': 2, '2026-06-03': 3 }, authors: ['y'] }),
       ],
     })
 
@@ -206,8 +266,8 @@ describe('computeDailyMetrics', () => {
   it('falls back to flat totalCommits when no per-day breakdown is available', () => {
     const snapshot = makeSnapshot({
       localGit: [
-        { path: '/a', repoName: 'a', defaultBranch: 'main', isGitRepo: true, recentCommits: 10, commitsByDay: {}, authors: ['x'], latestCommitAt: null, error: null },
-        { path: '/b', repoName: 'b', defaultBranch: 'main', isGitRepo: true, recentCommits: 5, commitsByDay: {}, authors: ['y'], latestCommitAt: null, error: null },
+        makeLocalRepo({ repoKey: 'local:/a', path: '/a', repoName: 'a', recentCommits: 10, authors: ['x'] }),
+        makeLocalRepo({ repoKey: 'local:/b', path: '/b', repoName: 'b', recentCommits: 5, authors: ['y'] }),
       ],
     })
 
@@ -257,8 +317,8 @@ describe('computeDailyMetrics', () => {
   it('sorts rows by descending day', () => {
     const snapshot = makeSnapshot({
       issues: [
-        { id: '1', title: 'a', state: 'open', createdAt: '2026-06-01T10:00:00Z', updatedAt: '', closedAt: null, repo: 'r', labels: [], assignee: null, milestone: null, url: '' },
-        { id: '2', title: 'b', state: 'open', createdAt: '2026-06-03T10:00:00Z', updatedAt: '', closedAt: null, repo: 'r', labels: [], assignee: null, milestone: null, url: '' },
+        makeIssue({ id: '1' }),
+        makeIssue({ id: '2', title: 'b', createdAt: '2026-06-03T10:00:00Z' }),
       ],
     })
 

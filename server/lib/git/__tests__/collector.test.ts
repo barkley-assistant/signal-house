@@ -32,6 +32,7 @@ describe('createLocalGitCollector', () => {
 
     expect(result.repos).toHaveLength(1)
     expect(result.repos[0]!.isGitRepo).toBe(true)
+    expect(result.repos[0]!.repoKey).toBe('local:/valid/repo')
     expect(result.repos[0]!.repoName).toBe('repo')
     expect(result.repos[0]!.defaultBranch).toBe('main')
     expect(result.repos[0]!.recentCommits).toBe(2)
@@ -53,6 +54,7 @@ describe('createLocalGitCollector', () => {
 
     expect(result.repos).toHaveLength(1)
     expect(result.repos[0]!.isGitRepo).toBe(false)
+    expect(result.repos[0]!.repoKey).toBe('local:/nonexistent/path')
     expect(result.repos[0]!.error).toContain('Path does not exist')
     expect(result.errors).toHaveLength(1)
   })
@@ -71,6 +73,7 @@ describe('createLocalGitCollector', () => {
 
     expect(result.repos).toHaveLength(1)
     expect(result.repos[0]!.isGitRepo).toBe(false)
+    expect(result.repos[0]!.repoKey).toBe('local:/not/git')
     expect(result.repos[0]!.error).toBe('Not a git repository')
     expect(result.errors).toHaveLength(1)
   })
@@ -91,6 +94,7 @@ describe('createLocalGitCollector', () => {
 
     expect(result.repos).toHaveLength(1)
     expect(result.repos[0]!.isGitRepo).toBe(true)
+    expect(result.repos[0]!.repoKey).toBe('local:/empty/repo')
     expect(result.repos[0]!.recentCommits).toBe(0)
     expect(result.repos[0]!.authors).toEqual([])
     expect(result.repos[0]!.latestCommitAt).toBeNull()
@@ -121,8 +125,10 @@ describe('createLocalGitCollector', () => {
 
     expect(result.repos).toHaveLength(2)
     expect(result.repos[0]!.isGitRepo).toBe(true)
+    expect(result.repos[0]!.repoKey).toBe('local:/valid/repo')
     expect(result.repos[0]!.error).toBeNull()
     expect(result.repos[1]!.isGitRepo).toBe(false)
+    expect(result.repos[1]!.repoKey).toBe('local:/invalid/repo')
     expect(result.repos[1]!.error).toBe('Not a git repository')
     expect(result.errors).toHaveLength(1)
   })

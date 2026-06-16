@@ -48,7 +48,7 @@ describe('buildRefreshConfig', () => {
     vi.stubEnv('OPENCODE_BIN', '/usr/local/bin/opencode')
     vi.stubEnv('OPENCODE_COMMAND', 'opencode stats')
 
-    expect(buildRefreshConfig()).toEqual({
+    expect(buildRefreshConfig()).toMatchObject({
       github: {
         owner: 'owner',
         repo: 'repo',
@@ -67,7 +67,10 @@ describe('buildRefreshConfig', () => {
 
   it('discovers repos from SECRET_HOUSE_PROJECT_ROOTS', () => {
     mocks.mockDiscoverGitRepos.mockReturnValue({
-      repos: ['/discovered/a', '/discovered/b'],
+      repos: [
+        { repoKey: 'local:/discovered/a', name: 'a', path: '/discovered/a', remoteUrl: null, githubOwner: null, githubRepo: null, source: 'local' },
+        { repoKey: 'local:/discovered/b', name: 'b', path: '/discovered/b', remoteUrl: null, githubOwner: null, githubRepo: null, source: 'local' },
+      ],
       warnings: [],
     })
 
@@ -78,14 +81,19 @@ describe('buildRefreshConfig', () => {
     expect(mocks.mockDiscoverGitRepos).toHaveBeenCalledWith(
       expect.objectContaining({ roots: ['/workspace'] }),
     )
-    expect(config.localGit).toEqual({
-      repos: [{ path: '/discovered/a' }, { path: '/discovered/b' }],
+    expect(config.localGit).toMatchObject({
+      repos: [
+        expect.objectContaining({ path: '/discovered/a', repoKey: 'local:/discovered/a' }),
+        expect.objectContaining({ path: '/discovered/b', repoKey: 'local:/discovered/b' }),
+      ],
     })
   })
 
   it('merges explicit repos with discovered repos', () => {
     mocks.mockDiscoverGitRepos.mockReturnValue({
-      repos: ['/discovered/repo'],
+      repos: [
+        { repoKey: 'local:/discovered/repo', name: 'repo', path: '/discovered/repo', remoteUrl: null, githubOwner: null, githubRepo: null, source: 'local' },
+      ],
       warnings: [],
     })
 
@@ -94,14 +102,19 @@ describe('buildRefreshConfig', () => {
 
     const config = buildRefreshConfig()
 
-    expect(config.localGit).toEqual({
-      repos: [{ path: '/explicit/repo' }, { path: '/discovered/repo' }],
+    expect(config.localGit).toMatchObject({
+      repos: [
+        expect.objectContaining({ path: '/explicit/repo', repoKey: 'local:/explicit/repo' }),
+        expect.objectContaining({ path: '/discovered/repo', repoKey: 'local:/discovered/repo' }),
+      ],
     })
   })
 
   it('deduplicates when explicit and discovered repos overlap', () => {
     mocks.mockDiscoverGitRepos.mockReturnValue({
-      repos: ['/explicit/repo'],
+      repos: [
+        { repoKey: 'local:/explicit/repo', name: 'repo', path: '/explicit/repo', remoteUrl: null, githubOwner: null, githubRepo: null, source: 'local' },
+      ],
       warnings: [],
     })
 
@@ -201,7 +214,10 @@ describe('buildRefreshConfig', () => {
   })
 
   it('uses legacy GIT_REPO_ROOTS fallback', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: ['/legacy/repo'], warnings: [] })
+    mocks.mockDiscoverGitRepos.mockReturnValue({
+      repos: [{ repoKey: 'local:/legacy/repo', name: 'repo', path: '/legacy/repo', remoteUrl: null, githubOwner: null, githubRepo: null, source: 'local' }],
+      warnings: [],
+    })
 
     vi.stubEnv('GIT_REPO_ROOTS', '/legacy-workspace')
 
@@ -214,7 +230,10 @@ describe('buildRefreshConfig', () => {
   })
 
   it('prefers SECRET_HOUSE_PROJECT_ROOTS over legacy GIT_REPO_ROOTS', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: ['/preferred/repo'], warnings: [] })
+    mocks.mockDiscoverGitRepos.mockReturnValue({
+      repos: [{ repoKey: 'local:/preferred/repo', name: 'repo', path: '/preferred/repo', remoteUrl: null, githubOwner: null, githubRepo: null, source: 'local' }],
+      warnings: [],
+    })
 
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/preferred')
     vi.stubEnv('GIT_REPO_ROOTS', '/legacy')

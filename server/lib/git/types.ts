@@ -1,5 +1,11 @@
 export interface LocalGitRepoConfig {
   path: string
+  repoKey?: string
+  name?: string
+  remoteUrl?: string | null
+  githubOwner?: string | null
+  githubRepo?: string | null
+  source?: 'local' | 'github' | 'both'
 }
 
 export interface LocalGitCollectorConfig {
@@ -20,10 +26,13 @@ export interface RepoDiscoveryWarning {
 }
 
 export interface RepoDiscoveryRepo {
+  repoKey: string
+  name: string
   path: string
-  originRemoteUrl: string | null
+  remoteUrl: string | null
   githubOwner: string | null
   githubRepo: string | null
+  source: 'local' | 'github' | 'both'
 }
 
 export interface RepoDiscoveryResult {
@@ -37,8 +46,13 @@ export interface LocalGitCollectorResult {
 }
 
 export interface LocalGitRepoInfo {
+  repoKey: string
+  source: 'local' | 'github' | 'both'
   path: string
   repoName: string
+  remoteUrl: string | null
+  githubOwner: string | null
+  githubRepo: string | null
   defaultBranch: string | null
   isGitRepo: boolean
   recentCommits: number

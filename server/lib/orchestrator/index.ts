@@ -14,16 +14,40 @@ import type {
   IssueMetric,
   PullRequestMetric,
   CheckRunMetric,
+  RepositoryIdentity,
   RepositoryMetric,
   SessionMetric,
   LocalGitRepoMetric,
   ErrorMetric,
 } from '../../../types/metrics'
 
+function mergeSource(a: RepositoryIdentity['source'], b: RepositoryIdentity['source']): RepositoryIdentity['source'] {
+  if (a === b) return a
+  return 'both'
+}
+
+function mergeIdentity(existing: RepositoryIdentity | undefined, next: RepositoryIdentity): RepositoryIdentity {
+  if (!existing) return next
+  return {
+    repoKey: existing.repoKey,
+    name: existing.name || next.name,
+    localPath: existing.localPath ?? next.localPath,
+    remoteUrl: existing.remoteUrl ?? next.remoteUrl,
+    githubOwner: existing.githubOwner ?? next.githubOwner,
+    githubRepo: existing.githubRepo ?? next.githubRepo,
+    source: mergeSource(existing.source, next.source),
+  }
+}
+
 function toLocalGitRepoMetric(info: LocalGitRepoInfo): LocalGitRepoMetric {
   return {
+    repoKey: info.repoKey,
+    source: info.source,
     path: info.path,
     repoName: info.repoName,
+    remoteUrl: info.remoteUrl,
+    githubOwner: info.githubOwner,
+    githubRepo: info.githubRepo,
     defaultBranch: info.defaultBranch,
     isGitRepo: info.isGitRepo,
     recentCommits: info.recentCommits,
@@ -34,17 +58,27 @@ function toLocalGitRepoMetric(info: LocalGitRepoInfo): LocalGitRepoMetric {
   }
 }
 
-function toRepositoryMetric(info: LocalGitRepoInfo): RepositoryMetric {
+function toRepositoryMetric(info: LocalGitRepoInfo): RepositoryIdentity {
   return {
-    id: `local-${info.path.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-    name: info.repoName,
-    owner: 'local',
-    description: null,
-    defaultBranch: info.defaultBranch || 'unknown',
-    isPrivate: true,
-    updatedAt: info.latestCommitAt || new Date().toISOString(),
-    pushedAt: info.latestCommitAt || new Date().toISOString(),
-    url: `file://${info.path}`,
+    repoKey: info.repoKey,
+    name: info.githubRepo ?? info.repoName,
+    localPath: info.path,
+    remoteUrl: info.remoteUrl,
+    githubOwner: info.githubOwner,
+    githubRepo: info.githubRepo,
+    source: info.source,
+  }
+}
+
+function normalizeRepositoryMetric(info: RepositoryIdentity): RepositoryIdentity {
+  return {
+    repoKey: info.repoKey,
+    name: info.name,
+    localPath: info.localPath,
+    remoteUrl: info.remoteUrl,
+    githubOwner: info.githubOwner,
+    githubRepo: info.githubRepo,
+    source: info.source,
   }
 }
 
@@ -60,7 +94,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
       let issues: IssueMetric[] = []
       let pullRequests: PullRequestMetric[] = []
       let checkRuns: CheckRunMetric[] = []
-      let repositories: RepositoryMetric[] = []
+      let repositories: RepositoryIdentity[] = []
       let sessions: SessionMetric[] = []
       let localGit: LocalGitRepoMetric[] = []
       let aggregates: DashboardAggregates | null = null
@@ -79,7 +113,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
             issues = ghResult.snapshot.issues
             pullRequests = ghResult.snapshot.pullRequests
             checkRuns = ghResult.snapshot.checkRuns
-            repositories = ghResult.snapshot.repositories
+            repositories = ghResult.snapshot.repositories.map(normalizeRepositoryMetric)
             aggregates = ghResult.snapshot.aggregates
           }
           allErrors.push(...ghResult.errors)
@@ -95,7 +129,11 @@ export function createOrchestrator(config: OrchestratorConfig) {
           const gitCollector = createLocalGitCollector(config.localGit)
           const gitResult = await gitCollector.collect()
           const repoMetrics = gitResult.repos.map(toRepositoryMetric)
-          repositories = [...repositories, ...repoMetrics]
+          for (const repo of repoMetrics) {
+            const existing = repositories.find(item => item.repoKey === repo.repoKey)
+            const merged = mergeIdentity(existing, repo)
+            repositories = repositories.filter(item => item.repoKey !== repo.repoKey).concat([merged])
+          }
           localGit = gitResult.repos.map(toLocalGitRepoMetric)
           allErrors.push(...gitResult.errors)
         } catch (err) {
@@ -171,7 +209,14 @@ export function createOrchestrator(config: OrchestratorConfig) {
         issues,
         pullRequests,
         checkRuns,
-        repositories,
+        repositories: repositories.reduce<RepositoryIdentity[]>((acc, repo) => {
+          const existing = acc.find(item => item.repoKey === repo.repoKey)
+          if (!existing) {
+            acc.push(repo)
+            return acc
+          }
+          return acc.map(item => item.repoKey === repo.repoKey ? mergeIdentity(item, repo) : item)
+        }, []),
         sessions,
         localGit,
         errors: errorMetrics,

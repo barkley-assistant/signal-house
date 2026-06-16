@@ -21,6 +21,7 @@ export function createApiClient(opts: PAClientOptions) {
   const owner = segments.at(-2) ?? ''
   const repo = segments.at(-1) ?? ''
   const repoFullName = `${owner}/${repo}`
+  const repoKey = `github:${repoFullName}`
 
   async function request<T>(path: string): Promise<{ data: T; headers: Headers }> {
     const url = `${baseUrl}${path}`
@@ -102,6 +103,7 @@ export function createApiClient(opts: PAClientOptions) {
           updatedAt: item.updated_at,
           closedAt: item.closed_at,
           repo: repoFullName,
+          repoKey,
           labels: (item.labels ?? []).map(l => l.name),
           assignee: item.assignee?.login ?? null,
           milestone: item.milestone?.title ?? null,
@@ -131,6 +133,7 @@ export function createApiClient(opts: PAClientOptions) {
           mergedAt: item.merged_at,
           closedAt: item.closed_at,
           repo: repoFullName,
+          repoKey,
           author: item.user.login,
           labels: (item.labels ?? []).map(l => l.name),
           additions: item.additions,
@@ -156,6 +159,7 @@ export function createApiClient(opts: PAClientOptions) {
           createdAt: item.created_at,
           completedAt: item.status === 'completed' ? item.updated_at : null,
           repo: repoFullName,
+          repoKey,
           branch: item.head_branch,
           workflowName: workflowNames.get(item.workflow_id) ?? `Workflow ${item.workflow_id}`,
           url: item.html_url,
@@ -169,6 +173,12 @@ export function createApiClient(opts: PAClientOptions) {
       return {
         id: String(data.id),
         name: data.name,
+        repoKey,
+        localPath: null,
+        remoteUrl: data.html_url,
+        githubOwner: data.owner.login,
+        githubRepo: data.name,
+        source: 'github',
         owner: data.owner.login,
         description: data.description,
         defaultBranch: data.default_branch,

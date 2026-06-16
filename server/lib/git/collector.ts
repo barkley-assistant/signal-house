@@ -20,11 +20,22 @@ export function createLocalGitCollector(config: LocalGitCollectorConfig) {
   async function inspectRepo(repoPath: string): Promise<LocalGitRepoInfo> {
     const resolvedPath = resolve(repoPath)
     const repoName = resolvedPath.split('/').pop() || resolvedPath
+    const configEntry = config.repos.find(r => resolve(r.path) === resolvedPath)
+    const repoKey = configEntry?.repoKey ?? `local:${resolvedPath}`
+    const source = configEntry?.source ?? 'local'
+    const remoteUrl = configEntry?.remoteUrl ?? null
+    const githubOwner = configEntry?.githubOwner ?? null
+    const githubRepo = configEntry?.githubRepo ?? null
 
     if (!existsSync(resolvedPath)) {
       return {
+        repoKey,
+        source,
         path: resolvedPath,
         repoName,
+        remoteUrl,
+        githubOwner,
+        githubRepo,
         defaultBranch: null,
         isGitRepo: false,
         recentCommits: 0,
@@ -41,8 +52,13 @@ export function createLocalGitCollector(config: LocalGitCollectorConfig) {
       isGitRepo = true
     } catch {
       return {
+        repoKey,
+        source,
         path: resolvedPath,
         repoName,
+        remoteUrl,
+        githubOwner,
+        githubRepo,
         defaultBranch: null,
         isGitRepo: false,
         recentCommits: 0,
@@ -95,8 +111,13 @@ export function createLocalGitCollector(config: LocalGitCollectorConfig) {
     }
 
     return {
+      repoKey,
+      source,
       path: resolvedPath,
       repoName,
+      remoteUrl,
+      githubOwner,
+      githubRepo,
       defaultBranch,
       isGitRepo,
       recentCommits,

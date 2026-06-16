@@ -40,6 +40,13 @@ function readOriginRemote(path: string): string | null {
   }
 }
 
+function repoKeyFromDiscovery(path: string, remoteUrl: string | null, parsedRemote: ReturnType<typeof parseGithubOriginRemote>): string {
+  if (parsedRemote) {
+    return `github:${parsedRemote.githubOwner}/${parsedRemote.githubRepo}`
+  }
+  return `local:${path}`
+}
+
 function walk(
   currentPath: string,
   depth: number,
@@ -86,10 +93,13 @@ function walk(
             const originRemoteUrl = readOriginRemote(fullPath)
             const parsedRemote = originRemoteUrl ? parseGithubOriginRemote(originRemoteUrl) : null
             found.push({
+              repoKey: repoKeyFromDiscovery(fullPath, originRemoteUrl, parsedRemote),
+              name: parsedRemote ? parsedRemote.githubRepo : entry,
               path: fullPath,
-              originRemoteUrl,
+              remoteUrl: originRemoteUrl,
               githubOwner: parsedRemote?.githubOwner ?? null,
               githubRepo: parsedRemote?.githubRepo ?? null,
+              source: parsedRemote ? 'both' : 'local',
             })
           }
         } catch (error) {
@@ -143,10 +153,13 @@ export function discoverGitRepos(config: RepoDiscoveryConfig): RepoDiscoveryResu
           const originRemoteUrl = readOriginRemote(resolvedRoot)
           const parsedRemote = originRemoteUrl ? parseGithubOriginRemote(originRemoteUrl) : null
           found.push({
+            repoKey: repoKeyFromDiscovery(resolvedRoot, originRemoteUrl, parsedRemote),
+            name: parsedRemote ? parsedRemote.githubRepo : (resolvedRoot.split('/').pop() ?? resolvedRoot),
             path: resolvedRoot,
-            originRemoteUrl,
+            remoteUrl: originRemoteUrl,
             githubOwner: parsedRemote?.githubOwner ?? null,
             githubRepo: parsedRemote?.githubRepo ?? null,
+            source: parsedRemote ? 'both' : 'local',
           })
         }
       } catch (error) {
