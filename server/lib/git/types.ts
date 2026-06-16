@@ -14,6 +14,16 @@ export interface RepoDiscoveryConfig {
   excludes?: string[]
 }
 
+export interface RepoDiscoveryWarning {
+  path: string
+  message: string
+}
+
+export interface RepoDiscoveryResult {
+  repos: string[]
+  warnings: RepoDiscoveryWarning[]
+}
+
 export interface LocalGitCollectorResult {
   repos: LocalGitRepoInfo[]
   errors: string[]

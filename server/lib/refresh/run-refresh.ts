@@ -1,7 +1,7 @@
 import { initDb, setRefreshInProgress, getRefreshInProgress, setRefreshRunState, setRefreshRunStatus } from '../../db/client'
 import { createOrchestrator } from '../orchestrator'
 import { getEnv } from '../env'
-import { discoverGitRepos } from '../git/discovery'
+import { discoverGitRepos } from '../discovery/discovery'
 import type { OrchestratorConfig, OrchestratorResult } from '../orchestrator/types'
 import type { SessionCollectorConfig } from '../sessions/types'
 import type { RepoDiscoveryConfig } from '../git/types'
@@ -65,7 +65,10 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
         discoveryConfig.excludes = excludesRaw.split(',').map(e => e.trim()).filter(Boolean)
       }
       const discovered = discoverGitRepos(discoveryConfig)
-      for (const p of discovered) {
+      for (const warning of discovered.warnings) {
+        console.warn(`[signal-house] Repo discovery warning at ${warning.path}: ${warning.message}`)
+      }
+      for (const p of discovered.repos) {
         if (!allPaths.includes(p)) {
           allPaths.push(p)
         }

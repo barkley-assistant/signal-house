@@ -24,7 +24,7 @@ vi.mock('../../orchestrator', () => ({
   })),
 }))
 
-vi.mock('../../git/discovery', () => ({
+vi.mock('../../discovery/discovery', () => ({
   discoverGitRepos: mocks.mockDiscoverGitRepos,
 }))
 
@@ -66,7 +66,10 @@ describe('buildRefreshConfig', () => {
   })
 
   it('discovers repos from SECRET_HOUSE_PROJECT_ROOTS', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue(['/discovered/a', '/discovered/b'])
+    mocks.mockDiscoverGitRepos.mockReturnValue({
+      repos: ['/discovered/a', '/discovered/b'],
+      warnings: [],
+    })
 
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/workspace')
 
@@ -81,7 +84,10 @@ describe('buildRefreshConfig', () => {
   })
 
   it('merges explicit repos with discovered repos', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue(['/discovered/repo'])
+    mocks.mockDiscoverGitRepos.mockReturnValue({
+      repos: ['/discovered/repo'],
+      warnings: [],
+    })
 
     vi.stubEnv('SECRET_HOUSE_GIT_REPOS', '/explicit/repo')
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/workspace')
@@ -94,7 +100,10 @@ describe('buildRefreshConfig', () => {
   })
 
   it('deduplicates when explicit and discovered repos overlap', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue(['/explicit/repo'])
+    mocks.mockDiscoverGitRepos.mockReturnValue({
+      repos: ['/explicit/repo'],
+      warnings: [],
+    })
 
     vi.stubEnv('SECRET_HOUSE_GIT_REPOS', '/explicit/repo')
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/workspace')
@@ -106,7 +115,7 @@ describe('buildRefreshConfig', () => {
   })
 
   it('passes globs to the discovery function', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue([])
+    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: [], warnings: [] })
 
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/workspace')
     vi.stubEnv('SECRET_HOUSE_GIT_REPO_GLOBS', 'project-*')
@@ -119,7 +128,7 @@ describe('buildRefreshConfig', () => {
   })
 
   it('passes maxDepth to the discovery function', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue([])
+    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: [], warnings: [] })
 
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/workspace')
     vi.stubEnv('SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH', '5')
@@ -132,7 +141,7 @@ describe('buildRefreshConfig', () => {
   })
 
   it('passes excludes to the discovery function', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue([])
+    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: [], warnings: [] })
 
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/workspace')
     vi.stubEnv('SECRET_HOUSE_GIT_EXCLUDE', 'node_modules,dist')
@@ -145,7 +154,7 @@ describe('buildRefreshConfig', () => {
   })
 
   it('warns and ignores invalid GIT_DISCOVERY_MAX_DEPTH', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue([])
+    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: [], warnings: [] })
     const warnings: string[] = []
     const origWarn = console.warn
     console.warn = (msg: string) => { warnings.push(msg) }
@@ -169,7 +178,7 @@ describe('buildRefreshConfig', () => {
   })
 
   it('warns and ignores negative GIT_DISCOVERY_MAX_DEPTH', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue([])
+    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: [], warnings: [] })
     const warnings: string[] = []
     const origWarn = console.warn
     console.warn = (msg: string) => { warnings.push(msg) }
@@ -192,7 +201,7 @@ describe('buildRefreshConfig', () => {
   })
 
   it('uses legacy GIT_REPO_ROOTS fallback', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue(['/legacy/repo'])
+    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: ['/legacy/repo'], warnings: [] })
 
     vi.stubEnv('GIT_REPO_ROOTS', '/legacy-workspace')
 
@@ -205,7 +214,7 @@ describe('buildRefreshConfig', () => {
   })
 
   it('prefers SECRET_HOUSE_PROJECT_ROOTS over legacy GIT_REPO_ROOTS', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue(['/preferred/repo'])
+    mocks.mockDiscoverGitRepos.mockReturnValue({ repos: ['/preferred/repo'], warnings: [] })
 
     vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/preferred')
     vi.stubEnv('GIT_REPO_ROOTS', '/legacy')
