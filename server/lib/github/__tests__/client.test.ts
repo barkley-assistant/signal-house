@@ -81,9 +81,9 @@ describe('createApiClient', () => {
     expect(prs).toHaveLength(1)
     expect(prs[0]!.state).toBe('merged')
     expect(prs[0]!.author).toBe('bob')
-    expect(prs[0]!.additions).toBe(100)
-    expect(prs[0]!.deletions).toBe(50)
-    expect(prs[0]!.changedFiles).toBe(5)
+    expect(prs[0]!.additions).toBeNull()
+    expect(prs[0]!.deletions).toBeNull()
+    expect(prs[0]!.changedFiles).toBeNull()
     expect(prs[0]!.repo).toBe('test/repo')
   })
 
@@ -137,6 +137,91 @@ describe('createApiClient', () => {
     expect(prs[0]!.additions).toBe(12)
     expect(prs[0]!.deletions).toBe(3)
     expect(prs[0]!.changedFiles).toBe(2)
+  })
+
+  it('classifies PR with merged boolean when merged_at is null', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        {
+          number: 9,
+          title: 'Merged via boolean',
+          state: 'closed',
+          created_at: '2025-01-01T00:00:00Z',
+          updated_at: '2025-01-10T00:00:00Z',
+          merged_at: null,
+          closed_at: '2025-01-10T00:00:00Z',
+          html_url: '',
+          user: { login: 'dave' },
+          labels: [],
+          additions: 0,
+          deletions: 0,
+          changed_files: 0,
+          head: { ref: 'b', sha: 'xyz' },
+          head_sha: 'xyz',
+          merged: true,
+        },
+      ]), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        number: 9,
+        title: 'Merged via boolean',
+        state: 'closed',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-10T00:00:00Z',
+        merged_at: '2025-01-10T00:00:00Z',
+        closed_at: '2025-01-10T00:00:00Z',
+        html_url: '',
+        user: { login: 'dave' },
+        labels: [],
+        additions: 30,
+        deletions: 5,
+        changed_files: 2,
+        head: { ref: 'b', sha: 'xyz' },
+        head_sha: 'xyz',
+        merged: true,
+      }), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
+
+    const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
+    const prs = await client.fetchPullRequests()
+
+    expect(prs).toHaveLength(1)
+    expect(prs[0]!.state).toBe('merged')
+    expect(prs[0]!.mergedAt).toBe('2025-01-10T00:00:00Z')
+    expect(prs[0]!.additions).toBe(30)
+    expect(prs[0]!.deletions).toBe(5)
+    expect(prs[0]!.changedFiles).toBe(2)
+  })
+
+  it('closed-unmerged PR has null size fields from list endpoint', async () => {
+    mockFetch(200, [
+      {
+        number: 10,
+        title: 'Closed unmerged',
+        state: 'closed',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-05T00:00:00Z',
+        merged_at: null,
+        closed_at: '2025-01-05T00:00:00Z',
+        html_url: '',
+        user: { login: 'eve' },
+        labels: [],
+        additions: 0,
+        deletions: 0,
+        changed_files: 0,
+        head: { ref: 'c', sha: 'zzz' },
+        head_sha: 'zzz',
+        merged: false,
+      },
+    ])
+
+    const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
+    const prs = await client.fetchPullRequests()
+
+    expect(prs).toHaveLength(1)
+    expect(prs[0]!.state).toBe('closed')
+    expect(prs[0]!.additions).toBeNull()
+    expect(prs[0]!.deletions).toBeNull()
+    expect(prs[0]!.changedFiles).toBeNull()
   })
 
   it('maps workflow runs from GitHub API response', async () => {

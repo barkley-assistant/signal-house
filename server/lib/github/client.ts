@@ -96,7 +96,7 @@ export function createApiClient(opts: PAClientOptions) {
 
   function mapPullRequest(item: GHPullRequestRaw): PullRequestMetric {
     let state: PullRequestMetric['state'] = 'open'
-    if (item.merged_at) {
+    if (item.merged_at ?? item.merged) {
       state = 'merged'
     } else if (item.state === 'closed') {
       state = 'closed'
@@ -171,7 +171,12 @@ export function createApiClient(opts: PAClientOptions) {
           }
         }
 
-        prs.push(mapped)
+        prs.push({
+          ...mapped,
+          additions: null,
+          deletions: null,
+          changedFiles: null,
+        })
       }
       return { prs, warnings }
     },

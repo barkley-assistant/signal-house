@@ -145,6 +145,7 @@ describe('createCollector', () => {
       owner: 'test',
       repo: 'repo',
       token: 'ghp_test',
+      skipPersist: true,
     })
 
     const result = await collector.collect()
@@ -152,6 +153,13 @@ describe('createCollector', () => {
     expect(result.prsCount).toBe(1)
     expect(result.errors.some(error => error.includes('Failed to enrich pull request #10'))).toBe(true)
     expect(result.partialData).toBe(true)
+
+    const snapshot = (result as { snapshot?: unknown }).snapshot as { pullRequests: Array<{ additions: unknown; deletions: unknown; changedFiles: unknown }> } | undefined
+    expect(snapshot).toBeDefined()
+    const pr = snapshot!.pullRequests[0]!
+    expect(pr.additions).toBeNull()
+    expect(pr.deletions).toBeNull()
+    expect(pr.changedFiles).toBeNull()
   })
 
   it('handles rate limit retry', async () => {

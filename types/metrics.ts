@@ -26,9 +26,9 @@ export interface PullRequestMetric {
   repoKey: string
   author: string
   labels: string[]
-  additions: number
-  deletions: number
-  changedFiles: number
+  additions: number | null
+  deletions: number | null
+  changedFiles: number | null
   url: string
   ciStatus: 'pending' | 'success' | 'failure' | 'cancelled' | null
 }
