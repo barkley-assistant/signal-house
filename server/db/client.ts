@@ -333,6 +333,8 @@ export function getLatestState(): LatestState {
 
   return {
     snapshot,
+    viewSnapshot: snapshot,
+    selectedRepoKey: 'all',
     lastRefreshAt: lastRefresh,
     lastSuccessfulRefreshAt: lastRefresh,
     refreshInProgress,

@@ -163,6 +163,8 @@ export interface DashboardWindow {
 
 export interface LatestState {
   snapshot: MetricSnapshot | null
+  viewSnapshot: MetricSnapshot | null
+  selectedRepoKey: string
   lastRefreshAt: string | null
   lastSuccessfulRefreshAt: string | null
   refreshInProgress: boolean

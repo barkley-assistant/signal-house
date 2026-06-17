@@ -309,57 +309,6 @@ describe('GET /api/state', () => {
     )
   })
 
-  it('returns repo-filtered daily metrics when repoKey is provided', async () => {
-    mocks.mockGetQuery.mockReturnValue({ repoKey: 'github:barkley-clawd/signal-house' })
-    mocks.mockGetDailyMetricsRangeForRepo.mockReturnValue([
-      {
-        day: '2026-06-14',
-        repoKey: 'github:barkley-clawd/signal-house',
-        capturedAt: '2026-06-14T12:00:00.000Z',
-        source: 'orchestrated',
-        version: 1,
-        reflectsCompleteData: true,
-        issuesOpened: 1,
-        issuesClosed: 2,
-        prsCreated: 3,
-        prsMerged: 4,
-        totalCommits: 5,
-        avgCycleTimeDays: null,
-        medianCycleTimeDays: null,
-        p95CycleTimeDays: null,
-        cycleTimeSampleSize: 0,
-        ciTotalRuns: 0,
-        ciPassCount: 0,
-        ciFailCount: 0,
-        ciPassRate: null,
-        ciAvgDurationMs: null,
-        totalSessions: 0,
-        sessionErrorCount: 0,
-        staleIssues: 0,
-        stalePrs: 0,
-        warnings: [],
-        createdAt: '2026-06-14T12:00:00.000Z',
-      },
-    ])
-
-    const result = await handler({} as any)
-
-    expect(mocks.mockGetDailyMetricsRange).not.toHaveBeenCalled()
-    expect(mocks.mockGetDailyMetricsRangeForRepo).toHaveBeenCalledWith(
-      '2026-05-18',
-      '2026-06-14',
-      'github:barkley-clawd/signal-house',
-    )
-    expect(result.dashboardWindow.days.at(-1)).toMatchObject({
-      day: '2026-06-14',
-      isGap: false,
-      metrics: expect.objectContaining({
-        repoKey: 'github:barkley-clawd/signal-house',
-      }),
-    })
-    expect(result.dashboardWindow.coverage.daysWithData).toBe(1)
-  })
-
   it('propagates refreshInProgress from the database', async () => {
     mocks.mockGetLatestState.mockReturnValue({
       snapshot: null,
@@ -372,5 +321,271 @@ describe('GET /api/state', () => {
 
     const result = await handler({} as any)
     expect(result.refreshInProgress).toBe(true)
+  })
+
+  it('filters the dashboard view to a selected repo', async () => {
+    const snapshot = {
+      id: 'snap-2',
+      capturedAt: '2026-06-14T12:00:00.000Z',
+      issues: [
+        {
+          id: 'issue-a',
+          title: 'Repo A issue',
+          state: 'open',
+          createdAt: '2026-06-14T09:00:00.000Z',
+          updatedAt: '2026-06-14T09:00:00.000Z',
+          closedAt: null,
+          repo: 'demo/repo-a',
+          repoKey: 'github:demo/repo-a',
+          labels: [],
+          assignee: null,
+          milestone: null,
+          url: 'https://github.com/demo/repo-a/issues/1',
+        },
+        {
+          id: 'issue-b',
+          title: 'Repo B issue',
+          state: 'open',
+          createdAt: '2026-06-14T09:00:00.000Z',
+          updatedAt: '2026-06-14T09:00:00.000Z',
+          closedAt: null,
+          repo: 'demo/repo-b',
+          repoKey: 'github:demo/repo-b',
+          labels: [],
+          assignee: null,
+          milestone: null,
+          url: 'https://github.com/demo/repo-b/issues/2',
+        },
+      ],
+      pullRequests: [
+        {
+          id: 'pr-a',
+          title: 'Repo A PR',
+          state: 'merged',
+          createdAt: '2026-06-13T09:00:00.000Z',
+          updatedAt: '2026-06-14T09:00:00.000Z',
+          headSha: null,
+          mergedAt: '2026-06-14T10:00:00.000Z',
+          closedAt: '2026-06-14T10:00:00.000Z',
+          repo: 'demo/repo-a',
+          repoKey: 'github:demo/repo-a',
+          author: 'a',
+          labels: [],
+          additions: null,
+          deletions: null,
+          changedFiles: null,
+          url: 'https://github.com/demo/repo-a/pull/1',
+          ciStatus: 'success',
+        },
+        {
+          id: 'pr-b',
+          title: 'Repo B PR',
+          state: 'open',
+          createdAt: '2026-06-13T09:00:00.000Z',
+          updatedAt: '2026-06-14T09:00:00.000Z',
+          headSha: null,
+          mergedAt: null,
+          closedAt: null,
+          repo: 'demo/repo-b',
+          repoKey: 'github:demo/repo-b',
+          author: 'b',
+          labels: [],
+          additions: null,
+          deletions: null,
+          changedFiles: null,
+          url: 'https://github.com/demo/repo-b/pull/2',
+          ciStatus: 'failure',
+        },
+      ],
+      workflowRuns: [
+        {
+          id: 'run-a',
+          name: 'Repo A run',
+          status: 'completed',
+          conclusion: 'success',
+          createdAt: '2026-06-14T08:00:00.000Z',
+          completedAt: '2026-06-14T09:00:00.000Z',
+          headSha: null,
+          repo: 'demo/repo-a',
+          repoKey: 'github:demo/repo-a',
+          branch: 'main',
+          workflowName: 'CI',
+          url: null,
+        },
+        {
+          id: 'run-b',
+          name: 'Repo B run',
+          status: 'completed',
+          conclusion: 'failure',
+          createdAt: '2026-06-14T08:00:00.000Z',
+          completedAt: '2026-06-14T09:00:00.000Z',
+          headSha: null,
+          repo: 'demo/repo-b',
+          repoKey: 'github:demo/repo-b',
+          branch: 'main',
+          workflowName: 'CI',
+          url: null,
+        },
+      ],
+      repositories: [
+        {
+          repoKey: 'github:demo/repo-a',
+          name: 'repo-a',
+          localPath: null,
+          remoteUrl: 'https://github.com/demo/repo-a',
+          githubOwner: 'demo',
+          githubRepo: 'repo-a',
+          source: 'github',
+        },
+        {
+          repoKey: 'github:demo/repo-b',
+          name: 'repo-b',
+          localPath: null,
+          remoteUrl: 'https://github.com/demo/repo-b',
+          githubOwner: 'demo',
+          githubRepo: 'repo-b',
+          source: 'github',
+        },
+      ],
+      sessions: [],
+      localGit: [
+        {
+          repoKey: 'github:demo/repo-a',
+          source: 'github',
+          path: '/tmp/repo-a',
+          repoName: 'repo-a',
+          remoteUrl: 'https://github.com/demo/repo-a',
+          githubOwner: 'demo',
+          githubRepo: 'repo-a',
+          defaultBranch: 'main',
+          isGitRepo: true,
+          recentCommits: 2,
+          commitsByDay: { '2026-06-14': 2 },
+          authors: ['a'],
+          latestCommitAt: '2026-06-14T11:00:00.000Z',
+          error: null,
+        },
+        {
+          repoKey: 'github:demo/repo-b',
+          source: 'github',
+          path: '/tmp/repo-b',
+          repoName: 'repo-b',
+          remoteUrl: 'https://github.com/demo/repo-b',
+          githubOwner: 'demo',
+          githubRepo: 'repo-b',
+          defaultBranch: 'main',
+          isGitRepo: true,
+          recentCommits: 8,
+          commitsByDay: { '2026-06-14': 8 },
+          authors: ['b'],
+          latestCommitAt: '2026-06-14T11:00:00.000Z',
+          error: null,
+        },
+      ],
+      errors: [],
+      aggregates: {
+        throughput: {
+          periodStart: '2026-06-13T00:00:00.000Z',
+          periodEnd: '2026-06-14T12:00:00.000Z',
+          issuesClosed: 0,
+          issuesOpened: 0,
+          prsMerged: 0,
+          prsCreated: 0,
+          totalCommits: 0,
+        },
+        cycleTime: {
+          periodStart: '2026-06-13T00:00:00.000Z',
+          periodEnd: '2026-06-14T12:00:00.000Z',
+          averageDays: 1,
+          medianDays: 1,
+          p95Days: 1,
+          sampleSize: 1,
+        },
+        ci: {
+          periodStart: '2026-06-13T00:00:00.000Z',
+          periodEnd: '2026-06-14T12:00:00.000Z',
+          totalRuns: 0,
+          passCount: 0,
+          failCount: 0,
+          passRate: 0,
+          averageDurationMs: null,
+        },
+        staleWork: {
+          asOf: '2026-06-14T12:00:00.000Z',
+          staleIssues: 0,
+          stalePRs: 0,
+          staleThresholdDays: 14,
+          oldestItemDays: null,
+        },
+        sessionUsage: {
+          periodStart: '2026-06-13T00:00:00.000Z',
+          periodEnd: '2026-06-14T12:00:00.000Z',
+          totalSessions: 0,
+          startedSessions: 0,
+          completedSessions: 0,
+          erroredSessions: 0,
+          stuckSessions: 0,
+          lastActivityAt: null,
+          messages: 0,
+          activeDays: 0,
+          totalCost: 0,
+          averageCostPerDay: 0,
+          averageTokensPerSession: 0,
+          medianTokensPerSession: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          uniqueTools: [],
+          toolUsage: [],
+          topActions: [],
+          errorCount: 0,
+        },
+        computedAt: '2026-06-14T12:00:00.000Z',
+      },
+      metadata: {
+        source: 'orchestrated',
+        refreshDurationMs: 1,
+        partialData: false,
+        errors: [],
+      },
+    }
+
+    mocks.mockGetLatestState.mockReturnValue({
+      snapshot,
+      lastRefreshAt: '2026-06-14T12:00:00.000Z',
+      lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
+      refreshInProgress: false,
+      isStale: false,
+      dashboardWindow: null,
+      diagnostics: {
+        configuredProjectRoots: ['/workspace'],
+        discoveredRepos: [],
+        skippedPaths: [],
+        parsedGitHubRemotes: [],
+        collectionTargets: [],
+        cacheAgeSeconds: 0,
+        pollerEnabled: false,
+        pollerIntervalSeconds: 300,
+        lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
+        lastError: null,
+        sourceHealth: {},
+      },
+    })
+
+    mocks.mockGetQuery.mockReturnValue({ repoKey: 'github:demo/repo-a' })
+
+    const result = await handler({} as any)
+
+    expect(mocks.mockGetDailyMetricsRange).not.toHaveBeenCalled()
+    expect(mocks.mockGetDailyMetricsRangeForRepo).not.toHaveBeenCalled()
+    expect(result.selectedRepoKey).toBe('github:demo/repo-a')
+    expect(result.snapshot?.issues).toHaveLength(2)
+    expect(result.viewSnapshot?.issues).toHaveLength(1)
+    expect(result.viewSnapshot?.issues[0]?.repoKey).toBe('github:demo/repo-a')
+    expect(result.dashboardWindow.cards.throughput.issuesOpened).toBe(1)
+    expect(result.dashboardWindow.cards.throughput.totalCommits).toBe(2)
+    expect(result.dashboardWindow.cards.staleWork.staleIssues).toBe(0)
+    expect(result.dashboardWindow.latestDay?.day).toBe('2026-06-14')
   })
 })

@@ -21,7 +21,7 @@
       <EmptyState
         v-else
         :message="throughput?.message ?? 'Throughput unavailable'"
-        hint="Check GitHub and local git configuration"
+        :hint="throughput?.status === 'empty' ? `${scopeLabel} has no throughput data yet` : 'Check GitHub and local git configuration'"
       />
     </UiCard>
 
@@ -55,7 +55,7 @@
       <EmptyState
         v-else
         :message="cycleTime?.message ?? 'Cycle time unavailable'"
-        hint="GitHub pull requests are required for cycle time"
+        :hint="cycleTime?.status === 'empty' ? `${scopeLabel} has no cycle time data yet` : 'GitHub pull requests are required for cycle time'"
       />
     </UiCard>
 
@@ -81,7 +81,7 @@
       <EmptyState
         v-else
         :message="ci?.message ?? 'CI unavailable'"
-        hint="GitHub Actions or workflow run data is required"
+        :hint="ci?.status === 'empty' ? `${scopeLabel} has no CI data yet` : 'GitHub Actions or workflow run data is required'"
       />
     </UiCard>
 
@@ -102,7 +102,7 @@
       <EmptyState
         v-else
         :message="staleWork?.message ?? 'Stale work unavailable'"
-        hint="GitHub issues and pull requests are required"
+        :hint="staleWork?.status === 'empty' ? `${scopeLabel} has no stale work` : 'GitHub issues and pull requests are required'"
       />
     </UiCard>
 
@@ -110,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DashboardWindowThroughputSummary, DashboardWindowCycleTimeSummary, DashboardWindowCISummary, DashboardWindowStaleWorkSummary, DashboardPanelStatus } from '../types/snapshot'
 
 const props = defineProps<{
@@ -118,7 +119,10 @@ const props = defineProps<{
   ci: DashboardWindowCISummary | null
   staleWork: DashboardWindowStaleWorkSummary | null
   isStale?: boolean
+  scopeLabel?: string
 }>()
+
+const scopeLabel = computed(() => props.scopeLabel ?? 'all repos')
 
 function isBlockedState(status: DashboardPanelStatus): boolean {
   return status === 'unconfigured' || status === 'unavailable' || status === 'error'

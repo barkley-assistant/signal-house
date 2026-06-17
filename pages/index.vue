@@ -6,9 +6,18 @@
         <p class="page-subtitle">
           28-day rolling window
           <template v-if="windowRange">· {{ windowRange }}</template>
+          <template v-if="selectedScopeLabel">· {{ selectedScopeLabel }}</template>
         </p>
       </div>
       <div class="page-actions">
+        <label class="repo-picker">
+          <span class="repo-picker__label">Repo</span>
+          <select class="repo-picker__select" :value="selectedRepoKey" @change="onRepoChange">
+            <option v-for="option in repoOptions" :key="option.repoKey" :value="option.repoKey">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
         <button
           class="refresh-btn"
           :class="{ 'refresh-btn--active': refreshing }"
@@ -173,6 +182,7 @@
             :ci="cards?.ci ?? null"
             :stale-work="cards?.staleWork ?? null"
             :is-stale="isStale"
+            :scope-label="selectedScopeLabel"
           />
         </div>
 
@@ -186,7 +196,7 @@
               v-if="hasDataDays"
               :data="dashboardDays"
             />
-            <EmptyState v-else message="No throughput data yet" />
+            <EmptyState v-else message="No throughput data yet" :hint="selectionEmptyHint('throughput')" />
           </UiCard>
         </div>
 
@@ -196,7 +206,7 @@
               v-if="hasDataDays"
               :data="dashboardDays"
             />
-            <EmptyState v-else message="No cycle time data yet" />
+            <EmptyState v-else message="No cycle time data yet" :hint="selectionEmptyHint('cycle time')" />
           </UiCard>
         </div>
 
@@ -206,17 +216,18 @@
               v-if="hasDataDays"
               :data="dashboardDays"
             />
-            <EmptyState v-else message="No CI data yet" />
+            <EmptyState v-else message="No CI data yet" :hint="selectionEmptyHint('CI')" />
           </UiCard>
         </div>
 
         <div class="section section-large section-table">
           <UiCard title="Stale or Blocked Work">
             <StaleWorkTable
-              :issues="snapshot.issues"
-              :pull-requests="snapshot.pullRequests"
+              :issues="displaySnapshot?.issues ?? []"
+              :pull-requests="displaySnapshot?.pullRequests ?? []"
               :state="cards?.staleWork?.status ?? null"
               :message="cards?.staleWork?.message ?? null"
+              :scope-label="selectedScopeLabel"
             />
           </UiCard>
         </div>
@@ -231,13 +242,28 @@
 
 <script setup lang="ts">
 import type { LatestState, DashboardWindow } from '../types/snapshot'
+import { ALL_REPOS_REPO_KEY } from '../types/daily-metrics'
 
 const fetchOpts = { cache: 'no-store' as const }
-const { data: stateData, pending: statePending, error: stateError, refresh: refreshDashboardData } = useFetch<LatestState>('/api/state', fetchOpts)
+const route = useRoute()
+const router = useRouter()
+
+const selectedRepoKey = computed(() => {
+  const value = route.query.repoKey
+  return typeof value === 'string' && value.trim() ? value.trim() : ALL_REPOS_REPO_KEY
+})
+
+const stateUrl = computed(() => {
+  if (selectedRepoKey.value === ALL_REPOS_REPO_KEY) return '/api/state'
+  return `/api/state?repoKey=${encodeURIComponent(selectedRepoKey.value)}`
+})
+
+const { data: stateData, pending: statePending, error: stateError, refresh: refreshDashboardData } = useFetch<LatestState>(stateUrl, fetchOpts)
 
 const loading = computed(() => statePending.value)
 const error = computed(() => stateError.value)
 const snapshot = computed(() => stateData.value?.snapshot ?? null)
+const displaySnapshot = computed(() => stateData.value?.viewSnapshot ?? snapshot.value)
 const isStale = computed(() => stateData.value?.isStale ?? false)
 const refreshing = ref(false)
 const refreshError = ref<string | null>(null)
@@ -280,6 +306,27 @@ const sourceHealthEntries = computed(() => {
 })
 
 const diagnostics = computed(() => stateData.value?.diagnostics ?? null)
+
+const repoOptions = computed(() => {
+  const repos = snapshot.value?.repositories ?? []
+  const uniqueRepos = Array.from(new Map(repos.map(repo => [repo.repoKey, repo])).values())
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return [
+    { repoKey: ALL_REPOS_REPO_KEY, label: 'All repos' },
+    ...uniqueRepos.map(repo => ({
+      repoKey: repo.repoKey,
+      label: repo.githubOwner && repo.githubRepo
+        ? `${repo.githubOwner}/${repo.githubRepo}`
+        : repo.name,
+    })),
+  ]
+})
+
+const selectedScopeLabel = computed(() => {
+  if (selectedRepoKey.value === ALL_REPOS_REPO_KEY) return 'all repos'
+  return repoOptions.value.find(option => option.repoKey === selectedRepoKey.value)?.label ?? selectedRepoKey.value
+})
 
 const nextRefreshLabel = computed(() => {
   if (!stateData.value?.pollerEnabled) return 'Manual only'
@@ -331,6 +378,30 @@ async function doRefresh() {
   }
 }
 
+function selectionEmptyHint(sourceName: string): string {
+  if (selectedRepoKey.value === ALL_REPOS_REPO_KEY) {
+    return `No ${sourceName} data in this window`
+  }
+  return `No ${sourceName} data for ${selectedScopeLabel.value} in this window`
+}
+
+async function onRepoChange(event: Event) {
+  const nextRepoKey = (event.target as HTMLSelectElement).value || ALL_REPOS_REPO_KEY
+  const nextQuery: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(route.query)) {
+    if (typeof value === 'string') nextQuery[key] = value
+  }
+
+  if (nextRepoKey === ALL_REPOS_REPO_KEY) {
+    delete nextQuery.repoKey
+  } else {
+    nextQuery.repoKey = nextRepoKey
+  }
+
+  await router.replace({ query: nextQuery })
+}
+
 async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Promise<void> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
@@ -356,6 +427,37 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
 
 .page-actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.repo-picker {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.repo-picker__label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.repo-picker__select {
+  min-width: 220px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.8rem;
+  color: #e2e8f0;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.375rem;
+  outline: none;
+}
+
+.repo-picker__select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.15);
 }
 
 .service-status {

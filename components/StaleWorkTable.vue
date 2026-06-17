@@ -60,6 +60,7 @@ const props = defineProps<{
   pullRequests: PullRequestMetric[]
   state?: DashboardPanelStatus | null
   message?: string | null
+  scopeLabel?: string
 }>()
 
 const STALE_ISSUE_DAYS = 14
@@ -71,6 +72,7 @@ const emptyMessage = computed(() => props.message ?? 'No stale or blocked work')
 
 const emptyHint = computed(() => {
   if (isBlockedState.value) return 'GitHub issues and pull requests are required'
+  if (props.scopeLabel && props.scopeLabel !== 'all repos') return `No stale or blocked work for ${props.scopeLabel}`
   return 'All tracked items are up to date'
 })
 
