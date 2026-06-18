@@ -153,44 +153,20 @@ function migrate(db: Db): void {
   db.exec(SQL.createTables)
   const row = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value?: unknown } | undefined
   const current = row ? Number(row.value) : 0
-  if (current < SCHEMA_VERSION) {
-    if (current < 3) {
-      db.exec(SQL.createDailyMetricsV3)
-      const hasLegacyDailyMetrics = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'daily_metrics' LIMIT 1`).get() != null
-      if (hasLegacyDailyMetrics) {
-        db.exec(`
-          INSERT INTO daily_metrics_v3 (
-            day, repo_key, captured_at, source, version, reflects_complete_data,
-            issues_opened, issues_closed, prs_created, prs_merged, total_commits,
-            avg_cycle_time_days, median_cycle_time_days, p95_cycle_time_days, cycle_time_sample_size,
-            ci_total_runs, ci_pass_count, ci_fail_count, ci_pass_rate, ci_avg_duration_ms,
-            total_sessions, session_error_count,
-            stale_issues, stale_prs,
-            warnings, created_at
-          )
-          SELECT
-            day, 'all', captured_at, source, version, reflects_complete_data,
-            issues_opened, issues_closed, prs_created, prs_merged, total_commits,
-            avg_cycle_time_days, median_cycle_time_days, p95_cycle_time_days, cycle_time_sample_size,
-            ci_total_runs, ci_pass_count, ci_fail_count, ci_pass_rate, ci_avg_duration_ms,
-            total_sessions, session_error_count,
-            stale_issues, stale_prs,
-            warnings, created_at
-          FROM daily_metrics;
-        `)
-        db.exec('DROP TABLE daily_metrics;')
-      }
-      db.exec(`
-        ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics;
-        CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
-          ON daily_metrics(repo_key, day DESC);
-      `)
-    }
-    db.prepare(SQL.upsertLatestState).run({
-      key: 'schema_version',
-      value: String(SCHEMA_VERSION),
-    })
-  }
+  if (current >= SCHEMA_VERSION) return
+
+  db.exec(SQL.dropTables)
+  db.exec(SQL.createTables)
+  db.exec(SQL.createDailyMetricsV3)
+  db.exec(`
+    ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics;
+    CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
+      ON daily_metrics(repo_key, day DESC);
+  `)
+  db.prepare(SQL.upsertLatestState).run({
+    key: 'schema_version',
+    value: String(SCHEMA_VERSION),
+  })
 }
 
 export function save(): void {

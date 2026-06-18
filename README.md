@@ -239,6 +239,8 @@ The poller is owned by the Signal House daemon process. It is started at server 
 | --------- | ---------------------------------------------------------------- | ------- |
 | `DB_DIR`  | Directory for the SQLite database file (no `SECRET_HOUSE_` prefix) | `.data` |
 
+Signal House may rebuild this local runtime database after schema changes. Existing local cache contents are not guaranteed to survive upgrades.
+
 ### Legacy env names
 
 Each `SECRET_HOUSE_*` variable has a legacy fallback name for backward compatibility. The preferred name takes precedence when both are set. Legacy names:

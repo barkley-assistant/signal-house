@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
+import Database from 'better-sqlite3'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { initDb, getLatestState, close, setRefreshRunState, getRefreshRunState, getLatestSnapshot, insertSnapshot } from '../client'
@@ -135,5 +136,46 @@ describe('initDb on fresh database', () => {
     const reopened = await initDb()
     expect(reopened).toBeTruthy()
     expect(getLatestSnapshot()?.id).toBe('snap-1')
+  })
+
+  it('drops incompatible runtime data and recreates a fresh schema', async () => {
+    const legacyDb = new Database(join(tmpDir, 'metrics.db'))
+    legacyDb.exec(`
+      CREATE TABLE snapshots (
+        id TEXT PRIMARY KEY,
+        captured_at TEXT NOT NULL,
+        data TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE aggregates (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        data TEXT NOT NULL,
+        snapshot_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE latest_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO latest_state (key, value) VALUES ('schema_version', '3');
+      INSERT INTO snapshots (id, captured_at, data, version) VALUES ('snap-old', '2026-06-01T00:00:00.000Z', '{}', 3);
+    `)
+    legacyDb.close()
+
+    await initDb()
+
+    expect(getLatestSnapshot()).toBeNull()
+    expect(getLatestState().snapshot).toBeNull()
+    expect(getLatestState().refreshState.runHistory).toEqual([])
+
+    const reopened = new Database(join(tmpDir, 'metrics.db'))
+    const count = reopened.prepare('SELECT COUNT(*) as count FROM snapshots').get() as { count: number }
+    expect(count.count).toBe(0)
+    reopened.close()
   })
 })

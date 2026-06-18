@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export const SQL = {
 
@@ -37,6 +37,55 @@ export const SQL = {
     CREATE INDEX IF NOT EXISTS idx_aggregates_period
       ON aggregates(period_start, period_end);
 
+    CREATE INDEX IF NOT EXISTS idx_latest_state_key
+      ON latest_state(key);
+
+  `,
+
+  dropTables: `
+    DROP TABLE IF EXISTS aggregates;
+    DROP TABLE IF EXISTS snapshots;
+    DROP TABLE IF EXISTS daily_metrics;
+    DROP TABLE IF EXISTS latest_state;
+  `,
+
+  createStorageTables: `
+    CREATE TABLE IF NOT EXISTS snapshots (
+      id          TEXT PRIMARY KEY,
+      captured_at TEXT NOT NULL,
+      data        TEXT NOT NULL,
+      version     INTEGER NOT NULL DEFAULT 1,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS aggregates (
+      id           TEXT PRIMARY KEY,
+      type         TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end   TEXT NOT NULL,
+      data         TEXT NOT NULL,
+      snapshot_id  TEXT NOT NULL,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (snapshot_id) REFERENCES snapshots(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS latest_state (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_snapshots_captured_at
+      ON snapshots(captured_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_aggregates_type
+      ON aggregates(type);
+
+    CREATE INDEX IF NOT EXISTS idx_aggregates_period
+      ON aggregates(period_start, period_end);
+
+    CREATE INDEX IF NOT EXISTS idx_latest_state_key
+      ON latest_state(key);
   `,
 
   createDailyMetricsV3: `

@@ -200,7 +200,7 @@ describe('daily_metrics table', () => {
     ])
   })
 
-  it('boots cleanly on existing database (schema migration)', async () => {
+  it('resets incompatible existing database state and starts cleanly', async () => {
     const legacyDb = new Database(join(tmpDir, 'metrics.db'))
     legacyDb.exec(`
       CREATE TABLE snapshots (
@@ -264,10 +264,6 @@ describe('daily_metrics table', () => {
 
     await initDb()
     const results = getDailyMetricsRange('2026-06-01', '2026-06-01')
-    expect(results).toHaveLength(1)
-    expect(results[0]!.day).toBe('2026-06-01')
-    expect(results[0]!.repoKey).toBe('all')
-    expect(results[0]!.issuesOpened).toBe(4)
-    expect(results[0]!.warnings).toEqual(['legacy'])
+    expect(results).toHaveLength(0)
   })
 })
