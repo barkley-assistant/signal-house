@@ -19,6 +19,10 @@ describe('runtime config', () => {
     const config = getRuntimeConfig({})
 
     expect(config).toMatchObject({
+      accessProtection: {
+        enabled: false,
+        username: 'signal-house',
+      },
       poller: {
         enabled: false,
         intervalSeconds: 300,
@@ -75,5 +79,15 @@ describe('runtime config', () => {
       staleThresholdDays: 14,
     })
     expect(getDiscoveryMaxDepth()).toBe(3)
+  })
+
+  it('reads the optional access protection env vars', () => {
+    vi.stubEnv('SECRET_HOUSE_ACCESS_USERNAME', 'jake')
+    vi.stubEnv('SECRET_HOUSE_ACCESS_PASSWORD', 'secret')
+
+    expect(getRuntimeConfig().accessProtection).toMatchObject({
+      enabled: true,
+      username: 'jake',
+    })
   })
 })

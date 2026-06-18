@@ -24,6 +24,10 @@ function parseNonNegativeInt(value: string | undefined, fallback: number): numbe
 }
 
 export interface RuntimeConfig {
+  accessProtection: {
+    enabled: boolean
+    username: string
+  }
   poller: {
     enabled: boolean
     intervalSeconds: number
@@ -56,8 +60,13 @@ export interface RuntimeConfig {
 export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const pollIntervalSeconds = parsePositiveInt(getEnv(env, 'SECRET_HOUSE_POLL_INTERVAL_SECONDS', 'METRICS_POLL_INTERVAL_SECONDS'), DEFAULT_POLL_INTERVAL_SECONDS)
   const startupDelaySeconds = parsePositiveInt(getEnv(env, 'SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS', 'METRICS_POLL_STARTUP_DELAY_SECONDS'), DEFAULT_POLL_STARTUP_DELAY_SECONDS)
+  const accessPassword = getEnv(env, 'SECRET_HOUSE_ACCESS_PASSWORD')?.trim() ?? ''
 
   return {
+    accessProtection: {
+      enabled: accessPassword.length > 0,
+      username: getEnv(env, 'SECRET_HOUSE_ACCESS_USERNAME')?.trim() ?? 'signal-house',
+    },
     poller: {
       enabled: getBooleanEnv(env, 'SECRET_HOUSE_POLLER_ENABLED', 'METRICS_POLLER_ENABLED'),
       intervalSeconds: Math.min(MAX_POLL_INTERVAL_SECONDS, Math.max(MIN_POLL_INTERVAL_SECONDS, pollIntervalSeconds)),

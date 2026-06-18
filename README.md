@@ -378,7 +378,7 @@ Use the repo’s actual scripts as the source of truth. If a script is missing o
 
 ## Running as a local service
 
-Signal House is intended to run as a persistent local Node service on the machine that hosts Clawd.
+Signal House is intended to run as a persistent local Node service on the machine that hosts Clawd. It can be bound to the LAN when needed, but LAN exposure should be treated as untrusted until optional protection is enabled.
 
 A typical production run is:
 
@@ -427,7 +427,7 @@ journalctl -u signal-house -f
 
 ## Firewall note
 
-If the dashboard should be available on the LAN, allow port `3000`.
+If the dashboard should be available on the LAN, allow port `3000` and set `SECRET_HOUSE_ACCESS_PASSWORD` to enable the optional protection gate.
 
 ```bash
 # firewalld
@@ -456,6 +456,32 @@ Avoid:
 * decorative charts
 * dashboards that require interpretation archaeology
 * abstractions added before the local workflow proves they are needed
+
+## Optional LAN protection
+
+By default, Signal House stays local-first and does not require any extra setup. If you bind it to the LAN or open the firewall, the app and local API become reachable from other devices on the network. That is useful for a trusted home or lab network, but it is not safe to treat as public access.
+
+You can enable a lightweight shared-secret gate with two env vars:
+
+```bash
+SECRET_HOUSE_ACCESS_USERNAME=signal-house
+SECRET_HOUSE_ACCESS_PASSWORD=choose-a-long-random-password
+```
+
+When enabled, requests must use HTTP Basic auth with those credentials. This protects the dashboard, API routes, and built-in server assets. It does not add users, sessions, roles, OAuth, or any multi-user account system.
+
+What is protected:
+
+* the dashboard pages
+* `/api/state`
+* `/api/refresh`
+* built-in server assets and other Nitro-served routes
+
+What is not protected:
+
+* your network transport
+* the host machine itself
+* any reverse proxy or firewall you put in front of Signal House
 
 ## Current boundaries
 
