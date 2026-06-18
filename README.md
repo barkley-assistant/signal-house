@@ -10,6 +10,8 @@ It answers one blunt question:
 
 It is not a generic analytics dashboard. It is not a full observability platform. It is a focused workstream health screen for the person running OpenClaw day to day.
 
+Signal House runs as a single long-running local daemon. It serves the Nuxt dashboard, owns the local SQLite state, and keeps the dashboard warm by refreshing on its own schedule.
+
 Signal House should make it obvious whether work is moving, where it is getting stuck, whether PRs are progressing, whether CI is behaving, and whether the system is collecting useful signal instead of noise.
 
 ## What Signal House tracks
@@ -64,7 +66,7 @@ Signal House uses:
 
 The stack is deliberately boring where it matters.
 
-Nuxt keeps the server and UI in one place. Vue fits the dashboard UI well. TypeScript keeps the data model honest. SQLite is a simple local store for cached snapshots and refresh state. ECharts is enough for useful trend charts without turning charts into their own project.
+Nuxt keeps the server and UI in one place. Vue fits the dashboard UI well. TypeScript keeps the data model honest. SQLite is a simple local store for cached dashboard state, refresh state, and daily rollups. ECharts is enough for useful trend charts without turning charts into their own project.
 
 ## Architecture
 
@@ -257,7 +259,7 @@ A manual refresh:
 * is rejected with `HTTP 409` if another refresh is already in progress (manual or scheduled)
 * preserves the last good data if collection fails
 
-GitHub rate limits still apply. If GitHub is slow, unreachable, or rate-limited, Signal House should show the cached snapshot with a clear stale or partial-data warning.
+GitHub rate limits still apply. If GitHub is slow, unreachable, or rate-limited, Signal House should show the cached state with a clear stale or partial-data warning.
 
 ## Background polling
 
@@ -267,7 +269,7 @@ The poller:
 
 * is owned by the server process and started by `server/plugins/poller.ts`
 * waits for the configured startup delay
-* optionally runs once on startup
+* runs once on startup when configured to do so
 * refreshes at the configured interval
 * uses the same refresh runner as manual refresh
 * uses the same in-process concurrency guard as manual refresh
@@ -298,7 +300,7 @@ Returns HTTP 409 if a refresh is already in progress.
 
 The response includes:
 
-* latest snapshot data
+* latest cached state
 * refresh status
 * stale-data status
 * source health
@@ -403,6 +405,7 @@ Restart=on-failure
 RestartSec=5
 User=openclaw
 Group=openclaw
+# The service should be the only Signal House instance touching this DB.
 
 [Install]
 WantedBy=multi-user.target
