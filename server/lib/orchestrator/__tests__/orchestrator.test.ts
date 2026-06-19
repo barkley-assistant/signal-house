@@ -862,5 +862,94 @@ describe('createOrchestrator', () => {
     expect(snapshotArg.aggregates.staleWork.staleIssues).toBe(2)
     expect(snapshotArg.aggregates.staleWork.stalePRs).toBe(1)
     expect(snapshotArg.aggregates.throughput.totalCommits).toBe(10)
+    expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.sessionUsage!.totalSessions).toBe(3)
+  })
+
+  it('preserves sessionUsage when GitHub aggregates are rebuilt', async () => {
+    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
+    const sessionCollector = { collect: vi.fn() }
+
+    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+
+    ghCollector.collect.mockResolvedValue({
+      snapshotId: 'gh-id',
+      capturedAt: new Date().toISOString(),
+      issuesCount: 1,
+      prsCount: 0,
+      workflowRunsCount: 0,
+      errors: [],
+      partialData: false,
+      durationMs: 50,
+      snapshot: {
+        id: 'gh-id',
+        capturedAt: new Date().toISOString(),
+        issues: [{
+          id: 'i1', title: 'Issue 1', state: 'open' as const,
+          createdAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-01T10:00:00Z', closedAt: null, repo: 'test/repo', repoKey: 'github:test/repo',
+          labels: [], assignee: null, milestone: null, url: '',
+        }],
+        pullRequests: [],
+        workflowRuns: [],
+        repositories: [],
+        sessions: [],
+        localGit: [],
+        errors: [],
+        aggregates: {
+          throughput: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-02T00:00:00Z', issuesClosed: 0, issuesOpened: 1, prsMerged: 0, prsCreated: 0, totalCommits: 0 },
+          cycleTime: null,
+          ci: null,
+          staleWork: { asOf: '2026-06-02T00:00:00Z', staleIssues: 0, stalePRs: 0, staleThresholdDays: 14, oldestItemDays: null },
+          sessionUsage: null,
+          computedAt: 'now',
+        },
+        metadata: { source: 'github' as const, refreshDurationMs: 50, partialData: false, errors: [] },
+      },
+    })
+
+    sessionCollector.collect.mockResolvedValue({
+      sessions: [
+        { id: 's1', toolName: 'opencode', action: 'edit', timestamp: '2026-06-01T12:00:00Z', durationMs: 100, metadata: {}, success: true },
+      ],
+      sessionUsage: {
+        periodStart: '2026-06-01T00:00:00Z',
+        periodEnd: '2026-06-02T00:00:00Z',
+        totalSessions: 1,
+        startedSessions: 1,
+        completedSessions: 1,
+        erroredSessions: 0,
+        stuckSessions: 0,
+        lastActivityAt: '2026-06-01T12:00:00Z',
+        messages: 1,
+        activeDays: 1,
+        totalCost: 1,
+        averageCostPerDay: 1,
+        averageTokensPerSession: 10,
+        medianTokensPerSession: 10,
+        inputTokens: 5,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        uniqueTools: ['opencode'],
+        toolUsage: [{ toolName: 'opencode', count: 1, percentage: 100 }],
+        topActions: [{ action: 'edit', count: 1 }],
+        errorCount: 0,
+      },
+      gap: null,
+      errors: [],
+    })
+
+    const orchestrator = createOrchestrator({
+      github: [{ owner: 'test', repo: 'repo', token: 'tok' }],
+      sessions: {},
+    })
+
+    await orchestrator.collect()
+
+    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.sessionUsage!.totalSessions).toBe(1)
+    expect(snapshotArg.aggregates.throughput.issuesOpened).toBe(1)
   })
 })

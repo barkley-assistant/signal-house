@@ -155,11 +155,6 @@ export function createOrchestrator(config: OrchestratorConfig) {
           const sessionResult = await sessionCollector.collect()
           sessions = sessionResult.sessions
           sessionUsageFromCollector = sessionResult.sessionUsage
-          const currentAggregates = aggregates as DashboardAggregates | null
-          if (sessionResult.sessionUsage && currentAggregates !== null) {
-            currentAggregates.sessionUsage = sessionResult.sessionUsage
-            currentAggregates.computedAt = capturedAt
-          }
           if (sessionResult.gap) {
             allErrors.push(sessionResult.gap)
           }
@@ -173,6 +168,9 @@ export function createOrchestrator(config: OrchestratorConfig) {
         const deriveConfig = { staleThresholdDays: runtimeConfig.orchestrator.staleThresholdDays, lookbackDays: runtimeConfig.orchestrator.githubLookbackDays }
         aggregates = deriveAll(issues, pullRequests, workflowRuns, deriveConfig)
         aggregates.throughput.totalCommits = localGit.reduce((sum, r) => sum + r.recentCommits, 0)
+        if (sessionUsageFromCollector) {
+          aggregates.sessionUsage = sessionUsageFromCollector
+        }
       }
 
       if (!aggregates) {
