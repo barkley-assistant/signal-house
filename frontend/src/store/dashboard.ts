@@ -12,11 +12,13 @@ export interface DashboardState {
   lastSuccessfulRefreshAt: string | null;
   refreshStatus: "idle" | "running" | "success" | "failed";
   manualRefreshStatus: "idle" | "running" | "success" | "failed";
+  manualRefreshErrorTimestamp: number | null;
   lastPollTimestamp: string | null;
 
   fetch: (repoKey?: string) => Promise<void>;
   manualRefresh: () => Promise<void>;
   triggerAutoRefresh: () => Promise<void>;
+  clearManualRefreshError: () => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -30,6 +32,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   lastSuccessfulRefreshAt: null,
   refreshStatus: "idle",
   manualRefreshStatus: "idle",
+  manualRefreshErrorTimestamp: null,
   lastPollTimestamp: null,
 
   fetch: async (repoKey) => {
@@ -110,6 +113,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         error: String(err),
         refreshStatus: "failed",
         manualRefreshStatus: "failed",
+        manualRefreshErrorTimestamp: Date.now(),
       });
     }
   },
@@ -145,5 +149,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         error: String(err),
       });
     }
+  },
+
+  clearManualRefreshError: () => {
+    set({ manualRefreshErrorTimestamp: null });
   },
 }));
