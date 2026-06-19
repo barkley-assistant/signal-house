@@ -27,10 +27,9 @@ export function StatusStrip() {
     error,
   } = useDashboardStore();
 
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [pulsing, setPulsing] = useState(false);
   const [countdown, setCountdown] = useState(30);
-  const [justRefreshed, setJustRefreshed] = useState(false);
   const prevRefreshStatusRef = useRef(refreshStatus);
 
   useEffect(() => {
@@ -40,14 +39,6 @@ export function StatusStrip() {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (manualRefreshStatus === "success") {
-      setJustRefreshed(true);
-      const timer = setTimeout(() => setJustRefreshed(false), 10000);
-      return () => clearTimeout(timer);
-    }
-  }, [manualRefreshStatus]);
 
   useEffect(() => {
     const prev = prevRefreshStatusRef.current;
@@ -70,9 +61,8 @@ export function StatusStrip() {
 
   const isRefreshingNow = isRefreshing || refreshStatus === "running";
   const isError = refreshStatus === "failed" && !isRefreshingNow;
-  const showJustRefreshed = justRefreshed && !isRefreshingNow;
 
-  const timeAgo = showJustRefreshed ? "just now" : formatTimeAgo(lastRefreshAt, now);
+  const timeAgo = formatTimeAgo(lastRefreshAt, now);
 
   let dotStyle: React.CSSProperties;
   let statusText: string;

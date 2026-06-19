@@ -150,19 +150,20 @@ export default function Home() {
   const {
     data,
     isLoading,
-    isRefreshing,
     error,
     selectedRepoKey,
     hasEverLoaded,
     manualRefreshStatus,
+    manualRefreshErrorTimestamp,
     fetch,
     manualRefresh,
     triggerAutoRefresh,
+    clearManualRefreshError,
   } = useDashboardStore();
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(() => loadFilter("sh-queue-type", "all"));
   const [conditionFilter, setConditionFilter] = useState<ConditionFilter>(() => loadFilter("sh-queue-cond", "all"));
   const [sortMode, setSortMode] = useState<SortMode>(() => loadFilter("sh-queue-sort", "urgent"));
-  const [errorDismissed, setErrorDismissed] = useState(false);
+  const [now, setNow] = useState(Date.now);
 
   useEffect(() => {
     if (!hasEverLoaded && !isLoading) {
@@ -190,12 +191,9 @@ export default function Home() {
   }, [triggerAutoRefresh]);
 
   useEffect(() => {
-    if (manualRefreshStatus === "failed") {
-      setErrorDismissed(false);
-      const timer = setTimeout(() => setErrorDismissed(true), 8000);
-      return () => clearTimeout(timer);
-    }
-  }, [manualRefreshStatus]);
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const repoState = useSectionState({
     isLoading: !hasEverLoaded && isLoading,
@@ -226,7 +224,7 @@ export default function Home() {
   });
 
   const isRefreshingNow = isLoading || manualRefreshStatus === "running";
-  const showErrorBanner = manualRefreshStatus === "failed" && !errorDismissed;
+  const showErrorBanner = manualRefreshStatus === "failed" && manualRefreshErrorTimestamp !== null && now - manualRefreshErrorTimestamp < 8000;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -258,7 +256,7 @@ export default function Home() {
               </span>
               <button
                 type="button"
-                onClick={() => setErrorDismissed(true)}
+                onClick={() => clearManualRefreshError()}
                 className="text-xs"
                 style={{ color: "var(--color-text-muted)" }}
               >
