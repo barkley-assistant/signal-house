@@ -86,6 +86,21 @@ function parseToolPercentage(value: string | undefined): number | null {
   return match ? parseNumber(match[1]) : null
 }
 
+function parseSectionRows(lines: string[], heading: string): string[] {
+  const rows: string[] = []
+  let inSection = false
+  for (const line of lines) {
+    if (line.includes(heading)) {
+      inSection = true
+      continue
+    }
+    if (!inSection) continue
+    if (line.includes('└')) break
+    rows.push(line)
+  }
+  return rows
+}
+
 function parseSessionList(output: string): string[] {
   return output
     .split('\n')
@@ -187,15 +202,21 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
             }
           }
 
-          const stdout = execFileSync(cmd, ['stats', '--days', String(periodDays)], {
+          const stdout = execFileSync(cmd, ['stats', '--days', String(periodDays), '--models'], {
             timeout: 15_000,
             encoding: 'utf-8',
             stdio: ['pipe', 'pipe', 'ignore'],
           })
 
+          if (stdout.length > 250_000) {
+            throw new Error(`opencode stats output too large (${stdout.length} bytes)`)
+          }
+
           const lines = stdout.split('\n')
 
           const foundOverview = lines.some(line => line.includes('OVERVIEW'))
+          const foundToolUsage = lines.some(line => line.includes('TOOL USAGE'))
+          const foundModelUsage = lines.some(line => line.includes('MODEL USAGE'))
           const totalSessions = extractOverviewValue(lines, 'Sessions') ?? 0
           const messages = extractOverviewValue(lines, 'Messages')
           const activeDays = extractOverviewValue(lines, 'Days')
@@ -209,12 +230,7 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
           const cacheWriteTokens = extractOverviewValueFromLabels(lines, ['Cache Write'])
 
           const tools: Array<{ toolName: string; count: number; percentage: number | null }> = []
-          let inToolSection = false
-          for (const line of lines) {
-            if (line.includes('TOOL USAGE')) { inToolSection = true; continue }
-            if (!inToolSection) continue
-            if (line.includes('└')) break
-
+          for (const line of parseSectionRows(lines, 'TOOL USAGE')) {
             const toolMatch = line.match(/│\s+(.+?)\s+.*?(\d+)\s+\(([\d.]+%)\)\s*│?/)
             if (toolMatch) {
               tools.push({
@@ -225,7 +241,39 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
             }
           }
 
-          if (!foundOverview) {
+          const modelUsage: Array<{
+            modelName: string
+            messages: number
+            inputTokens: number | null
+            outputTokens: number | null
+            cacheReadTokens: number | null
+            cacheWriteTokens: number | null
+            cost: number | null
+          }> = []
+          if (foundModelUsage) {
+            const modelRows = parseSectionRows(lines, 'MODEL USAGE')
+            for (let i = 0; i < modelRows.length; i += 1) {
+              const row = modelRows[i]!
+              const modelMatch = row.match(/│\s+(.+?)\s+│\s*$/)
+              if (!modelMatch) continue
+              const modelName = modelMatch[1]!.trim()
+              if (!modelName || modelName === 'Messages') continue
+              const block = modelRows.slice(i + 1, i + 7).join('\n')
+              const messagesMatch = block.match(/Messages\s+([\d,]+)/)
+              if (!messagesMatch) continue
+              modelUsage.push({
+                modelName,
+                messages: parseInt(messagesMatch[1]!.replace(/,/g, ''), 10),
+                inputTokens: parseNumber((block.match(/Input Tokens\s+([^\n│]+)/)?.[1] ?? block.match(/Input\s+([^\n│]+)/)?.[1])?.trim()),
+                outputTokens: parseNumber((block.match(/Output Tokens\s+([^\n│]+)/)?.[1] ?? block.match(/Output\s+([^\n│]+)/)?.[1])?.trim()),
+                cacheReadTokens: parseNumber((block.match(/Cache Read\s+([^\n│]+)/)?.[1])?.trim()),
+                cacheWriteTokens: parseNumber((block.match(/Cache Write\s+([^\n│]+)/)?.[1])?.trim()),
+                cost: parseNumber((block.match(/Cost\s+([^\n│]+)/)?.[1])?.trim()),
+              })
+            }
+          }
+
+          if (!foundOverview || !foundToolUsage) {
             const gap = `opencode stats CLI unavailable: Could not parse CLI output. Install opencode and run 'opencode stats' to populate session metrics.`
             return { sessions: [], sessionUsage: null, gap, errors: [] }
           }
@@ -259,6 +307,7 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
             cacheWriteTokens,
             uniqueTools: tools.map(t => t.toolName),
             toolUsage: tools,
+            modelUsage,
             topActions,
             errorCount: 0,
           }

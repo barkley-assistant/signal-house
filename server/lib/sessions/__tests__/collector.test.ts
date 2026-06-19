@@ -16,7 +16,11 @@ function enoentErr(): Error {
   return err
 }
 
-function cliOutput(overview: Record<string, number | string>, tools: Array<{ name: string; count: number; pct: string }>): string {
+function cliOutput(
+  overview: Record<string, number | string>,
+  tools: Array<{ name: string; count: number; pct: string }>,
+  models: Array<{ name: string; messages: number; input: string; output: string; cacheRead: string; cacheWrite: string; cost: string }> = [],
+): string {
   const section = (title: string, rows: string[]) => [
     '┌────────────────────────────────────────────────────────┐',
     `│${title}│`,
@@ -33,8 +37,23 @@ function cliOutput(overview: Record<string, number | string>, tools: Array<{ nam
     t => `│ ${t.name.padEnd(18)} ██████████████████████████████ ${String(t.count).padStart(5)} (${t.pct})│`,
   )
 
+  const modelRows = models.flatMap((model, index) => [
+    `│ ${model.name.padEnd(50)} │`,
+    `│  Messages${String(model.messages).padStart(42)} │`,
+    `│  Input Tokens${model.input.padStart(37)} │`,
+    `│  Output Tokens${model.output.padStart(36)} │`,
+    `│  Cache Read${model.cacheRead.padStart(39)} │`,
+    `│  Cache Write${model.cacheWrite.padStart(38)} │`,
+    `│  Cost${model.cost.padStart(47)} │`,
+    ...(index < models.length - 1 ? ['├────────────────────────────────────────────────────────┤'] : []),
+  ])
+
   return [
     section('                       OVERVIEW                         ', overviewRows),
+    '',
+    section('                    COST & TOKENS                       ', []),
+    '',
+    ...models.length ? [section('                      MODEL USAGE                       ', modelRows)] : [],
     '',
     section('                      TOOL USAGE                        ', toolRows),
   ].join('\n')
@@ -105,10 +124,60 @@ describe('createSessionCollector', () => {
     expect(result.sessionUsage!.cacheWriteTokens).toBe(10)
     expect(result.sessionUsage!.uniqueTools).toEqual(['edit', 'search'])
     expect(result.sessionUsage!.toolUsage[0]).toMatchObject({ toolName: 'edit', count: 1, percentage: 50 })
+    expect(result.sessionUsage!.modelUsage).toEqual([])
     expect(result.sessionUsage!.topActions).toHaveLength(2)
     expect(result.sessionUsage!.topActions[0]!.action).toBe('edit')
     expect(result.sessionUsage!.topActions[0]!.count).toBe(1)
     expect(result.errors).toHaveLength(0)
+  })
+
+  it('parses model usage rows from opencode stats --models output', async () => {
+    const mockOutput = cliOutput(
+      {
+        Sessions: 2,
+        Messages: 4,
+        Days: 1,
+        'Total Cost': '$12.34',
+        'Avg Cost/Day': '$12.34',
+        'Avg Tokens/Session': 100,
+        'Median Tokens/Session': 80,
+        Input: '3.8M',
+        Output: '597.2K',
+        'Cache Read': '29.3M',
+        'Cache Write': 0,
+      },
+      [],
+      [
+        {
+          name: 'opencode-go/deepseek-v4-flash',
+          messages: 164,
+          input: '1.3M',
+          output: '80.1K',
+          cacheRead: '4.9M',
+          cacheWrite: '0',
+          cost: '$0.2135',
+        },
+      ],
+    )
+
+    mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
+    mockExecFileSync.mockReturnValueOnce(mockOutput + '\n')
+
+    const collector = createSessionCollector()
+    const result = await collector.collect()
+
+    expect(result.sessionUsage).not.toBeNull()
+    expect(result.sessionUsage!.modelUsage).toEqual([
+      {
+        modelName: 'opencode-go/deepseek-v4-flash',
+        messages: 164,
+        inputTokens: 1_300_000,
+        outputTokens: 80_100,
+        cacheReadTokens: 4_900_000,
+        cacheWriteTokens: 0,
+        cost: 0.2135,
+      },
+    ])
   })
 
   it('falls back to short token labels used by current opencode stats output', async () => {
@@ -184,7 +253,7 @@ describe('createSessionCollector', () => {
       return sessionListOutput() + '\n'
     }).mockImplementationOnce((cmd: string, args: readonly string[] | undefined) => {
       expect(cmd).toBe('/custom/opencode-bin')
-      expect(args).toEqual(['stats', '--days', '30'])
+      expect(args).toEqual(['stats', '--days', '30', '--models'])
       return cliOutput({ Sessions: 0, Messages: 0, Days: 30 }, []) + '\n'
     })
 
@@ -205,7 +274,7 @@ describe('createSessionCollector', () => {
       return sessionListOutput() + '\n'
     }).mockImplementationOnce((cmd: string, args: readonly string[] | undefined) => {
       expect(cmd).toBe('/custom/opencode-bin')
-      expect(args).toEqual(['stats', '--days', '30'])
+      expect(args).toEqual(['stats', '--days', '30', '--models'])
       return cliOutput({ Sessions: 0, Messages: 0, Days: 30 }, []) + '\n'
     })
 

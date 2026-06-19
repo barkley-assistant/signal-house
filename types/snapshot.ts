@@ -117,6 +117,15 @@ export interface DashboardWindowSessionUsageSummary {
   cacheWriteTokens: number | null
   uniqueTools: string[]
   toolUsage: Array<{ toolName: string; count: number; percentage: number | null }>
+  modelUsage?: Array<{
+    modelName: string
+    messages: number
+    inputTokens: number | null
+    outputTokens: number | null
+    cacheReadTokens: number | null
+    cacheWriteTokens: number | null
+    cost: number | null
+  }>
   topActions: Array<{ action: string; count: number }>
   errorCount: number
   status: DashboardPanelStatus
