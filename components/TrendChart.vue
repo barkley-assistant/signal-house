@@ -10,7 +10,7 @@ const props = withDefaults(defineProps<{
   option: Record<string, unknown>
   height?: string
 }>(), {
-  height: '240px',
+  height: '260px',
 })
 
 const emit = defineEmits<{
@@ -63,6 +63,6 @@ watch(
 <style scoped>
 .trend-chart {
   width: 100%;
-  min-height: 200px;
+  min-height: 220px;
 }
 </style>

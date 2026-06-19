@@ -25,6 +25,7 @@ defineProps<{
   border-radius: 0.5rem;
   padding: 1.25rem;
   min-height: 120px;
+  transition: border-color 0.15s;
 }
 
 .ui-card--full {
@@ -40,10 +41,10 @@ defineProps<{
 
 .ui-card__title {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #94a3b8;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .ui-card__badge {
@@ -56,5 +57,13 @@ defineProps<{
 
 .ui-card__body {
   position: relative;
+  display: grid;
+  gap: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .ui-card {
+    padding: 1rem;
+  }
 }
 </style>

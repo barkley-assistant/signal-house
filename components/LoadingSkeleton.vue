@@ -37,16 +37,28 @@ const skeletonStyle = computed(() => ({
   background: #334155;
 }
 
+.skeleton--card {
+  min-height: 120px;
+}
+
+.skeleton--chart {
+  min-height: 260px;
+}
+
+.skeleton--table {
+  min-height: 200px;
+}
+
 .skeleton__pulse {
   position: absolute;
   inset: 0;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(148, 163, 184, 0.08) 50%,
+    rgba(148, 163, 184, 0.06) 50%,
     transparent 100%
   );
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.8s ease-in-out infinite;
 }
 
 @keyframes shimmer {

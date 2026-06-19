@@ -35,7 +35,7 @@ const chartOption = computed(() => {
       itemWidth: 10,
       itemHeight: 10,
     },
-    grid: { left: 44, right: 44, top: 32, bottom: 32 },
+    grid: { left: 48, right: 48, top: 36, bottom: 36 },
     xAxis: {
       type: 'category' as const,
       data: labels,

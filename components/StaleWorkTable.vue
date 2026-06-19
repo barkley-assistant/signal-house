@@ -157,17 +157,17 @@ function dayDiff(now: number, dateStr: string): number {
 .stale-table th {
   text-align: left;
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.5rem 0.5rem 0.5rem 0;
+  padding: 0.6rem 0.75rem 0.6rem 0;
   border-bottom: 1px solid #334155;
   white-space: nowrap;
 }
 
 .stale-table td {
-  padding: 0.5rem 0.5rem 0.5rem 0;
+  padding: 0.6rem 0.75rem 0.6rem 0;
   border-bottom: 1px solid #1e293b;
   vertical-align: middle;
 }

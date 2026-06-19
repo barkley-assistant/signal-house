@@ -110,12 +110,13 @@
 
     <!-- Loading state (initial load only) -->
     <div v-else-if="loading" class="sections">
-      <div class="section section-large">
+      <div class="section section-summary">
         <LoadingSkeleton variant="card" />
       </div>
-      <div class="section"><LoadingSkeleton variant="chart" /></div>
-      <div class="section"><LoadingSkeleton variant="card" /></div>
-      <div class="section section-large"><LoadingSkeleton variant="table" /></div>
+      <div class="section section-chart"><LoadingSkeleton variant="chart" /></div>
+      <div class="section section-chart"><LoadingSkeleton variant="chart" /></div>
+      <div class="section section-chart"><LoadingSkeleton variant="chart" /></div>
+      <div class="section section-table"><LoadingSkeleton variant="table" /></div>
     </div>
 
     <!-- Empty state -->
@@ -451,7 +452,7 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .top-rail__primary,
@@ -652,7 +653,7 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
 .sections {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .section {
@@ -712,14 +713,19 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
   color: #fbbf24;
 }
 
+@media (max-width: 1200px) {
+  .section-chart {
+    grid-column: span 6;
+  }
+}
+
 @media (max-width: 1100px) {
   .top-rail {
     grid-template-columns: 1fr;
   }
 
   .section-summary,
-  .section-session,
-  .section-chart {
+  .section-session {
     grid-column: span 6;
   }
 }
@@ -729,6 +735,10 @@ async function pollForRefreshComplete(timeoutMs = 60000, intervalMs = 2000): Pro
   .section-session,
   .section-chart {
     grid-column: span 12;
+  }
+
+  .sections {
+    gap: 1rem;
   }
 }
 </style>
