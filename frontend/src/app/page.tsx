@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { SectionState, useSectionState } from "@/components/section-state";
 
 type TypeFilter = "issues" | "prs" | "all";
 type ConditionFilter = "stale" | "blocked" | "failing" | "all";
@@ -166,6 +166,12 @@ export default function Home() {
     window.sessionStorage.setItem("sh-queue-sort", sortMode);
   }, [sortMode]);
 
+  const repoState = useSectionState({
+    isLoading,
+    error,
+    isEmpty: !data,
+  });
+
   const filteredItems = useMemo(() => {
     let result = [...attentionItems];
 
@@ -181,6 +187,12 @@ export default function Home() {
   }, [conditionFilter, sortMode, typeFilter]);
 
   const isFiltered = typeFilter !== "all" || conditionFilter !== "all" || sortMode !== "urgent";
+
+  const attentionState = useSectionState({
+    isLoading,
+    error,
+    isEmpty: filteredItems.length === 0 && !isFiltered,
+  });
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -206,13 +218,15 @@ export default function Home() {
             <CardDescription className="text-text-muted">Current repository context</CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-4 w-3/4 bg-divider" />
-            ) : error ? (
-              <p className="text-sm text-status-error">{error}</p>
-            ) : (
-              <p className="text-sm text-text-secondary">{data ? "Data loaded" : "No data available"}</p>
-            )}
+            <SectionState
+              state={repoState}
+              section="health"
+              errorMessage={error ?? undefined}
+              onRetry={() => fetch()}
+              minHeight="24px"
+            >
+              <p className="text-sm text-text-secondary">Data loaded</p>
+            </SectionState>
           </CardContent>
         </Card>
 
@@ -256,6 +270,53 @@ export default function Home() {
             >
               View Diagnostics
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card className="border-card-border bg-card-bg">
+          <CardHeader>
+            <CardTitle className="text-text-primary">Health Summary</CardTitle>
+            <CardDescription className="text-text-muted">Key metrics at a glance</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SectionState
+              state={repoState}
+              section="health"
+              errorMessage={error ?? undefined}
+              onRetry={() => fetch()}
+              minHeight="100px"
+            >
+              <div className="grid grid-cols-5 gap-3">
+                {["Issues", "PRs", "CI Runs", "Stale", "Sessions"].map((label) => (
+                  <div key={label} className="flex flex-col gap-1 rounded-lg border border-card-border bg-card-bg p-3">
+                    <span className="text-xs text-text-muted">{label}</span>
+                    <span className="text-lg font-semibold text-text-primary">—</span>
+                  </div>
+                ))}
+              </div>
+            </SectionState>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card className="border-card-border bg-card-bg">
+          <CardHeader>
+            <CardTitle className="text-text-primary">Trend Chart</CardTitle>
+            <CardDescription className="text-text-muted">Activity over time</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SectionState
+              state={repoState}
+              section="trends"
+              errorMessage={error ?? undefined}
+              onRetry={() => fetch()}
+              minHeight="180px"
+            >
+              <TestChart />
+            </SectionState>
           </CardContent>
         </Card>
       </div>
@@ -325,46 +386,42 @@ export default function Home() {
               )}
             </div>
 
-            <div className="space-y-2">
-              {filteredItems.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-divider px-4 py-6 text-sm text-text-muted">
-                  No items match this filter. Try broadening your filter.
-                </p>
-              ) : (
-                filteredItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-col gap-2 rounded-lg border border-card-border bg-card-bg px-4 py-3 transition-colors hover:bg-card-hover md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">{item.kind === "issue" ? "Issue" : "PR"}</Badge>
-                        <span className="text-sm font-medium text-text-primary">{item.title}</span>
+            <SectionState
+              state={attentionState}
+              section="attention"
+              errorMessage={error ?? undefined}
+              onRetry={() => fetch()}
+              minHeight="200px"
+            >
+              <div className="space-y-2">
+                {filteredItems.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-divider px-4 py-6 text-sm text-text-muted">
+                    No items match this filter. Try broadening your filter.
+                  </p>
+                ) : (
+                  filteredItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-col gap-2 rounded-lg border border-card-border bg-card-bg px-4 py-3 transition-colors hover:bg-card-hover md:flex-row md:items-center md:justify-between"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary">{item.kind === "issue" ? "Issue" : "PR"}</Badge>
+                          <span className="text-sm font-medium text-text-primary">{item.title}</span>
+                        </div>
+                        <p className="text-xs text-text-muted">{item.repo}</p>
                       </div>
-                      <p className="text-xs text-text-muted">{item.repo}</p>
+                      <div className="flex items-center gap-2 text-sm text-text-muted">
+                        <span className="font-mono tabular-nums">{item.ageDays}d</span>
+                        <Badge variant="outline" className="border-divider text-text-muted">
+                          {item.statusLabel}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-text-muted">
-                      <span className="font-mono tabular-nums">{item.ageDays}d</span>
-                      <Badge variant="outline" className="border-divider text-text-muted">
-                        {item.statusLabel}
-                      </Badge>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mt-6">
-        <Card className="border-card-border bg-card-bg">
-          <CardHeader>
-            <CardTitle className="text-text-primary">Activity Chart</CardTitle>
-            <CardDescription className="text-text-muted">ECharts test with custom dark theme</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TestChart />
+                  ))
+                )}
+              </div>
+            </SectionState>
           </CardContent>
         </Card>
       </div>
