@@ -3,11 +3,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const mocks = vi.hoisted(() => ({
   mockInitDb: vi.fn(),
   mockClose: vi.fn(),
+  mockRunRetention: vi.fn().mockReturnValue({ snapshotsDeleted: 0, aggregatesDeleted: 0, dailyMetricsDeleted: 0, sessionsDeleted: 0, workflowRunsDeleted: 0 }),
 }))
 
 vi.mock('../../db/client', () => ({
   initDb: mocks.mockInitDb,
   close: mocks.mockClose,
+  runRetention: mocks.mockRunRetention,
 }))
 
 const mockHooks: { name: string; fn: (...args: unknown[]) => unknown }[] = []
@@ -45,6 +47,7 @@ describe('db plugin', () => {
     await (dbPlugin as (app: unknown) => Promise<void>)(makeNitroApp())
 
     expect(mocks.mockInitDb).toHaveBeenCalledTimes(1)
+    expect(mocks.mockRunRetention).toHaveBeenCalledTimes(1)
 
     const closeHook = mockHooks.find(h => h.name === 'close')
     expect(closeHook).toBeDefined()

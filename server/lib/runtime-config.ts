@@ -12,6 +12,10 @@ const DEFAULT_ORCHESTRATOR_LOOKBACK_DAYS = 30
 const DEFAULT_ORCHESTRATOR_STALE_THRESHOLD_DAYS = 14
 const DEFAULT_SESSION_PERIOD_DAYS = 30
 const DEFAULT_DISCOVERY_MAX_DEPTH = 3
+const DEFAULT_RETENTION_SNAPSHOTS_DAYS = 30
+const DEFAULT_RETENTION_DAILY_METRICS_DAYS = 90
+const DEFAULT_RETENTION_SESSIONS_DAYS = 90
+const DEFAULT_RETENTION_WORKFLOW_RUNS_DAYS = 90
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = value ? Number.parseInt(value, 10) : Number.NaN
@@ -55,6 +59,12 @@ export interface RuntimeConfig {
   discovery: {
     maxDepth: number
   }
+  retention: {
+    snapshotsDays: number
+    dailyMetricsDays: number
+    sessionsDays: number
+    workflowRunsDays: number
+  }
 }
 
 export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -94,6 +104,12 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
     discovery: {
       maxDepth: DEFAULT_DISCOVERY_MAX_DEPTH,
     },
+    retention: {
+      snapshotsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS'), DEFAULT_RETENTION_SNAPSHOTS_DAYS),
+      dailyMetricsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS'), DEFAULT_RETENTION_DAILY_METRICS_DAYS),
+      sessionsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_SESSIONS_DAYS'), DEFAULT_RETENTION_SESSIONS_DAYS),
+      workflowRunsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS'), DEFAULT_RETENTION_WORKFLOW_RUNS_DAYS),
+    },
   }
 }
 
@@ -123,4 +139,8 @@ export function getSessionPeriodDays(env: NodeJS.ProcessEnv = process.env): numb
 
 export function getDiscoveryMaxDepth(env: NodeJS.ProcessEnv = process.env): number {
   return getRuntimeConfig(env).discovery.maxDepth
+}
+
+export function getRetentionConfig(env: NodeJS.ProcessEnv = process.env) {
+  return getRuntimeConfig(env).retention
 }

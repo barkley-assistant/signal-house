@@ -3,7 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { SQL, SCHEMA_VERSION } from './schema'
 import { getBooleanEnv, getEnv } from '../lib/env'
-import { getRefreshHistoryLimit, getStaleThresholdMs } from '../lib/runtime-config'
+import { getRefreshHistoryLimit, getStaleThresholdMs, getRetentionConfig } from '../lib/runtime-config'
 import type { MetricSnapshot, SnapshotRow, LatestState, RefreshRunRecord, RefreshRunState, RefreshSourceHealth, RefreshRunStatus, SourceDiagnostics } from '../../types/snapshot'
 import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
@@ -872,6 +872,81 @@ export function getNormalizedSnapshotForRepo(repoKey: string): MetricSnapshot | 
     aggregates,
     metadata,
   }
+}
+
+// ── Retention / cleanup ────────────────────────────────────────────
+
+function daysAgoIso(days: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() - days)
+  return d.toISOString()
+}
+
+function daysAgoDay(days: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() - days)
+  return d.toISOString().slice(0, 10)
+}
+
+export interface RetentionResult {
+  snapshotsDeleted: number
+  aggregatesDeleted: number
+  dailyMetricsDeleted: number
+  sessionsDeleted: number
+  workflowRunsDeleted: number
+}
+
+export function runRetention(env: NodeJS.ProcessEnv = process.env): RetentionResult {
+  const db = getDb()
+  const retention = getRetentionConfig(env)
+
+  const latestSnap = db.prepare(SQL.getLatestSnapshotId).get() as { id?: string } | undefined
+  const latestSnapshotId = latestSnap?.id ?? null
+
+  const snapshotsBefore = daysAgoIso(retention.snapshotsDays)
+  const aggregatesBefore = daysAgoIso(retention.snapshotsDays)
+  const dailyMetricsBeforeDay = daysAgoDay(retention.dailyMetricsDays)
+  const sessionsBefore = daysAgoIso(retention.sessionsDays)
+  const workflowRunsBefore = daysAgoIso(retention.workflowRunsDays)
+
+  const transaction = db.transaction(() => {
+    let aggregatesDeleted = 0
+    let snapshotsDeleted = 0
+
+    if (latestSnapshotId) {
+      const aggResult = db.prepare(`
+        DELETE FROM aggregates
+        WHERE period_end < ? AND snapshot_id != ?
+      `).run(aggregatesBefore, latestSnapshotId)
+      aggregatesDeleted = aggResult.changes
+
+      const snapResult = db.prepare(`
+        DELETE FROM snapshots
+        WHERE captured_at < ? AND id != ?
+      `).run(snapshotsBefore, latestSnapshotId)
+      snapshotsDeleted = snapResult.changes
+    } else {
+      const aggResult = db.prepare(SQL.deleteAggregatesOlderThan).run({ before: aggregatesBefore })
+      aggregatesDeleted = aggResult.changes
+
+      const snapResult = db.prepare(SQL.deleteSnapshotsOlderThan).run({ before: snapshotsBefore })
+      snapshotsDeleted = snapResult.changes
+    }
+
+    const dailyResult = db.prepare(SQL.deleteDailyMetricsOlderThan).run({ beforeDay: dailyMetricsBeforeDay })
+    const sessionsResult = db.prepare(SQL.deleteSessionsOlderThan).run({ before: sessionsBefore })
+    const workflowRunsResult = db.prepare(SQL.deleteWorkflowRunsOlderThan).run({ before: workflowRunsBefore })
+
+    return {
+      snapshotsDeleted,
+      aggregatesDeleted,
+      dailyMetricsDeleted: dailyResult.changes,
+      sessionsDeleted: sessionsResult.changes,
+      workflowRunsDeleted: workflowRunsResult.changes,
+    }
+  })
+
+  return transaction()
 }
 
 function getDb(): Db {

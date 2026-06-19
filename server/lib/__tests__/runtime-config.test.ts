@@ -5,6 +5,7 @@ import {
   getOrchestratorDefaults,
   getPollerConfig,
   getRefreshHistoryLimit,
+  getRetentionConfig,
   getRuntimeConfig,
   getSessionPeriodDays,
   getStaleThresholdMs,
@@ -50,6 +51,12 @@ describe('runtime config', () => {
       discovery: {
         maxDepth: 3,
       },
+      retention: {
+        snapshotsDays: 30,
+        dailyMetricsDays: 90,
+        sessionsDays: 90,
+        workflowRunsDays: 90,
+      },
     })
   })
 
@@ -88,6 +95,20 @@ describe('runtime config', () => {
     expect(getRuntimeConfig().accessProtection).toMatchObject({
       enabled: true,
       username: 'jake',
+    })
+  })
+
+  it('reads configurable retention thresholds from env', () => {
+    vi.stubEnv('SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS', '60')
+    vi.stubEnv('SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS', '180')
+    vi.stubEnv('SECRET_HOUSE_RETENTION_SESSIONS_DAYS', '45')
+    vi.stubEnv('SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS', '120')
+
+    expect(getRetentionConfig()).toEqual({
+      snapshotsDays: 60,
+      dailyMetricsDays: 180,
+      sessionsDays: 45,
+      workflowRunsDays: 120,
     })
   })
 })

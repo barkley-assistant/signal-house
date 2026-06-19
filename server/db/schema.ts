@@ -420,6 +420,21 @@ export const SQL = {
     WHERE period_end < @before;
   `,
 
+  deleteDailyMetricsOlderThan: `
+    DELETE FROM daily_metrics
+    WHERE day < @beforeDay;
+  `,
+
+  deleteSessionsOlderThan: `
+    DELETE FROM source_sessions
+    WHERE timestamp < @before;
+  `,
+
+  deleteWorkflowRunsOlderThan: `
+    DELETE FROM source_workflow_runs
+    WHERE created_at < @before;
+  `,
+
   upsertDailyMetrics: `
     INSERT INTO daily_metrics (
       day, repo_key, captured_at, source, version, reflects_complete_data,
