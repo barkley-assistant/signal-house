@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     ...state,
+    sourceHealth: state.refreshState?.sourceHealth ?? state.diagnostics?.sourceHealth ?? {},
     selectedRepoKey: repoKey,
     viewSnapshot,
     dashboardWindow,

@@ -507,7 +507,7 @@ describe('GET /api/state', () => {
     expect(result.dashboardWindow.cards.throughput.status).toBe('partial')
   })
 
-  it('includes diagnostics sourceHealth in the response', async () => {
+  it('includes sourceHealth in the response while preserving diagnostics', async () => {
     const diagnostics = {
       configuredProjectRoots: ['/workspace'],
       discoveredRepos: [],
@@ -537,6 +537,7 @@ describe('GET /api/state', () => {
 
     const result = await handler({} as any)
 
+    expect(result.sourceHealth).toEqual(diagnostics.sourceHealth)
     expect(result.diagnostics).toEqual(diagnostics)
     expect(result.diagnostics.sourceHealth.github).toEqual({ status: 'healthy', message: null })
     expect(result.diagnostics.sourceHealth.localGit).toEqual({ status: 'healthy', message: null })
