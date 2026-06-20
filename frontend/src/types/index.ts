@@ -3,6 +3,7 @@ export type {
   DashboardWindow,
   DashboardWindowCards,
   DashboardWindowCoverage,
+  DashboardWindowDay,
   DashboardWindowSessionUsageSummary,
   MetricSnapshot,
   SourceDiagnostics,

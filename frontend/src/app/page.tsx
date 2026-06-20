@@ -20,7 +20,9 @@ import { cn } from "@/lib/utils";
 import { SectionState, useSectionState } from "@/components/section-state";
 import { StatusStrip } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
-import type { DashboardWindowSessionUsageSummary } from "@/types";
+import { TrendCard } from "@/components/TrendCard";
+import type { DashboardWindow, DashboardWindowDay, DashboardWindowSessionUsageSummary } from "@/types";
+import type { EChartsOption } from "echarts-for-react";
 
 const SourceHealthSection = dynamic(
   () =>
@@ -115,6 +117,206 @@ function loadFilter<T extends string>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   const value = window.sessionStorage.getItem(key);
   return value === null ? fallback : (value as T);
+}
+
+function formatDayLabel(dayStr: string): string {
+  const d = new Date(dayStr + "T00:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function buildThroughputOption(days: DashboardWindowDay[]): EChartsOption | null {
+  const nonNull = days.filter((d) => !d.isGap && d.metrics);
+  if (nonNull.length === 0) return null;
+  const labels = days.map((d) => formatDayLabel(d.day));
+  const values = days.map((d) =>
+    d.isGap ? null : (d.metrics?.issuesClosed ?? 0) + (d.metrics?.prsMerged ?? 0),
+  );
+  return {
+    grid: { top: 8, right: 8, bottom: 20, left: 36, containLabel: false },
+    xAxis: {
+      type: "category",
+      data: labels,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { fontSize: 10, color: "#64748b" },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#1e2128", type: "dashed" } },
+      axisLabel: { fontSize: 10, color: "#64748b" },
+    },
+    tooltip: {
+      backgroundColor: "#1a1d24",
+      borderColor: "#262a33",
+      textStyle: { color: "#f1f5f9", fontSize: 12 },
+    },
+    series: [
+      {
+        type: "line",
+        data: values,
+        smooth: true,
+        connectNulls: false,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { color: "#38bdf8", width: 2 },
+        itemStyle: { color: "#38bdf8" },
+        areaStyle: { color: "rgba(56,189,248,0.12)" },
+      },
+    ],
+  };
+}
+
+function buildCycleTimeOption(days: DashboardWindowDay[]): EChartsOption | null {
+  // Backend #152 will provide rolling 14-day medianCycleTimeDays per day.
+  // Until then we use the per-day medianCycleTimeDays from DailyMetricsRow.
+  const nonNull = days.filter(
+    (d) => !d.isGap && d.metrics?.medianCycleTimeDays != null,
+  );
+  if (nonNull.length === 0) return null;
+  const labels = days.map((d) => formatDayLabel(d.day));
+  const values = days.map((d) =>
+    d.isGap ? null : (d.metrics?.medianCycleTimeDays ?? null),
+  );
+  return {
+    grid: { top: 8, right: 8, bottom: 20, left: 36, containLabel: false },
+    xAxis: {
+      type: "category",
+      data: labels,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { fontSize: 10, color: "#64748b" },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#1e2128", type: "dashed" } },
+      axisLabel: { fontSize: 10, color: "#64748b" },
+    },
+    tooltip: {
+      backgroundColor: "#1a1d24",
+      borderColor: "#262a33",
+      textStyle: { color: "#f1f5f9", fontSize: 12 },
+    },
+    series: [
+      {
+        type: "line",
+        data: values,
+        smooth: true,
+        connectNulls: false,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { color: "#a855f7", width: 2 },
+        itemStyle: { color: "#a855f7" },
+        areaStyle: { color: "rgba(168,85,247,0.12)" },
+      },
+    ],
+  };
+}
+
+function buildCIOption(days: DashboardWindowDay[]): EChartsOption | null {
+  const nonNull = days.filter((d) => !d.isGap && d.metrics);
+  if (nonNull.length === 0) return null;
+  const labels = days.map((d) => formatDayLabel(d.day));
+  const passCounts = days.map((d) => (d.isGap ? null : (d.metrics?.ciPassCount ?? 0)));
+  const failCounts = days.map((d) => (d.isGap ? null : (d.metrics?.ciFailCount ?? 0)));
+  return {
+    grid: { top: 8, right: 8, bottom: 20, left: 36, containLabel: false },
+    xAxis: {
+      type: "category",
+      data: labels,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { fontSize: 10, color: "#64748b" },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#1e2128", type: "dashed" } },
+      axisLabel: { fontSize: 10, color: "#64748b" },
+    },
+    tooltip: {
+      backgroundColor: "#1a1d24",
+      borderColor: "#262a33",
+      textStyle: { color: "#f1f5f9", fontSize: 12 },
+    },
+    series: [
+      {
+        name: "Passed",
+        type: "bar",
+        stack: "ci",
+        data: passCounts,
+        itemStyle: { color: "#4ade80" },
+        barMaxWidth: 12,
+      },
+      {
+        name: "Failed",
+        type: "bar",
+        stack: "ci",
+        data: failCounts,
+        itemStyle: { color: "#f87171" },
+        barMaxWidth: 12,
+      },
+    ],
+  };
+}
+
+function computeThroughputFooter(days: DashboardWindowDay[]): string {
+  if (days.length < 2) return "Insufficient data";
+  const mid = Math.floor(days.length / 2);
+  const prev = days.slice(0, mid);
+  const curr = days.slice(mid);
+  const prevSum = prev.reduce(
+    (s, d) => s + (d.isGap ? 0 : (d.metrics?.issuesClosed ?? 0) + (d.metrics?.prsMerged ?? 0)),
+    0,
+  );
+  const currSum = curr.reduce(
+    (s, d) => s + (d.isGap ? 0 : (d.metrics?.issuesClosed ?? 0) + (d.metrics?.prsMerged ?? 0)),
+    0,
+  );
+  const pctChange = prevSum > 0 ? ((currSum - prevSum) / prevSum) * 100 : 0;
+  const arrow = pctChange >= 0 ? "\u2191" : "\u2193";
+  const pctStr = prevSum > 0 ? `${Math.abs(Math.round(pctChange))}%` : "\u2014";
+  return `${arrow}${pctStr} from last window \u00B7 ${currSum} this window`;
+}
+
+function computeCycleTimeFooter(days: DashboardWindowDay[]): string {
+  const nonNull = days.filter(
+    (d) => !d.isGap && d.metrics?.medianCycleTimeDays != null,
+  );
+  if (nonNull.length < 3) return "Insufficient PR data for cycle time trend";
+  const latest = nonNull[nonNull.length - 1].metrics!.medianCycleTimeDays!;
+  // Trend: compare first half vs second half. Down = improving for cycle time.
+  const mid = Math.floor(nonNull.length / 2);
+  const firstHalf = nonNull.slice(0, mid);
+  const secondHalf = nonNull.slice(mid);
+  const firstAvg =
+    firstHalf.reduce((s, d) => s + (d.metrics?.medianCycleTimeDays ?? 0), 0) / firstHalf.length;
+  const secondAvg =
+    secondHalf.reduce((s, d) => s + (d.metrics?.medianCycleTimeDays ?? 0), 0) / secondHalf.length;
+  const trend =
+    secondAvg < firstAvg ? "Improving" : secondAvg > firstAvg ? "Slowing" : "Steady";
+  return `Daily median \u00B7 ${latest.toFixed(1)}d latest \u00B7 ${trend} over window`;
+}
+
+function computeCIFooter(days: DashboardWindowDay[]): string {
+  if (days.length < 2) return "Insufficient data";
+  const mid = Math.floor(days.length / 2);
+  const curr = days.slice(mid);
+  const totalRuns = curr.reduce(
+    (s, d) => s + (d.isGap ? 0 : d.metrics?.ciTotalRuns ?? 0),
+    0,
+  );
+  const passCount = curr.reduce(
+    (s, d) => s + (d.isGap ? 0 : d.metrics?.ciPassCount ?? 0),
+    0,
+  );
+  const failCount = curr.reduce(
+    (s, d) => s + (d.isGap ? 0 : d.metrics?.ciFailCount ?? 0),
+    0,
+  );
+  const passRate = totalRuns > 0 ? Math.round((passCount / totalRuns) * 100) : 0;
+  return `${passRate}% pass rate \u00B7 ${failCount} failures this window`;
 }
 
 export default function Home() {
@@ -363,24 +565,50 @@ export default function Home() {
         </Card>
       </section>
 
-      <section aria-label="Trend chart" className="mt-6">
-        <Card className="border-card-border bg-card-bg">
-          <CardHeader>
-            <CardTitle className="text-text-primary">Trend Chart</CardTitle>
-            <CardDescription>Activity over time</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SectionState
-              state={repoState}
-              section="trends"
-              errorMessage={error ?? undefined}
-              onRetry={() => fetch()}
-              minHeight="180px"
-            >
-              <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-divider text-sm text-text-secondary">Headline summary cards now sit above the main dashboard</div>
-            </SectionState>
-          </CardContent>
-        </Card>
+      <section aria-label="Trend charts" className="mt-6">
+        {(() => {
+          const raw = (data as Record<string, unknown> | null)?.dashboardWindow as
+            | Record<string, unknown>
+            | undefined;
+          const windowData = raw as DashboardWindow | undefined;
+          const days = windowData?.days ?? [];
+          const trendLoading = !hasEverLoaded && isLoading;
+          const trendEmpty = days.length === 0;
+          const throughputOption = trendEmpty ? null : buildThroughputOption(days);
+          const cycleTimeOption = trendEmpty ? null : buildCycleTimeOption(days);
+          const ciOption = trendEmpty ? null : buildCIOption(days);
+          const throughputFooter = trendEmpty ? "" : computeThroughputFooter(days);
+          const cycleTimeFooter = trendEmpty ? "" : computeCycleTimeFooter(days);
+          const ciFooter = trendEmpty ? "" : computeCIFooter(days);
+          return (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <TrendCard
+                title="Throughput"
+                option={throughputOption}
+                footer={throughputFooter}
+                loading={trendLoading}
+                isEmpty={trendEmpty}
+                emptyMessage="No throughput data in this window"
+              />
+              <TrendCard
+                title="Cycle Time"
+                option={cycleTimeOption}
+                footer={cycleTimeFooter}
+                loading={trendLoading}
+                isEmpty={trendEmpty}
+                emptyMessage="Insufficient PR data for cycle time trend"
+              />
+              <TrendCard
+                title="CI Health"
+                option={ciOption}
+                footer={ciFooter}
+                loading={trendLoading}
+                isEmpty={trendEmpty}
+                emptyMessage="No CI data in this window"
+              />
+            </div>
+          );
+        })()}
       </section>
 
       <section aria-label="Attention queue" className="mt-6">
