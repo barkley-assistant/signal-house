@@ -21,7 +21,14 @@ import { SectionState, useSectionState } from "@/components/section-state";
 import { StatusStrip } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
 import { TrendCard } from "@/components/TrendCard";
-import type { DashboardWindow, DashboardWindowDay, DashboardWindowSessionUsageSummary } from "@/types";
+import type {
+  DashboardWindow,
+  DashboardWindowCards,
+  DashboardWindowDay,
+  DashboardWindowSessionUsageSummary,
+  IssueMetric,
+  PullRequestMetric,
+} from "@/types";
 import type { EChartsOption } from "echarts-for-react";
 
 const SourceHealthSection = dynamic(
@@ -56,44 +63,135 @@ type AttentionItem = {
   statusLabel: string;
 };
 
-const attentionItems: AttentionItem[] = [
-  {
-    id: "issue-1",
-    kind: "issue",
-    title: "Queue rows need keyboard focus and a clearer hover state",
-    repo: "barkley-clawd/signal-house",
-    ageDays: 18,
-    priorityTier: "stale",
-    statusLabel: "Stale",
-  },
-  {
-    id: "pr-2",
-    kind: "pr",
-    title: "Fix flaky diagnostics refresh",
-    repo: "barkley-clawd/signal-house",
-    ageDays: 6,
-    priorityTier: "ci-failing",
-    statusLabel: "CI failing",
-  },
-  {
-    id: "pr-3",
-    kind: "pr",
-    title: "Replace dashboard scaffold with actual summaries",
-    repo: "barkley-clawd/signal-house",
-    ageDays: 12,
-    priorityTier: "ci-blocked",
-    statusLabel: "CI blocked",
-  },
-  {
-    id: "issue-4",
-    kind: "issue",
-    title: "Add filter persistence to attention queue",
-    repo: "barkley-clawd/signal-house",
-    ageDays: 9,
-    priorityTier: "ci-pending",
-    statusLabel: "CI pending",
-  },
-];
+const STALE_THRESHOLD_DAYS_FALLBACK = 14;
+
+function daysSince(iso: string | null | undefined, nowMs: number): number {
+  if (!iso) return 0;
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return 0;
+  return Math.max(0, Math.floor((nowMs - ts) / (1000 * 60 * 60 * 24)));
+}
+
+function deriveAttentionItems(
+  issues: IssueMetric[],
+  pullRequests: PullRequestMetric[],
+  nowMs: number,
+  staleThresholdDays: number,
+): AttentionItem[] {
+  const items: AttentionItem[] = [];
+
+  for (const issue of issues) {
+    if (issue.state !== "open") continue;
+    const ageDays = daysSince(issue.updatedAt, nowMs);
+    const isStale = ageDays >= staleThresholdDays;
+    items.push({
+      id: `issue-${issue.id}`,
+      kind: "issue",
+      title: issue.title,
+      repo: issue.repoKey,
+      ageDays,
+      priorityTier: isStale ? "stale" : "ci-pending",
+      statusLabel: isStale ? "Stale" : "Active",
+    });
+  }
+
+  for (const pr of pullRequests) {
+    if (pr.state !== "open") continue;
+    const ageDays = daysSince(pr.updatedAt, nowMs);
+    const isStale = ageDays >= staleThresholdDays;
+    let priorityTier: AttentionItem["priorityTier"];
+    let statusLabel: string;
+    if (pr.ciStatus === "failure") {
+      priorityTier = "ci-failing";
+      statusLabel = "CI failing";
+    } else if (pr.ciStatus === "pending") {
+      priorityTier = isStale ? "stale" : "ci-pending";
+      statusLabel = isStale ? "Stale" : "CI pending";
+    } else if (isStale) {
+      priorityTier = "stale";
+      statusLabel = "Stale";
+    } else {
+      priorityTier = "ci-pending";
+      statusLabel = "Active";
+    }
+    items.push({
+      id: `pr-${pr.id}`,
+      kind: "pr",
+      title: pr.title,
+      repo: pr.repoKey,
+      ageDays,
+      priorityTier,
+      statusLabel,
+    });
+  }
+
+  return items;
+}
+
+function throughputStatus(status: string | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
+  if (!status) return "unknown";
+  if (status === "available") return "healthy";
+  if (status === "partial") return "warning";
+  if (status === "stale") return "warning";
+  if (status === "empty") return "empty";
+  return "critical";
+}
+
+function cycleTimeStatus(card: { medianDays: number | null; averageDays: number | null; status: string } | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
+  if (!card) return "unknown";
+  if (card.status === "unavailable" || card.status === "error" || card.status === "unconfigured") return "critical";
+  if (card.status === "empty") return "empty";
+  const days = card.medianDays ?? card.averageDays;
+  if (days == null) return "empty";
+  if (days <= 3) return "healthy";
+  if (days <= 7) return "warning";
+  return "critical";
+}
+
+function ciStatus(card: { passRate: number | null; status: string } | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
+  if (!card) return "unknown";
+  if (card.status === "unavailable" || card.status === "error" || card.status === "unconfigured") return "critical";
+  if (card.status === "empty") return "empty";
+  if (card.passRate == null) return "empty";
+  if (card.passRate >= 0.9) return "healthy";
+  if (card.passRate >= 0.7) return "warning";
+  return "critical";
+}
+
+function staleWorkStatus(card: { staleIssues: number; stalePrs: number; status: string } | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
+  if (!card) return "unknown";
+  if (card.status === "unavailable" || card.status === "error" || card.status === "unconfigured") return "critical";
+  if (card.status === "empty") return "empty";
+  const total = card.staleIssues + card.stalePrs;
+  if (total === 0) return "healthy";
+  if (total <= 3) return "warning";
+  return "critical";
+}
+
+function overallScore(cards: DashboardWindowCards | null): number {
+  if (!cards) return 0;
+  let score = 0;
+  if (throughputStatus(cards.throughput.status) === "healthy") score += 1;
+  if (cycleTimeStatus(cards.cycleTime) === "healthy") score += 1;
+  if (ciStatus(cards.ci) === "healthy") score += 1;
+  if (staleWorkStatus(cards.staleWork) === "healthy") score += 1;
+  return score;
+}
+
+function overallLabel(score: number): string {
+  if (score >= 4) return "Healthy";
+  if (score >= 3) return "Fair";
+  if (score >= 2) return "Watch";
+  if (score >= 1) return "At Risk";
+  return "Critical";
+}
+
+function overallStatus(score: number): "healthy" | "warning" | "critical" | "empty" | "unknown" {
+  if (score >= 4) return "healthy";
+  if (score >= 2) return "warning";
+  if (score >= 1) return "critical";
+  return "empty";
+}
 
 const typeOptions: Array<{ value: TypeFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -374,6 +472,35 @@ export default function Home() {
     isEmpty: !data && hasEverLoaded,
   });
 
+  const snapshotIssues = useMemo<IssueMetric[]>(() => {
+    const dataRecord = (data as Record<string, unknown> | null) ?? null;
+    const snapshot = dataRecord?.snapshot as { issues?: IssueMetric[] } | null | undefined;
+    return snapshot?.issues ?? [];
+  }, [data]);
+
+  const snapshotPullRequests = useMemo<PullRequestMetric[]>(() => {
+    const dataRecord = (data as Record<string, unknown> | null) ?? null;
+    const snapshot = dataRecord?.snapshot as { pullRequests?: PullRequestMetric[] } | null | undefined;
+    return snapshot?.pullRequests ?? [];
+  }, [data]);
+
+  const staleThresholdDays = useMemo<number>(() => {
+    const dataRecord = (data as Record<string, unknown> | null) ?? null;
+    const snapshot = dataRecord?.snapshot as
+      | { aggregates?: { staleWork?: { staleThresholdDays?: number } } }
+      | null
+      | undefined;
+    return (
+      snapshot?.aggregates?.staleWork?.staleThresholdDays ??
+      STALE_THRESHOLD_DAYS_FALLBACK
+    );
+  }, [data]);
+
+  const attentionItems = useMemo<AttentionItem[]>(
+    () => deriveAttentionItems(snapshotIssues, snapshotPullRequests, now, staleThresholdDays),
+    [snapshotIssues, snapshotPullRequests, now, staleThresholdDays],
+  );
+
   const filteredItems = useMemo(() => {
     let result = [...attentionItems];
 
@@ -386,7 +513,7 @@ export default function Home() {
     result.sort((a, b) => (sortMode === "oldest" ? b.ageDays - a.ageDays : a.ageDays - b.ageDays));
 
     return result.slice(0, 20);
-  }, [conditionFilter, sortMode, typeFilter]);
+  }, [attentionItems, conditionFilter, sortMode, typeFilter]);
 
   const isFiltered = typeFilter !== "all" || conditionFilter !== "all" || sortMode !== "urgent";
 
@@ -402,6 +529,16 @@ export default function Home() {
       | undefined;
     return (raw?.sessionUsage as DashboardWindowSessionUsageSummary) ?? null;
   }, [data]);
+
+  const cards = useMemo<DashboardWindowCards | null>(() => {
+    const raw = (data as Record<string, unknown> | null)?.dashboardWindow as
+      | { cards?: DashboardWindowCards }
+      | undefined;
+    return raw?.cards ?? null;
+  }, [data]);
+
+  const healthSummaryLoading = !hasEverLoaded && isLoading;
+  const healthSummaryError = cards == null ? error : null;
 
   const modelUsageState = useSectionState({
     isLoading: !hasEverLoaded && isLoading,
@@ -426,11 +563,95 @@ export default function Home() {
         </header>
 
         <section aria-label="Headline health summary" className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <HealthSignalCard label="Throughput" value="48" unit="items" trend="up" status="healthy" detail="12 commits in window" />
-          <HealthSignalCard label="Cycle Time" value="2.1" unit="d" trend="down" status="warning" detail="P95: 4.8d · 18 items" />
-          <HealthSignalCard label="CI Health" value="94" unit="%" trend="up" status="healthy" detail="3 failures in 48 runs" />
-          <HealthSignalCard label="Stale Work" value="7" unit="items" trend="up" status="critical" detail="5 issues · 2 PRs" />
-          <HealthSignalCard label="Overall Health" value="Fair" trend="neutral" status="warning" detail="3/4 signals healthy" />
+          <HealthSignalCard
+            label="Throughput"
+            value={
+              cards
+                ? cards.throughput.issuesClosed + cards.throughput.prsMerged
+                : null
+            }
+            unit="items"
+            trend="neutral"
+            status={throughputStatus(cards?.throughput.status)}
+            detail={
+              cards
+                ? `${cards.throughput.totalCommits} commits in window`
+                : null
+            }
+            loading={healthSummaryLoading}
+            error={healthSummaryError}
+          />
+          <HealthSignalCard
+            label="Cycle Time"
+            value={
+              cards?.cycleTime.medianDays != null
+                ? cards.cycleTime.medianDays.toFixed(1)
+                : cards?.cycleTime.averageDays != null
+                  ? cards.cycleTime.averageDays.toFixed(1)
+                  : null
+            }
+            unit="d"
+            trend="neutral"
+            status={cycleTimeStatus(cards?.cycleTime)}
+            detail={
+              cards
+                ? cards.cycleTime.p95Days != null
+                  ? `P95: ${cards.cycleTime.p95Days.toFixed(1)}d · ${cards.cycleTime.sampleSize} items`
+                  : `${cards.cycleTime.sampleSize} items`
+                : null
+            }
+            loading={healthSummaryLoading}
+            error={healthSummaryError}
+          />
+          <HealthSignalCard
+            label="CI Health"
+            value={
+              cards?.ci.passRate != null
+                ? Math.round(cards.ci.passRate * 100)
+                : null
+            }
+            unit="%"
+            trend="neutral"
+            status={ciStatus(cards?.ci)}
+            detail={
+              cards
+                ? `${cards.ci.failCount} failures in ${cards.ci.totalRuns} runs`
+                : null
+            }
+            loading={healthSummaryLoading}
+            error={healthSummaryError}
+          />
+          <HealthSignalCard
+            label="Stale Work"
+            value={
+              cards
+                ? cards.staleWork.staleIssues + cards.staleWork.stalePrs
+                : null
+            }
+            unit="items"
+            trend="neutral"
+            status={staleWorkStatus(cards?.staleWork)}
+            detail={
+              cards
+                ? `${cards.staleWork.staleIssues} issues · ${cards.staleWork.stalePrs} PRs`
+                : null
+            }
+            loading={healthSummaryLoading}
+            error={healthSummaryError}
+          />
+          <HealthSignalCard
+            label="Overall Health"
+            value={overallLabel(overallScore(cards))}
+            trend="neutral"
+            status={overallStatus(overallScore(cards))}
+            detail={
+              cards
+                ? `${overallScore(cards)}/4 signals healthy`
+                : null
+            }
+            loading={healthSummaryLoading}
+            error={healthSummaryError}
+          />
         </section>
       </nav>
 

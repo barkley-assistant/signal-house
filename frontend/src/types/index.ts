@@ -5,6 +5,8 @@ export type {
   DashboardWindowCoverage,
   DashboardWindowDay,
   DashboardWindowSessionUsageSummary,
+  IssueMetric,
+  PullRequestMetric,
   MetricSnapshot,
   SourceDiagnostics,
   RefreshRunState,
