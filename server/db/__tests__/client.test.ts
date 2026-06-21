@@ -138,8 +138,30 @@ describe('initDb on fresh database', () => {
     expect(getLatestSnapshot()?.id).toBe('snap-1')
   })
 
-  it('drops incompatible runtime data and recreates a fresh schema', async () => {
+  it('preserves snapshots and backfills daily metrics on schema upgrade', async () => {
     const legacyDb = new Database(join(tmpDir, 'metrics.db'))
+    const snapshotData = {
+      id: 'snap-old',
+      capturedAt: '2026-06-01T00:00:00.000Z',
+      issues: [
+        { id: 'i1', title: 'Issue 1', state: 'closed', createdAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-01T10:00:00Z', closedAt: '2026-06-01T12:00:00Z', repo: 'test/repo', repoKey: 'github:test/repo', labels: [], assignee: null, milestone: null, url: '' },
+      ],
+      pullRequests: [],
+      workflowRuns: [],
+      repositories: [],
+      sessions: [],
+      localGit: [],
+      errors: [],
+      aggregates: {
+        throughput: { periodStart: '2026-06-01T00:00:00.000Z', periodEnd: '2026-06-01T00:00:00.000Z', issuesClosed: 1, issuesOpened: 1, prsMerged: 0, prsCreated: 0, totalCommits: 0 },
+        cycleTime: null,
+        ci: null,
+        staleWork: { asOf: '2026-06-01T00:00:00.000Z', staleIssues: 0, stalePRs: 0, staleThresholdDays: 14, oldestItemDays: null },
+        sessionUsage: null,
+        computedAt: '2026-06-01T00:00:00.000Z',
+      },
+      metadata: { source: 'orchestrated', refreshDurationMs: 1, partialData: false, errors: [] },
+    }
     legacyDb.exec(`
       CREATE TABLE snapshots (
         id TEXT PRIMARY KEY,
@@ -163,19 +185,29 @@ describe('initDb on fresh database', () => {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       INSERT INTO latest_state (key, value) VALUES ('schema_version', '3');
-      INSERT INTO snapshots (id, captured_at, data, version) VALUES ('snap-old', '2026-06-01T00:00:00.000Z', '{}', 3);
+      INSERT INTO snapshots (id, captured_at, data, version)
+      VALUES ('snap-old', '2026-06-01T00:00:00.000Z', '${JSON.stringify(snapshotData).replace(/'/g, "''")}', 3);
     `)
     legacyDb.close()
 
     await initDb()
 
-    expect(getLatestSnapshot()).toBeNull()
-    expect(getLatestState().snapshot).toBeNull()
-    expect(getLatestState().refreshState.runHistory).toEqual([])
+    // Snapshot should be preserved after migration
+    expect(getLatestSnapshot()).not.toBeNull()
+    expect(getLatestSnapshot()!.id).toBe('snap-old')
+
+    // Daily metrics should be backfilled from the preserved snapshot
+    const { getDailyMetricsRange } = await import('../client')
+    const metrics = getDailyMetricsRange('2026-06-01', '2026-06-01')
+    expect(metrics.length).toBeGreaterThanOrEqual(1)
+    const dayRow = metrics.find(m => m.day === '2026-06-01')
+    expect(dayRow).toBeDefined()
+    expect(dayRow!.issuesOpened).toBe(1)
+    expect(dayRow!.issuesClosed).toBe(1)
 
     const reopened = new Database(join(tmpDir, 'metrics.db'))
-    const count = reopened.prepare('SELECT COUNT(*) as count FROM snapshots').get() as { count: number }
-    expect(count.count).toBe(0)
+    const snapCount = reopened.prepare('SELECT COUNT(*) as count FROM snapshots').get() as { count: number }
+    expect(snapCount.count).toBe(1)
     reopened.close()
   })
 })

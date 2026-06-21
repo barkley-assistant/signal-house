@@ -123,6 +123,10 @@ function migrate(db: Db): void {
     const current = row ? Number(row.value) : 0
     if (current >= SCHEMA_VERSION) return
 
+    // Preserve existing snapshots so the migration is safe to roll out.
+    // After recreating tables we restore them and backfill daily metrics.
+    const existingSnapshots = db.prepare(`SELECT * FROM snapshots`).all() as SnapshotRow[]
+
     db.exec(SQL.dropTables)
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
@@ -133,6 +137,20 @@ function migrate(db: Db): void {
       CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
         ON daily_metrics(repo_key, day DESC);
     `)
+
+    // Restore snapshots and backfill daily metrics for the dashboard window
+    const insertSnap = db.prepare(SQL.insertSnapshot)
+    for (const snap of existingSnapshots) {
+      insertSnap.run({
+        id: snap.id,
+        capturedAt: (snap as unknown as Record<string, unknown>).captured_at as string,
+        data: snap.data,
+        version: snap.version,
+      })
+      const snapshot = JSON.parse(snap.data) as MetricSnapshot
+      backfillDailyMetricsFromSnapshot(db, snapshot)
+    }
+
     db.prepare(SQL.upsertLatestState).run({
       key: 'schema_version',
       value: String(SCHEMA_VERSION),
@@ -140,6 +158,40 @@ function migrate(db: Db): void {
   })
 
   runMigrations()
+}
+
+function backfillDailyMetricsFromSnapshot(db: Db, snapshot: MetricSnapshot): void {
+  const dailyRows = computeDailyMetrics(snapshot)
+  const stmt = db.prepare(SQL.upsertDailyMetrics)
+  for (const row of dailyRows) {
+    stmt.run({
+      day: row.day,
+      repoKey: row.repoKey,
+      capturedAt: row.capturedAt,
+      source: row.source,
+      version: SCHEMA_VERSION,
+      reflectsCompleteData: row.reflectsCompleteData ? 1 : 0,
+      issuesOpened: row.issuesOpened,
+      issuesClosed: row.issuesClosed,
+      prsCreated: row.prsCreated,
+      prsMerged: row.prsMerged,
+      totalCommits: row.totalCommits,
+      avgCycleTimeDays: row.avgCycleTimeDays,
+      medianCycleTimeDays: row.medianCycleTimeDays,
+      p95CycleTimeDays: row.p95CycleTimeDays,
+      cycleTimeSampleSize: row.cycleTimeSampleSize,
+      ciTotalRuns: row.ciTotalRuns,
+      ciPassCount: row.ciPassCount,
+      ciFailCount: row.ciFailCount,
+      ciPassRate: row.ciPassRate,
+      ciAvgDurationMs: row.ciAvgDurationMs,
+      totalSessions: row.totalSessions,
+      sessionErrorCount: row.sessionErrorCount,
+      staleIssues: row.staleIssues,
+      stalePrs: row.stalePrs,
+      warnings: JSON.stringify(row.warnings),
+    })
+  }
 }
 
 export function save(): void {
