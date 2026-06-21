@@ -1,17 +1,30 @@
 import { NextResponse } from "next/server";
+import { initDb, getRefreshRunState, getLatestSnapshot } from "../../../../../server/db/client";
+import { buildDiagnostics } from "../../../../../server/lib/build-diagnostics";
+
+let dbInitialized = false;
+
+async function ensureDb(): Promise<void> {
+  if (!dbInitialized) {
+    await initDb();
+    dbInitialized = true;
+  }
+}
 
 export async function GET() {
-  return NextResponse.json({
-    configuredProjectRoots: [],
-    discoveredRepos: [],
-    skippedPaths: [],
-    parsedGitHubRemotes: [],
-    collectionTargets: [],
-    cacheAgeSeconds: null,
-    pollerEnabled: false,
-    pollerIntervalSeconds: null,
-    lastSuccessfulRefreshAt: null,
-    lastError: null,
-    sourceHealth: {},
-  });
+  try {
+    await ensureDb();
+    const body = buildDiagnostics(getRefreshRunState(), getLatestSnapshot());
+    return NextResponse.json(body, {
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    });
+  } catch (error) {
+    console.error("[api/diagnostics] failed to build diagnostics response:", error);
+    return NextResponse.json(
+      { error: "Database unavailable" },
+      { status: 500 },
+    );
+  }
 }
