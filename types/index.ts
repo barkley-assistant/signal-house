@@ -35,9 +35,18 @@ export type {
   DashboardWindowStaleWorkSummary,
   DashboardWindowSessionSummary,
   DashboardWindowSessionUsageSummary,
+  RefreshRunState,
+  RefreshRunRecord,
+  RefreshSourceHealth,
+  DashboardPanelStatus,
 } from './snapshot'
 
 export type {
   DailyMetricsRow,
   DailyMetricsInsert,
 } from './daily-metrics'
+
+export type {
+  OpenCodeDailyUsageInsert,
+  OpenCodeDailyUsageRow,
+} from './opencode-daily'
