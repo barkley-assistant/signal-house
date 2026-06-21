@@ -22,7 +22,6 @@ import { StatusStrip } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
 import { TrendCard } from "@/components/TrendCard";
 import type {
-  DashboardWindow,
   DashboardWindowCards,
   DashboardWindowDay,
   DashboardWindowSessionUsageSummary,
@@ -472,29 +471,20 @@ export default function Home() {
     isEmpty: !data && hasEverLoaded,
   });
 
-  const snapshotIssues = useMemo<IssueMetric[]>(() => {
-    const dataRecord = (data as Record<string, unknown> | null) ?? null;
-    const snapshot = dataRecord?.snapshot as { issues?: IssueMetric[] } | null | undefined;
-    return snapshot?.issues ?? [];
-  }, [data]);
+  const snapshotIssues = useMemo<IssueMetric[]>(
+    () => data?.snapshot?.issues ?? [],
+    [data],
+  );
 
-  const snapshotPullRequests = useMemo<PullRequestMetric[]>(() => {
-    const dataRecord = (data as Record<string, unknown> | null) ?? null;
-    const snapshot = dataRecord?.snapshot as { pullRequests?: PullRequestMetric[] } | null | undefined;
-    return snapshot?.pullRequests ?? [];
-  }, [data]);
+  const snapshotPullRequests = useMemo<PullRequestMetric[]>(
+    () => data?.snapshot?.pullRequests ?? [],
+    [data],
+  );
 
-  const staleThresholdDays = useMemo<number>(() => {
-    const dataRecord = (data as Record<string, unknown> | null) ?? null;
-    const snapshot = dataRecord?.snapshot as
-      | { aggregates?: { staleWork?: { staleThresholdDays?: number } } }
-      | null
-      | undefined;
-    return (
-      snapshot?.aggregates?.staleWork?.staleThresholdDays ??
-      STALE_THRESHOLD_DAYS_FALLBACK
-    );
-  }, [data]);
+  const staleThresholdDays = useMemo<number>(
+    () => data?.snapshot?.aggregates?.staleWork?.staleThresholdDays ?? STALE_THRESHOLD_DAYS_FALLBACK,
+    [data],
+  );
 
   const attentionItems = useMemo<AttentionItem[]>(
     () => deriveAttentionItems(snapshotIssues, snapshotPullRequests, now, staleThresholdDays),
@@ -523,19 +513,15 @@ export default function Home() {
     isEmpty: filteredItems.length === 0 && !isFiltered,
   });
 
-  const sessionUsage = useMemo<DashboardWindowSessionUsageSummary | null>(() => {
-    const raw = (data as Record<string, unknown> | null)?.dashboardWindow as
-      | Record<string, unknown>
-      | undefined;
-    return (raw?.sessionUsage as DashboardWindowSessionUsageSummary) ?? null;
-  }, [data]);
+  const sessionUsage = useMemo<DashboardWindowSessionUsageSummary | null>(
+    () => data?.dashboardWindow?.sessionUsage ?? null,
+    [data],
+  );
 
-  const cards = useMemo<DashboardWindowCards | null>(() => {
-    const raw = (data as Record<string, unknown> | null)?.dashboardWindow as
-      | { cards?: DashboardWindowCards }
-      | undefined;
-    return raw?.cards ?? null;
-  }, [data]);
+  const cards = useMemo<DashboardWindowCards | null>(
+    () => data?.dashboardWindow?.cards ?? null,
+    [data],
+  );
 
   const healthSummaryLoading = !hasEverLoaded && isLoading;
   const healthSummaryError = cards == null ? error : null;
@@ -788,11 +774,7 @@ export default function Home() {
 
       <section aria-label="Trend charts" className="mt-6">
         {(() => {
-          const raw = (data as Record<string, unknown> | null)?.dashboardWindow as
-            | Record<string, unknown>
-            | undefined;
-          const windowData = raw as DashboardWindow | undefined;
-          const days = windowData?.days ?? [];
+          const days = data?.dashboardWindow?.days ?? [];
           const trendLoading = !hasEverLoaded && isLoading;
           const trendEmpty = days.length === 0;
           const throughputOption = trendEmpty ? null : buildThroughputOption(days);

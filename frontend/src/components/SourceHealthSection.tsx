@@ -17,18 +17,10 @@ import { SectionState, useSectionState } from "@/components/section-state";
 import type { SourceDiagnostics } from "@/types";
 
 type SourceHealth = SourceDiagnostics["sourceHealth"][string];
-type RefreshStateSummary = {
-  durationMs?: number | null;
-  sourceHealth?: Record<string, SourceHealth>;
-} | null;
 
 const STORAGE_KEY = "sh-diagnostics-open";
 
 type DashboardDiagnostics = SourceDiagnostics | null;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function loadExpanded(): boolean {
   if (typeof window === "undefined") return false;
@@ -76,18 +68,8 @@ function isEmptyDiagnostics(diagnostics: DashboardDiagnostics) {
 
 export function SourceHealthSection() {
   const dashboardDiagnostics = useDashboardStore((state) => state.diagnostics);
-  const dataDiagnostics = useDashboardStore((state) => {
-    const data = state.data;
-    if (!isRecord(data)) return null;
-    const diagnostics = data.diagnostics;
-    return isRecord(diagnostics) ? (diagnostics as unknown as SourceDiagnostics) : null;
-  });
-  const refreshState = useDashboardStore((state) => {
-    const data = state.data;
-    if (!isRecord(data)) return null;
-    const value = data.refreshState;
-    return isRecord(value) ? (value as unknown as RefreshStateSummary) : null;
-  });
+  const dataDiagnostics = useDashboardStore((state) => state.data?.diagnostics ?? null);
+  const refreshDurationMs = useDashboardStore((state) => state.data?.refreshState?.durationMs ?? null);
   const loadDiagnostics = useDashboardStore((state) => state.loadDiagnostics);
   const diagnosticsLoading = useDashboardStore((state) => state.diagnosticsLoading);
   const diagnosticsError = useDashboardStore((state) => state.diagnosticsError);
@@ -301,7 +283,7 @@ export function SourceHealthSection() {
                         <div className="flex justify-between gap-3">
                           <span className="text-text-muted">Duration</span>
                           <span className="text-text-primary">
-                            {formatDurationMs(refreshState?.durationMs ?? null)}
+                            {formatDurationMs(refreshDurationMs)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-3">

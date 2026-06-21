@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import { fetchState, fetchDiagnostics } from "@/lib/api-client";
-import type { SourceDiagnostics } from "@/types";
+import type { LatestState, SourceDiagnostics } from "@/types";
+
+export type RefreshStatus = "idle" | "running" | "success" | "failed";
 
 export interface DashboardState {
-  data: unknown | null;
+  data: LatestState | null;
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
@@ -11,8 +13,8 @@ export interface DashboardState {
   hasEverLoaded: boolean;
   lastRefreshAt: string | null;
   lastSuccessfulRefreshAt: string | null;
-  refreshStatus: "idle" | "running" | "success" | "failed";
-  manualRefreshStatus: "idle" | "running" | "success" | "failed";
+  refreshStatus: RefreshStatus;
+  manualRefreshStatus: RefreshStatus;
   manualRefreshErrorTimestamp: number | null;
   lastPollTimestamp: string | null;
 
@@ -26,6 +28,54 @@ export interface DashboardState {
   triggerAutoRefresh: () => Promise<void>;
   clearManualRefreshError: () => void;
   loadDiagnostics: () => Promise<void>;
+}
+
+type FetchKind = "manual" | "polled";
+
+function startFetchFlags(isFirstLoad: boolean) {
+  return isFirstLoad
+    ? { isLoading: true, refreshStatus: "running" as const }
+    : { isRefreshing: true, refreshStatus: "running" as const };
+}
+
+function applyFetchedState(
+  state: DashboardState,
+  data: LatestState,
+  kind: FetchKind,
+) {
+  return {
+    data,
+    isLoading: false,
+    isRefreshing: false,
+    hasEverLoaded: true,
+    selectedRepoKey: data.selectedRepoKey,
+    lastRefreshAt: new Date().toISOString(),
+    lastSuccessfulRefreshAt: data.lastSuccessfulRefreshAt,
+    refreshStatus: "success" as const,
+    manualRefreshStatus:
+      kind === "manual" ? ("success" as const) : state.manualRefreshStatus,
+    error: null,
+    diagnostics: state.diagnosticsHasLoaded ? state.diagnostics : data.diagnostics,
+    diagnosticsHasLoaded: state.diagnosticsHasLoaded || Boolean(data.diagnostics),
+  };
+}
+
+function applyFetchError(
+  state: DashboardState,
+  error: unknown,
+  kind: FetchKind,
+) {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    isLoading: false,
+    isRefreshing: false,
+    error: message,
+    refreshStatus: "failed" as const,
+    manualRefreshStatus:
+      kind === "manual" ? ("failed" as const) : state.manualRefreshStatus,
+    manualRefreshErrorTimestamp:
+      kind === "manual" ? Date.now() : state.manualRefreshErrorTimestamp,
+  };
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -49,128 +99,48 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   fetch: async (repoKey) => {
     const state = get();
     const repo = repoKey ?? state.selectedRepoKey;
-    const isFirstLoad = !state.hasEverLoaded;
-
-    if (isFirstLoad) {
-      set({ isLoading: true, error: null, refreshStatus: "running" });
-    } else {
-      set({ isRefreshing: true, refreshStatus: "running", error: null });
-    }
-
+    set({ ...startFetchFlags(!state.hasEverLoaded), error: null });
     try {
       const data = await fetchState(repo);
-      const stateData = data as Record<string, unknown>;
-      const diagnostics = (stateData.diagnostics as SourceDiagnostics | undefined) ?? null;
-      const nextDiagnostics = state.diagnosticsHasLoaded ? state.diagnostics : diagnostics;
-      set({
-        data,
-        isLoading: false,
-        isRefreshing: false,
-        hasEverLoaded: true,
-        selectedRepoKey: repo,
-        lastRefreshAt: new Date().toISOString(),
-        lastSuccessfulRefreshAt:
-          (stateData.lastSuccessfulRefreshAt as string) ?? new Date().toISOString(),
-        refreshStatus: "success",
-        error: null,
-        diagnostics: nextDiagnostics,
-        diagnosticsHasLoaded: Boolean(nextDiagnostics),
-      });
+      set((s) => applyFetchedState(s, data, "polled"));
     } catch (err) {
-      set({
-        isLoading: false,
-        isRefreshing: false,
-        error: String(err),
-        refreshStatus: "failed",
-      });
+      set((s) => applyFetchError(s, err, "polled"));
     }
   },
 
   manualRefresh: async () => {
     const state = get();
-    const isFirstLoad = !state.hasEverLoaded;
-
-    if (isFirstLoad) {
-      set({
-        isLoading: true,
-        error: null,
-        manualRefreshStatus: "running",
-        refreshStatus: "running",
-      });
-    } else {
-      set({
-        isRefreshing: true,
-        refreshStatus: "running",
-        manualRefreshStatus: "running",
-        error: null,
-      });
-    }
-
+    set({
+      ...startFetchFlags(!state.hasEverLoaded),
+      error: null,
+      manualRefreshStatus: "running",
+    });
     try {
       const data = await fetchState(state.selectedRepoKey);
-      const stateData = data as Record<string, unknown>;
-      const diagnostics = (stateData.diagnostics as SourceDiagnostics | undefined) ?? null;
-      const nextDiagnostics = state.diagnosticsHasLoaded ? state.diagnostics : diagnostics;
-      set({
-        data,
-        isLoading: false,
-        isRefreshing: false,
-        hasEverLoaded: true,
-        lastRefreshAt: new Date().toISOString(),
-        lastSuccessfulRefreshAt:
-          (stateData.lastSuccessfulRefreshAt as string) ?? new Date().toISOString(),
-        refreshStatus: "success",
-        manualRefreshStatus: "success",
-        error: null,
-        diagnostics: nextDiagnostics,
-        diagnosticsHasLoaded: Boolean(nextDiagnostics),
-      });
+      set((s) => applyFetchedState(s, data, "manual"));
     } catch (err) {
-      set({
-        isLoading: false,
-        isRefreshing: false,
-        error: String(err),
-        refreshStatus: "failed",
-        manualRefreshStatus: "failed",
-        manualRefreshErrorTimestamp: Date.now(),
-      });
+      set((s) => applyFetchError(s, err, "manual"));
     }
   },
 
   triggerAutoRefresh: async () => {
     const state = get();
-
     try {
       set({ refreshStatus: "running" });
       const data = await fetchState(state.selectedRepoKey);
-      const stateData = data as Record<string, unknown>;
-      const diagnostics = (stateData.diagnostics as SourceDiagnostics | undefined) ?? null;
-      const nextDiagnostics = state.diagnosticsHasLoaded ? state.diagnostics : diagnostics;
-      const apiLastRefreshAt = (stateData.lastSuccessfulRefreshAt as string) ?? null;
+      const apiLastRefreshAt = data.lastSuccessfulRefreshAt;
 
       if (apiLastRefreshAt && apiLastRefreshAt !== state.lastPollTimestamp) {
-        set({
-          data,
-          lastRefreshAt: new Date().toISOString(),
-          lastSuccessfulRefreshAt: apiLastRefreshAt,
+        set((s) => ({
+          ...applyFetchedState(s, data, "polled"),
           lastPollTimestamp: apiLastRefreshAt,
-          refreshStatus: "success",
-          hasEverLoaded: true,
-          error: null,
-          diagnostics: nextDiagnostics,
-          diagnosticsHasLoaded: Boolean(nextDiagnostics),
-        });
+        }));
       } else {
-        set({
-          lastPollTimestamp: apiLastRefreshAt,
-          refreshStatus: "idle",
-        });
+        set({ lastPollTimestamp: apiLastRefreshAt, refreshStatus: "idle" });
       }
     } catch (err) {
-      set({
-        refreshStatus: "failed",
-        error: String(err),
-      });
+      const message = err instanceof Error ? err.message : String(err);
+      set({ refreshStatus: "failed", error: message });
     }
   },
 
@@ -181,7 +151,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   loadDiagnostics: async () => {
     set({ diagnosticsLoading: true, diagnosticsError: null });
     try {
-      const data = (await fetchDiagnostics()) as SourceDiagnostics;
+      const data = await fetchDiagnostics();
       set({
         diagnostics: data,
         diagnosticsLoading: false,
@@ -189,10 +159,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         diagnosticsError: null,
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       set({
         diagnosticsLoading: false,
         diagnosticsHasLoaded: true,
-        diagnosticsError: String(err),
+        diagnosticsError: message,
       });
     }
   },
