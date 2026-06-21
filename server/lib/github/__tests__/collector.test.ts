@@ -87,7 +87,7 @@ describe('createCollector', () => {
       .mockResolvedValueOnce(mockOkJson(mockPRs))
       .mockResolvedValueOnce(mockOkJson(mockPRs[0]))
       .mockResolvedValueOnce(mockOkJson(mockWorkflows))
-      .mockResolvedValueOnce(mockOkJson(mockRuns))
+      .mockResolvedValueOnce(mockOkJson({ workflow_runs: mockRuns }))
       .mockResolvedValueOnce(mockOkJson(mockRepo))
 
     const collector = createCollector({
@@ -115,7 +115,7 @@ describe('createCollector', () => {
       .mockResolvedValueOnce(mockOkJson(mockIssues))
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce(mockOkJson(mockWorkflows))
-      .mockResolvedValueOnce(mockOkJson(mockRuns))
+      .mockResolvedValueOnce(mockOkJson({ workflow_runs: mockRuns }))
       .mockResolvedValueOnce(mockOkJson(mockRepo))
 
     const collector = createCollector({
@@ -138,7 +138,7 @@ describe('createCollector', () => {
       .mockResolvedValueOnce(mockOkJson(mockPRs))
       .mockRejectedValueOnce(new Error('Detail fetch failed'))
       .mockResolvedValueOnce(mockOkJson(mockWorkflows))
-      .mockResolvedValueOnce(mockOkJson(mockRuns))
+      .mockResolvedValueOnce(mockOkJson({ workflow_runs: mockRuns }))
       .mockResolvedValueOnce(mockOkJson(mockRepo))
 
     const collector = createCollector({
@@ -168,7 +168,7 @@ describe('createCollector', () => {
       .mockResolvedValueOnce(mockOkJson(mockIssues))
       .mockResolvedValueOnce(mockOkJson(mockPRs))
       .mockResolvedValueOnce(mockOkJson(mockWorkflows))
-      .mockResolvedValueOnce(mockOkJson(mockRuns))
+      .mockResolvedValueOnce(mockOkJson({ workflow_runs: mockRuns }))
       .mockResolvedValueOnce(mockOkJson(mockRepo))
 
     const collector = createCollector({

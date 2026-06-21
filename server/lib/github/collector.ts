@@ -260,7 +260,7 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         workflowRunsCount: workflowRuns.length,
         errors: allErrors,
         partialData,
-        durationMs: Date.now() - startTime,
+        durationMs: Math.max(1, Date.now() - startTime),
         ...(config.skipPersist ? { snapshot } : {}),
       }
     },
