@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals'
 import { buildDashboardWindow } from '../dashboard-state'
 import { makeDailyMetricsRow } from './fixtures'
 
@@ -34,17 +34,46 @@ function makeRow(day: string, overrides: Partial<import('../../../types/daily-me
   }
 }
 
+const ENV_KEYS = [
+  'GITHUB_TOKEN',
+  'GITHUB_OWNER',
+  'SECRET_HOUSE_GITHUB_REPO',
+  'GIT_REPOS',
+  'SESSIONS_PERIOD_DAYS',
+]
+
+function snapshotEnv(): Record<string, string | undefined> {
+  const saved: Record<string, string | undefined> = {}
+  for (const key of ENV_KEYS) {
+    saved[key] = process.env[key]
+  }
+  return saved
+}
+
+function restoreEnv(saved: Record<string, string | undefined>): void {
+  for (const key of ENV_KEYS) {
+    if (saved[key] === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = saved[key]
+    }
+  }
+}
+
 describe('buildDashboardWindow', () => {
+  let savedEnv: Record<string, string | undefined>
+
   beforeEach(() => {
-    vi.stubEnv('GITHUB_TOKEN', 'ghp_test')
-    vi.stubEnv('GITHUB_OWNER', 'barkley-clawd')
-    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'signal-house')
-    vi.stubEnv('GIT_REPOS', '/tmp/repo-a')
-    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+    savedEnv = snapshotEnv()
+    process.env['GITHUB_TOKEN'] = 'ghp_test'
+    process.env['GITHUB_OWNER'] = 'barkley-clawd'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'signal-house'
+    process.env['GIT_REPOS'] = '/tmp/repo-a'
+    process.env['SESSIONS_PERIOD_DAYS'] = '30'
   })
 
   afterEach(() => {
-    vi.unstubAllEnvs()
+    restoreEnv(savedEnv)
   })
 
   it('normalizes the response to a 28-day ascending series with explicit gaps', () => {
@@ -298,16 +327,22 @@ describe('buildDashboardWindow', () => {
 })
 
 describe('buildDashboardWindow — extended coverage', () => {
+  let savedEnv: Record<string, string | undefined>
+
+  beforeEach(() => {
+    savedEnv = snapshotEnv()
+  })
+
   afterEach(() => {
-    vi.unstubAllEnvs()
+    restoreEnv(savedEnv)
   })
 
   it('includes warning banners from source failures and marks cards unavailable', () => {
-    vi.stubEnv('GITHUB_TOKEN', 'tok')
-    vi.stubEnv('GITHUB_OWNER', 'o')
-    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
-    vi.stubEnv('GIT_REPOS', '/tmp/a')
-    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+    process.env['GITHUB_TOKEN'] = 'tok'
+    process.env['GITHUB_OWNER'] = 'o'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'r'
+    process.env['GIT_REPOS'] = '/tmp/a'
+    process.env['SESSIONS_PERIOD_DAYS'] = '30'
 
     const window = buildDashboardWindow([
       makeDailyMetricsRow('2026-06-14', {
@@ -332,11 +367,11 @@ describe('buildDashboardWindow — extended coverage', () => {
   })
 
   it('reports empty session usage when configured but no aggregate present', () => {
-    vi.stubEnv('GITHUB_TOKEN', 'tok')
-    vi.stubEnv('GITHUB_OWNER', 'o')
-    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
-    vi.stubEnv('GIT_REPOS', '/tmp/a')
-    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+    process.env['GITHUB_TOKEN'] = 'tok'
+    process.env['GITHUB_OWNER'] = 'o'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'r'
+    process.env['GIT_REPOS'] = '/tmp/a'
+    process.env['SESSIONS_PERIOD_DAYS'] = '30'
 
     const window = buildDashboardWindow([
       makeDailyMetricsRow('2026-06-14'),
@@ -349,10 +384,10 @@ describe('buildDashboardWindow — extended coverage', () => {
   })
 
   it('reports unconfigured session when no session env var set', () => {
-    vi.stubEnv('GITHUB_TOKEN', 'tok')
-    vi.stubEnv('GITHUB_OWNER', 'o')
-    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
-    vi.stubEnv('GIT_REPOS', '/tmp/a')
+    process.env['GITHUB_TOKEN'] = 'tok'
+    process.env['GITHUB_OWNER'] = 'o'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'r'
+    process.env['GIT_REPOS'] = '/tmp/a'
 
     const window = buildDashboardWindow([
       makeDailyMetricsRow('2026-06-14'),
@@ -364,11 +399,11 @@ describe('buildDashboardWindow — extended coverage', () => {
   })
 
   it('includes model usage rows when present on the session aggregate', () => {
-    vi.stubEnv('GITHUB_TOKEN', 'tok')
-    vi.stubEnv('GITHUB_OWNER', 'o')
-    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
-    vi.stubEnv('GIT_REPOS', '/tmp/a')
-    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+    process.env['GITHUB_TOKEN'] = 'tok'
+    process.env['GITHUB_OWNER'] = 'o'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'r'
+    process.env['GIT_REPOS'] = '/tmp/a'
+    process.env['SESSIONS_PERIOD_DAYS'] = '30'
 
     const window = buildDashboardWindow([
       makeDailyMetricsRow('2026-06-14'),
@@ -411,7 +446,7 @@ describe('buildDashboardWindow — extended coverage', () => {
   })
 
   it('reports unconfigured sources when GitHub and local git are not configured', () => {
-    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+    process.env['SESSIONS_PERIOD_DAYS'] = '30'
 
     const window = buildDashboardWindow([
       makeDailyMetricsRow('2026-06-14'),
@@ -424,10 +459,10 @@ describe('buildDashboardWindow — extended coverage', () => {
   })
 
   it('shows stale work as no stale work when issues and PRs are current', () => {
-    vi.stubEnv('GITHUB_TOKEN', 'tok')
-    vi.stubEnv('GITHUB_OWNER', 'o')
-    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
-    vi.stubEnv('GIT_REPOS', '/tmp/a')
+    process.env['GITHUB_TOKEN'] = 'tok'
+    process.env['GITHUB_OWNER'] = 'o'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'r'
+    process.env['GIT_REPOS'] = '/tmp/a'
 
     const window = buildDashboardWindow([
       makeDailyMetricsRow('2026-06-14', { staleIssues: 0, stalePrs: 0 }),
@@ -439,10 +474,10 @@ describe('buildDashboardWindow — extended coverage', () => {
   })
 
   it('summarises CI correctly when workflow run data is present across days', () => {
-    vi.stubEnv('GITHUB_TOKEN', 'tok')
-    vi.stubEnv('GITHUB_OWNER', 'o')
-    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
-    vi.stubEnv('GIT_REPOS', '/tmp/a')
+    process.env['GITHUB_TOKEN'] = 'tok'
+    process.env['GITHUB_OWNER'] = 'o'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'r'
+    process.env['GIT_REPOS'] = '/tmp/a'
 
     const window = buildDashboardWindow([
       makeDailyMetricsRow('2026-06-14', {

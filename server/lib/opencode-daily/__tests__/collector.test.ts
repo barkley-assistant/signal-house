@@ -1,13 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 import { collectDailyOpenCodeUsage, parseOpenCodeDailyStats } from '../collector'
 import { execFileSync } from 'node:child_process'
 
-vi.mock('node:child_process')
+jest.mock('node:child_process')
 
-const mockExecFileSync = vi.mocked(execFileSync)
+const mockExecFileSync = jest.mocked(execFileSync)
 
 beforeEach(() => {
-  vi.resetAllMocks()
+  jest.resetAllMocks()
 })
 
 function enoentErr(): Error {

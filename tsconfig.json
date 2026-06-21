@@ -11,6 +11,8 @@
     "./dist",
     "./node_modules/runtime/server",
     "./node_modules/dist/runtime/server",
-    "./frontend"
+    "./frontend",
+    "server/**/__tests__",
+    "frontend/src/**/__tests__"
   ]
 }

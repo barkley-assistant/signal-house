@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
 import { mkdtempSync, rmSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { join } from 'node:path'

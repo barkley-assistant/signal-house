@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals'
 
-const mocks = vi.hoisted(() => ({
-  mockInitDb: vi.fn(),
-  mockClose: vi.fn(),
-  mockRunRetention: vi.fn().mockReturnValue({ snapshotsDeleted: 0, aggregatesDeleted: 0, dailyMetricsDeleted: 0, sessionsDeleted: 0, workflowRunsDeleted: 0 }),
-}))
+const mocks = {
+  mockInitDb: jest.fn(),
+  mockClose: jest.fn(),
+  mockRunRetention: jest.fn().mockReturnValue({ snapshotsDeleted: 0, aggregatesDeleted: 0, dailyMetricsDeleted: 0, sessionsDeleted: 0, workflowRunsDeleted: 0 }),
+}
 
-vi.mock('../../db/client', () => ({
+jest.mock('../../db/client', () => ({
   initDb: mocks.mockInitDb,
   close: mocks.mockClose,
   runRetention: mocks.mockRunRetention,
@@ -14,9 +14,9 @@ vi.mock('../../db/client', () => ({
 
 const mockHooks: { name: string; fn: (...args: unknown[]) => unknown }[] = []
 
-vi.mock('nitropack/runtime', () => ({
+jest.mock('nitropack/runtime', () => ({
   defineNitroPlugin: (def: (nitroApp: unknown) => unknown) => def,
-}))
+}));
 
 import dbPlugin from '../db'
 
@@ -34,11 +34,11 @@ function makeNitroApp() {
 describe('db plugin', () => {
   beforeEach(() => {
     mockHooks.length = 0
-    vi.clearAllMocks()
+    jest.clearAllMocks()
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    jest.restoreAllMocks()
   })
 
   it('initializes the database at startup and closes it on shutdown', async () => {

@@ -1,27 +1,27 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals'
 
-const mocks = vi.hoisted(() => ({
-  mockInitDb: vi.fn(),
-  mockStartMetricsPoller: vi.fn(),
-  mockStopMetricsPoller: vi.fn(),
-  mockGetPollerConfig: vi.fn(),
-}))
+const mocks = {
+  mockInitDb: jest.fn(),
+  mockStartMetricsPoller: jest.fn(),
+  mockStopMetricsPoller: jest.fn(),
+  mockGetPollerConfig: jest.fn(),
+}
 
-vi.mock('../../db/client', () => ({
+jest.mock('../../db/client', () => ({
   initDb: mocks.mockInitDb,
-}))
+}));
 
-vi.mock('../../lib/poller', () => ({
+jest.mock('../../lib/poller', () => ({
   getPollerConfig: mocks.mockGetPollerConfig,
   startMetricsPoller: mocks.mockStartMetricsPoller,
   stopMetricsPoller: mocks.mockStopMetricsPoller,
-}))
+}));
 
 const mockHooks: { name: string; fn: (...args: unknown[]) => unknown }[] = []
 
-vi.mock('nitropack/runtime', () => ({
+jest.mock('nitropack/runtime', () => ({
   defineNitroPlugin: (def: (nitroApp: unknown) => unknown) => def,
-}))
+}));
 
 import pollerPlugin from '../poller'
 
@@ -39,11 +39,11 @@ function makeNitroApp() {
 describe('poller plugin', () => {
   beforeEach(() => {
     mockHooks.length = 0
-    vi.clearAllMocks()
+    jest.clearAllMocks()
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    jest.restoreAllMocks()
   })
 
   it('does not start the poller or register a close hook when disabled', async () => {
@@ -63,7 +63,7 @@ describe('poller plugin', () => {
   })
 
   it('starts the poller at process startup and stops it on the close hook', async () => {
-    const runtime = { stop: vi.fn() }
+    const runtime = { stop: jest.fn() }
     mocks.mockInitDb.mockResolvedValue(undefined)
     mocks.mockGetPollerConfig.mockReturnValue({
       enabled: true,

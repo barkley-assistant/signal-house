@@ -1,10 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, jest, beforeEach } from '@jest/globals'
 
-const mocks = vi.hoisted(() => ({
-  mockVerifyAccess: vi.fn(),
-}))
+const mocks = {
+  mockVerifyAccess: jest.fn(),
+}
 
-vi.mock('../../lib/access-protection', () => ({
+jest.mock('../../lib/access-protection', () => ({
   verifyAccess: mocks.mockVerifyAccess,
 }))
 
@@ -12,7 +12,7 @@ import middleware from '../access-protection.global'
 
 describe('access protection middleware', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    jest.clearAllMocks()
   })
 
   it('runs the shared protection check for every request', () => {

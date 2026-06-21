@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from '@jest/globals'
 import { computeDailyMetrics } from '../daily-metrics'
 import type { MetricSnapshot } from '../../../types/snapshot'
 import { makeIssue as makeIssueFixture, makePullRequest as makePullRequestFixture, makeWorkflowRun, makeSession, makeLocalRepo as makeLocalRepoFixture, makeSnapshot as makeSnapshotFixture } from './fixtures'

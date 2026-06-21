@@ -1,14 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 import { createApiClient } from '../client'
 
 function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}): void {
   const bodyStr = JSON.stringify(body)
   const resHeaders = new Headers({ 'content-type': 'application/json', ...headers })
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(bodyStr, { status, headers: resHeaders }))
+  jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(bodyStr, { status, headers: resHeaders }))
 }
 
 beforeEach(() => {
-  vi.restoreAllMocks()
+  jest.restoreAllMocks()
 })
 
 describe('createApiClient', () => {
@@ -88,7 +88,7 @@ describe('createApiClient', () => {
   })
 
   it('treats merged_at as the source of truth for merged PRs', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const fetchSpy = jest.spyOn(globalThis, 'fetch')
     fetchSpy
       .mockResolvedValueOnce(new Response(JSON.stringify([
         {
@@ -140,7 +140,7 @@ describe('createApiClient', () => {
   })
 
   it('classifies PR with merged boolean when merged_at is null', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const fetchSpy = jest.spyOn(globalThis, 'fetch')
     fetchSpy
       .mockResolvedValueOnce(new Response(JSON.stringify([
         {
@@ -226,7 +226,7 @@ describe('createApiClient', () => {
 
   it('maps workflow runs from GitHub API response', async () => {
     let callCount = 0
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const fetchSpy = jest.spyOn(globalThis, 'fetch')
     fetchSpy.mockImplementation(() => {
       callCount++
       const body = callCount === 1
@@ -269,7 +269,7 @@ describe('createApiClient', () => {
 
   it('maps in-progress workflow runs without completedAt', async () => {
     let callCount = 0
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const fetchSpy = jest.spyOn(globalThis, 'fetch')
     fetchSpy.mockImplementation(() => {
       callCount++
       const body = callCount === 1
@@ -299,7 +299,7 @@ describe('createApiClient', () => {
   })
 
   it('fetchWorkflowRuns falls back to Workflow id when workflow fetch fails', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const fetchSpy = jest.spyOn(globalThis, 'fetch')
     fetchSpy
       .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
       .mockResolvedValueOnce(new Response(JSON.stringify([
@@ -353,7 +353,7 @@ describe('createApiClient', () => {
       },
     ]
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const fetchSpy = jest.spyOn(globalThis, 'fetch')
     fetchSpy
       .mockResolvedValueOnce(
         new Response(JSON.stringify(page1), {

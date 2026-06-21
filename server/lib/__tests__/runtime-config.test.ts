@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals'
 import {
   getDiscoveryMaxDepth,
   getDashboardWindowDays,
@@ -11,9 +11,43 @@ import {
   getStaleThresholdMs,
 } from '../runtime-config'
 
+const ENV_KEYS = [
+  'METRICS_POLLER_ENABLED',
+  'METRICS_POLL_INTERVAL_SECONDS',
+  'METRICS_POLL_STARTUP_DELAY_SECONDS',
+  'METRICS_RUN_ON_STARTUP',
+  'SECRET_HOUSE_POLLER_ENABLED',
+  'SECRET_HOUSE_POLL_INTERVAL_SECONDS',
+  'SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS',
+  'SECRET_HOUSE_RUN_ON_STARTUP',
+  'SESSIONS_PERIOD_DAYS',
+  'SECRET_HOUSE_ACCESS_USERNAME',
+  'SECRET_HOUSE_ACCESS_PASSWORD',
+  'SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS',
+  'SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS',
+  'SECRET_HOUSE_RETENTION_SESSIONS_DAYS',
+  'SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS',
+]
+
 describe('runtime config', () => {
+  let savedEnv: Record<string, string | undefined>
+
+  beforeEach(() => {
+    savedEnv = {}
+    for (const key of ENV_KEYS) {
+      savedEnv[key] = process.env[key]
+      delete process.env[key]
+    }
+  })
+
   afterEach(() => {
-    vi.unstubAllEnvs()
+    for (const key of ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = savedEnv[key]
+      }
+    }
   })
 
   it('exposes the centralized defaults', () => {
@@ -61,11 +95,11 @@ describe('runtime config', () => {
   })
 
   it('keeps legacy env fallbacks working', () => {
-    vi.stubEnv('METRICS_POLLER_ENABLED', 'true')
-    vi.stubEnv('METRICS_POLL_INTERVAL_SECONDS', '2')
-    vi.stubEnv('METRICS_POLL_STARTUP_DELAY_SECONDS', '120')
-    vi.stubEnv('METRICS_RUN_ON_STARTUP', 'false')
-    vi.stubEnv('SESSIONS_PERIOD_DAYS', '45')
+    process.env['METRICS_POLLER_ENABLED'] = 'true'
+    process.env['METRICS_POLL_INTERVAL_SECONDS'] = '2'
+    process.env['METRICS_POLL_STARTUP_DELAY_SECONDS'] = '120'
+    process.env['METRICS_RUN_ON_STARTUP'] = 'false'
+    process.env['SESSIONS_PERIOD_DAYS'] = '45'
 
     expect(getPollerConfig()).toMatchObject({
       enabled: true,
@@ -89,8 +123,8 @@ describe('runtime config', () => {
   })
 
   it('reads the optional access protection env vars', () => {
-    vi.stubEnv('SECRET_HOUSE_ACCESS_USERNAME', 'jake')
-    vi.stubEnv('SECRET_HOUSE_ACCESS_PASSWORD', 'secret')
+    process.env['SECRET_HOUSE_ACCESS_USERNAME'] = 'jake'
+    process.env['SECRET_HOUSE_ACCESS_PASSWORD'] = 'secret'
 
     expect(getRuntimeConfig().accessProtection).toMatchObject({
       enabled: true,
@@ -99,10 +133,10 @@ describe('runtime config', () => {
   })
 
   it('reads configurable retention thresholds from env', () => {
-    vi.stubEnv('SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS', '60')
-    vi.stubEnv('SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS', '180')
-    vi.stubEnv('SECRET_HOUSE_RETENTION_SESSIONS_DAYS', '45')
-    vi.stubEnv('SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS', '120')
+    process.env['SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS'] = '60'
+    process.env['SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS'] = '180'
+    process.env['SECRET_HOUSE_RETENTION_SESSIONS_DAYS'] = '45'
+    process.env['SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS'] = '120'
 
     expect(getRetentionConfig()).toEqual({
       snapshotsDays: 60,

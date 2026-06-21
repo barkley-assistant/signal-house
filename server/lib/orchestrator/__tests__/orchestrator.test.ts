@@ -1,29 +1,29 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 import * as db from '../../../db/client'
 
-vi.mock('../../../db/client', () => ({
-  initDb: vi.fn().mockResolvedValue(undefined),
-  persistSnapshot: vi.fn(),
-  getLatestSnapshot: vi.fn().mockReturnValue(null),
-  upsertOpenCodeDailyUsage: vi.fn(),
+jest.mock('../../../db/client', () => ({
+  initDb: jest.fn().mockResolvedValue(undefined),
+  persistSnapshot: jest.fn(),
+  getLatestSnapshot: jest.fn().mockReturnValue(null),
+  upsertOpenCodeDailyUsage: jest.fn(),
 }))
 
-vi.mock('../../github/collector', () => ({
-  createCollector: vi.fn(),
+jest.mock('../../github/collector', () => ({
+  createCollector: jest.fn(),
   collectWithConcurrency: async <T, R>(items: T[], _limit: number, fn: (item: T, index: number) => Promise<R>) =>
     await Promise.all(items.map((item, index) => fn(item, index))),
 }))
 
-vi.mock('../../git/collector', () => ({
-  createLocalGitCollector: vi.fn(),
+jest.mock('../../git/collector', () => ({
+  createLocalGitCollector: jest.fn(),
 }))
 
-vi.mock('../../sessions/collector', () => ({
-  createSessionCollector: vi.fn(),
+jest.mock('../../sessions/collector', () => ({
+  createSessionCollector: jest.fn(),
 }))
 
-vi.mock('../../opencode-daily/collector', () => ({
-  collectDailyOpenCodeUsage: vi.fn().mockReturnValue({
+jest.mock('../../opencode-daily/collector', () => ({
+  collectDailyOpenCodeUsage: jest.fn().mockReturnValue({
     date: '2026-06-19',
     source: 'opencode',
     totalSessions: 0,
@@ -42,7 +42,7 @@ import { createSessionCollector as mockSessionCreate } from '../../sessions/coll
 import { createOrchestrator } from '../index'
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  jest.clearAllMocks()
 })
 
 describe('createOrchestrator', () => {
@@ -59,13 +59,13 @@ describe('createOrchestrator', () => {
   })
 
   it('runs all configured collectors and merges data', async () => {
-    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
-    const gitCollector = { collect: vi.fn() }
-    const sessionCollector = { collect: vi.fn() }
+    const ghCollector = { collect: jest.fn(), getApiClient: jest.fn() }
+    const gitCollector = { collect: jest.fn() }
+    const sessionCollector = { collect: jest.fn() }
 
-    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
-    vi.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
-    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+    jest.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    jest.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
+    jest.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
 
     ghCollector.collect.mockResolvedValue({
       snapshotId: 'gh-id',
@@ -180,7 +180,7 @@ describe('createOrchestrator', () => {
     expect(result.errors).toHaveLength(0)
     expect(result.partialData).toBe(false)
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.issues).toHaveLength(1)
     expect(snapshotArg.sessions).toHaveLength(3)
     expect(snapshotArg.localGit).toHaveLength(1)
@@ -189,10 +189,10 @@ describe('createOrchestrator', () => {
   })
 
   it('collects multiple GitHub targets and merges their raw metrics', async () => {
-    const ghCollectorA = { collect: vi.fn(), getApiClient: vi.fn() }
-    const ghCollectorB = { collect: vi.fn(), getApiClient: vi.fn() }
+    const ghCollectorA = { collect: jest.fn(), getApiClient: jest.fn() }
+    const ghCollectorB = { collect: jest.fn(), getApiClient: jest.fn() }
 
-    vi.mocked(mockGhCreate)
+    jest.mocked(mockGhCreate)
       .mockReturnValueOnce(ghCollectorA as never)
       .mockReturnValueOnce(ghCollectorB as never)
 
@@ -275,15 +275,15 @@ describe('createOrchestrator', () => {
 
     await orchestrator.collect()
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.issues).toHaveLength(2)
   })
 
   it('keeps the other GitHub target when one target fails', async () => {
-    const ghCollectorA = { collect: vi.fn(), getApiClient: vi.fn() }
-    const ghCollectorB = { collect: vi.fn(), getApiClient: vi.fn() }
+    const ghCollectorA = { collect: jest.fn(), getApiClient: jest.fn() }
+    const ghCollectorB = { collect: jest.fn(), getApiClient: jest.fn() }
 
-    vi.mocked(mockGhCreate)
+    jest.mocked(mockGhCreate)
       .mockReturnValueOnce(ghCollectorA as never)
       .mockReturnValueOnce(ghCollectorB as never)
 
@@ -338,11 +338,11 @@ describe('createOrchestrator', () => {
   })
 
   it('merges local and GitHub identity for the same repository key', async () => {
-    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
-    const gitCollector = { collect: vi.fn() }
+    const ghCollector = { collect: jest.fn(), getApiClient: jest.fn() }
+    const gitCollector = { collect: jest.fn() }
 
-    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
-    vi.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
+    jest.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    jest.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
 
     ghCollector.collect.mockResolvedValue({
       snapshotId: 'gh-id',
@@ -413,7 +413,7 @@ describe('createOrchestrator', () => {
 
     expect(result.errors).toHaveLength(0)
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.repositories).toHaveLength(1)
     expect(snapshotArg.repositories[0]).toMatchObject({
       repoKey: 'github:test/repo',
@@ -426,9 +426,9 @@ describe('createOrchestrator', () => {
   })
 
   it('preserves sessionUsage when no GitHub collector configured', async () => {
-    const sessionCollector = { collect: vi.fn() }
+    const sessionCollector = { collect: jest.fn() }
 
-    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+    jest.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
 
     sessionCollector.collect.mockResolvedValue({
       sessions: [
@@ -476,18 +476,18 @@ describe('createOrchestrator', () => {
     expect(result.errors).toHaveLength(0)
     expect(result.partialData).toBe(false)
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.sessions).toHaveLength(2)
     expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
     expect(snapshotArg.aggregates.sessionUsage!.totalSessions).toBe(2)
   })
 
   it('preserves sessionUsage when only localGit and sessions configured', async () => {
-    const gitCollector = { collect: vi.fn() }
-    const sessionCollector = { collect: vi.fn() }
+    const gitCollector = { collect: jest.fn() }
+    const sessionCollector = { collect: jest.fn() }
 
-    vi.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
-    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+    jest.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
+    jest.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
 
     gitCollector.collect.mockResolvedValue({
       repos: [{
@@ -553,7 +553,7 @@ describe('createOrchestrator', () => {
     expect(result.sources).toContain('opencodeDaily')
     expect(result.errors).toHaveLength(0)
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.sessions).toHaveLength(1)
     expect(snapshotArg.localGit).toHaveLength(1)
     expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
@@ -562,13 +562,13 @@ describe('createOrchestrator', () => {
   })
 
   it('handles partial collector failure gracefully', async () => {
-    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
-    const gitCollector = { collect: vi.fn() }
-    const sessionCollector = { collect: vi.fn() }
+    const ghCollector = { collect: jest.fn(), getApiClient: jest.fn() }
+    const gitCollector = { collect: jest.fn() }
+    const sessionCollector = { collect: jest.fn() }
 
-    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
-    vi.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
-    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+    jest.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    jest.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
+    jest.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
 
     ghCollector.collect.mockResolvedValue({
       snapshotId: 'gh-id',
@@ -621,9 +621,9 @@ describe('createOrchestrator', () => {
   })
 
   it('includes workflow runs from GitHub collector in the merged snapshot', async () => {
-    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
+    const ghCollector = { collect: jest.fn(), getApiClient: jest.fn() }
 
-    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    jest.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
 
     ghCollector.collect.mockResolvedValue({
       snapshotId: 'gh-id',
@@ -681,7 +681,7 @@ describe('createOrchestrator', () => {
 
     await orchestrator.collect()
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.workflowRuns).toHaveLength(2)
     expect(snapshotArg.workflowRuns[0]!.id).toBe('w1')
     expect(snapshotArg.workflowRuns[1]!.id).toBe('w2')
@@ -690,11 +690,11 @@ describe('createOrchestrator', () => {
   })
 
   it('propagates collector errors into snapshot metadata errors', async () => {
-    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
-    const gitCollector = { collect: vi.fn() }
+    const ghCollector = { collect: jest.fn(), getApiClient: jest.fn() }
+    const gitCollector = { collect: jest.fn() }
 
-    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
-    vi.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
+    jest.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    jest.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
 
     ghCollector.collect.mockResolvedValue({
       snapshotId: 'gh-id',
@@ -742,19 +742,19 @@ describe('createOrchestrator', () => {
     expect(result.errors).toContain('GitHub API rate limited')
     expect(result.partialData).toBe(true)
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.metadata.errors).toContain('GitHub API rate limited')
     expect(snapshotArg.metadata.partialData).toBe(true)
   })
 
   it('merges comprehensive data from all collectors including local git commits by day and session errors', async () => {
-    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
-    const gitCollector = { collect: vi.fn() }
-    const sessionCollector = { collect: vi.fn() }
+    const ghCollector = { collect: jest.fn(), getApiClient: jest.fn() }
+    const gitCollector = { collect: jest.fn() }
+    const sessionCollector = { collect: jest.fn() }
 
-    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
-    vi.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
-    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+    jest.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    jest.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
+    jest.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
 
     ghCollector.collect.mockResolvedValue({
       snapshotId: 'gh-id',
@@ -869,7 +869,7 @@ describe('createOrchestrator', () => {
     expect(result.errors).toHaveLength(0)
     expect(result.partialData).toBe(false)
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.issues).toHaveLength(3)
     expect(snapshotArg.pullRequests).toHaveLength(3)
     expect(snapshotArg.workflowRuns).toHaveLength(2)
@@ -887,11 +887,11 @@ describe('createOrchestrator', () => {
   })
 
   it('preserves sessionUsage when GitHub aggregates are rebuilt', async () => {
-    const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
-    const sessionCollector = { collect: vi.fn() }
+    const ghCollector = { collect: jest.fn(), getApiClient: jest.fn() }
+    const sessionCollector = { collect: jest.fn() }
 
-    vi.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
-    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+    jest.mocked(mockGhCreate).mockReturnValue(ghCollector as never)
+    jest.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
 
     ghCollector.collect.mockResolvedValue({
       snapshotId: 'gh-id',
@@ -967,7 +967,7 @@ describe('createOrchestrator', () => {
 
     await orchestrator.collect()
 
-    const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    const snapshotArg = jest.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
     expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
     expect(snapshotArg.aggregates.sessionUsage!.totalSessions).toBe(1)
     expect(snapshotArg.aggregates.throughput.issuesOpened).toBe(1)

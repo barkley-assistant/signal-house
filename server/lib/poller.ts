@@ -38,7 +38,7 @@ function getPollerGuard(): { running: boolean; runtime: PollerRuntime | null } {
 
 export function startMetricsPoller(config: PollerConfig = getPollerConfig()): PollerRuntime | null {
   if (!config.enabled) return null
-  if (import.meta.prerender) return null
+  if ((globalThis as { __prerender__?: boolean }).__prerender__) return null
 
   const guard = getPollerGuard()
   if (guard.running) return guard.runtime

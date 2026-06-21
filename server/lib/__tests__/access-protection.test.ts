@@ -1,15 +1,34 @@
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it, jest, beforeEach, afterEach } from '@jest/globals'
 import { getAccessProtectionConfig, verifyAccess } from '../access-protection'
 
-vi.mock('h3', () => ({
+jest.mock('h3', () => ({
   createError: (error: unknown) => error,
   getRequestHeader: (event: any, key: string) => event.headers?.[key],
-  setResponseHeader: vi.fn(),
+  setResponseHeader: jest.fn(),
 }))
 
 describe('access protection', () => {
+  let savedAccessUsername: string | undefined
+  let savedAccessPassword: string | undefined
+
+  beforeEach(() => {
+    savedAccessUsername = process.env['SECRET_HOUSE_ACCESS_USERNAME']
+    savedAccessPassword = process.env['SECRET_HOUSE_ACCESS_PASSWORD']
+    delete process.env['SECRET_HOUSE_ACCESS_USERNAME']
+    delete process.env['SECRET_HOUSE_ACCESS_PASSWORD']
+  })
+
   afterEach(() => {
-    vi.unstubAllEnvs()
+    if (savedAccessUsername === undefined) {
+      delete process.env['SECRET_HOUSE_ACCESS_USERNAME']
+    } else {
+      process.env['SECRET_HOUSE_ACCESS_USERNAME'] = savedAccessUsername
+    }
+    if (savedAccessPassword === undefined) {
+      delete process.env['SECRET_HOUSE_ACCESS_PASSWORD']
+    } else {
+      process.env['SECRET_HOUSE_ACCESS_PASSWORD'] = savedAccessPassword
+    }
   })
 
   it('is disabled by default', () => {
@@ -17,15 +36,15 @@ describe('access protection', () => {
   })
 
   it('accepts the configured basic auth credential', () => {
-    vi.stubEnv('SECRET_HOUSE_ACCESS_USERNAME', 'jake')
-    vi.stubEnv('SECRET_HOUSE_ACCESS_PASSWORD', 's3cret')
+    process.env['SECRET_HOUSE_ACCESS_USERNAME'] = 'jake'
+    process.env['SECRET_HOUSE_ACCESS_PASSWORD'] = 's3cret'
     const event = { headers: { authorization: `Basic ${Buffer.from('jake:s3cret').toString('base64')}` } } as any
     expect(() => verifyAccess(event)).not.toThrow()
   })
 
   it('rejects missing or wrong credentials', () => {
-    vi.stubEnv('SECRET_HOUSE_ACCESS_PASSWORD', 's3cret')
+    process.env['SECRET_HOUSE_ACCESS_PASSWORD'] = 's3cret'
     const event = { headers: {} } as any
-    expect(() => verifyAccess(event)).toThrowError()
+    expect(() => verifyAccess(event)).toThrow()
   })
 })

@@ -1,19 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 import { createLocalGitCollector } from '../collector'
 import { existsSync } from 'node:fs'
 
-vi.mock('node:fs')
+jest.mock('node:fs')
 
-const mockExistsSync = vi.mocked(existsSync)
+const mockExistsSync = jest.mocked(existsSync)
 
 beforeEach(() => {
-  vi.restoreAllMocks()
+  jest.restoreAllMocks()
 })
 
 describe('createLocalGitCollector', () => {
   it('returns repo info for a valid git repository', async () => {
     mockExistsSync.mockReturnValue(true)
-    const runGitCommand = vi.fn(async (args: string[]) => {
+    const runGitCommand = jest.fn(async (args: string[]) => {
       if (args[0] === 'rev-parse' && args[1] === '--git-dir') return '.git'
       if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return 'main'
       if (args[0] === 'log' && args.includes('--format="%cI"')) return '2025-05-30T10:00:00Z\n2025-06-01T12:00:00Z\n'
@@ -42,7 +42,7 @@ describe('createLocalGitCollector', () => {
     mockExistsSync.mockReturnValue(true)
     let active = 0
     let maxActive = 0
-    const runGitCommand = vi.fn(async (args: string[], cwd: string) => {
+    const runGitCommand = jest.fn(async (args: string[], cwd: string) => {
       active += 1
       maxActive = Math.max(maxActive, active)
       await new Promise(resolve => setTimeout(resolve, 10))
@@ -86,7 +86,7 @@ describe('createLocalGitCollector', () => {
 
   it('returns error for non-git directory', async () => {
     mockExistsSync.mockReturnValue(true)
-    const runGitCommand = vi.fn(async () => {
+    const runGitCommand = jest.fn(async () => {
       throw new Error('not a git repository')
     })
 
@@ -104,7 +104,7 @@ describe('createLocalGitCollector', () => {
 
   it('handles missing git log data gracefully', async () => {
     mockExistsSync.mockReturnValue(true)
-    const runGitCommand = vi.fn(async (args: string[]) => {
+    const runGitCommand = jest.fn(async (args: string[]) => {
       if (args[0] === 'rev-parse' && args[1] === '--git-dir') return '.git'
       if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return 'main'
       throw new Error('empty repo')
@@ -126,7 +126,7 @@ describe('createLocalGitCollector', () => {
 
   it('handles multiple repos with mixed results', async () => {
     mockExistsSync.mockReturnValue(true)
-    const runGitCommand = vi.fn(async (args: string[], cwd: string) => {
+    const runGitCommand = jest.fn(async (args: string[], cwd: string) => {
       if (cwd === '/valid/repo') {
         if (args[0] === 'rev-parse' && args[1] === '--git-dir') return '.git'
         if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return 'main'
@@ -163,7 +163,7 @@ describe('createLocalGitCollector', () => {
 
   it('returns a git error when a command times out', async () => {
     mockExistsSync.mockReturnValue(true)
-    const runGitCommand = vi.fn(async () => {
+    const runGitCommand = jest.fn(async () => {
       throw Object.assign(new Error('Command timed out'), { code: 'ETIMEDOUT' })
     })
 

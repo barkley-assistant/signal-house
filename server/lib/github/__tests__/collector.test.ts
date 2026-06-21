@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 import * as db from '../../../db/client'
 import { createCollector } from '../collector'
 
@@ -73,16 +73,16 @@ const mockRepo = {
 const mockWorkflows = { workflows: [{ id: 1, name: 'CI Pipeline' }] }
 
 beforeEach(async () => {
-  vi.restoreAllMocks()
-  vi.spyOn(db, 'initDb').mockResolvedValue(undefined as never)
-  vi.spyOn(db, 'insertSnapshot').mockImplementation(() => {})
-  vi.spyOn(db, 'insertAggregate').mockImplementation(() => {})
-  vi.spyOn(db, 'getLatestSnapshot').mockReturnValue(null)
+  jest.restoreAllMocks()
+  jest.spyOn(db, 'initDb').mockResolvedValue(undefined as never)
+  jest.spyOn(db, 'insertSnapshot').mockImplementation(() => {})
+  jest.spyOn(db, 'insertAggregate').mockImplementation(() => {})
+  jest.spyOn(db, 'getLatestSnapshot').mockReturnValue(null)
 })
 
 describe('createCollector', () => {
   it('collects data and returns result with counts', async () => {
-    vi.spyOn(globalThis, 'fetch')
+    jest.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(mockOkJson(mockIssues))
       .mockResolvedValueOnce(mockOkJson(mockPRs))
       .mockResolvedValueOnce(mockOkJson(mockPRs[0]))
@@ -111,7 +111,7 @@ describe('createCollector', () => {
   })
 
   it('handles partial failures and sets partialData flag', async () => {
-    vi.spyOn(globalThis, 'fetch')
+    jest.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(mockOkJson(mockIssues))
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce(mockOkJson(mockWorkflows))
@@ -133,7 +133,7 @@ describe('createCollector', () => {
   })
 
   it('warns when PR enrichment fails but keeps the list result', async () => {
-    vi.spyOn(globalThis, 'fetch')
+    jest.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(mockOkJson(mockIssues))
       .mockResolvedValueOnce(mockOkJson(mockPRs))
       .mockRejectedValueOnce(new Error('Detail fetch failed'))
@@ -163,7 +163,7 @@ describe('createCollector', () => {
   })
 
   it('handles rate limit retry', async () => {
-    vi.spyOn(globalThis, 'fetch')
+    jest.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(rateLimitResponse())
       .mockResolvedValueOnce(mockOkJson(mockIssues))
       .mockResolvedValueOnce(mockOkJson(mockPRs))

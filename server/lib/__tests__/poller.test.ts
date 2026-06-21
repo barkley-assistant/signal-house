@@ -1,18 +1,42 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals'
 
-const mocks = vi.hoisted(() => ({
-  mockRunRefresh: vi.fn(),
+jest.mock('../refresh/run-refresh', () => ({
+  runRefresh: jest.fn(),
 }))
 
-vi.mock('../refresh/run-refresh', () => ({
-  runRefresh: mocks.mockRunRefresh,
-}))
-
+import { runRefresh as mockRunRefresh } from '../refresh/run-refresh'
 import { getPollerConfig, startMetricsPoller, stopMetricsPoller } from '../poller'
 
+const ENV_KEYS = [
+  'SECRET_HOUSE_POLLER_ENABLED',
+  'SECRET_HOUSE_POLL_INTERVAL_SECONDS',
+  'SECRET_HOUSE_RUN_ON_STARTUP',
+  'SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS',
+  'METRICS_POLLER_ENABLED',
+  'METRICS_POLL_INTERVAL_SECONDS',
+  'METRICS_RUN_ON_STARTUP',
+  'METRICS_POLL_STARTUP_DELAY_SECONDS',
+]
+
 describe('getPollerConfig', () => {
+  let savedEnv: Record<string, string | undefined>
+
+  beforeEach(() => {
+    savedEnv = {}
+    for (const key of ENV_KEYS) {
+      savedEnv[key] = process.env[key]
+      delete process.env[key]
+    }
+  })
+
   afterEach(() => {
-    vi.unstubAllEnvs()
+    for (const key of ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = savedEnv[key]
+      }
+    }
   })
 
   it('applies the default disabled config', () => {
@@ -25,10 +49,10 @@ describe('getPollerConfig', () => {
   })
 
   it('prefers the new SECRET_HOUSE prefix', () => {
-    vi.stubEnv('SECRET_HOUSE_POLLER_ENABLED', 'true')
-    vi.stubEnv('SECRET_HOUSE_POLL_INTERVAL_SECONDS', '2')
-    vi.stubEnv('SECRET_HOUSE_RUN_ON_STARTUP', 'false')
-    vi.stubEnv('SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS', '120')
+    process.env['SECRET_HOUSE_POLLER_ENABLED'] = 'true'
+    process.env['SECRET_HOUSE_POLL_INTERVAL_SECONDS'] = '2'
+    process.env['SECRET_HOUSE_RUN_ON_STARTUP'] = 'false'
+    process.env['SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS'] = '120'
 
     expect(getPollerConfig()).toEqual({
       enabled: true,
@@ -39,10 +63,10 @@ describe('getPollerConfig', () => {
   })
 
   it('falls back to the legacy METRICS prefix', () => {
-    vi.stubEnv('METRICS_POLLER_ENABLED', 'true')
-    vi.stubEnv('METRICS_POLL_INTERVAL_SECONDS', '2')
-    vi.stubEnv('METRICS_RUN_ON_STARTUP', 'false')
-    vi.stubEnv('METRICS_POLL_STARTUP_DELAY_SECONDS', '120')
+    process.env['METRICS_POLLER_ENABLED'] = 'true'
+    process.env['METRICS_POLL_INTERVAL_SECONDS'] = '2'
+    process.env['METRICS_RUN_ON_STARTUP'] = 'false'
+    process.env['METRICS_POLL_STARTUP_DELAY_SECONDS'] = '120'
 
     expect(getPollerConfig()).toEqual({
       enabled: true,
@@ -55,9 +79,9 @@ describe('getPollerConfig', () => {
 
 describe('startMetricsPoller', () => {
   beforeEach(() => {
-    vi.useFakeTimers()
-    vi.clearAllMocks()
-    mocks.mockRunRefresh.mockResolvedValue({
+    jest.useFakeTimers()
+    jest.clearAllMocks()
+    jest.mocked(mockRunRefresh).mockResolvedValue({
       startedAt: '2026-06-15T00:00:00.000Z',
       finishedAt: '2026-06-15T00:00:01.000Z',
       durationMs: 1000,
@@ -73,14 +97,13 @@ describe('startMetricsPoller', () => {
   })
 
   afterEach(() => {
-    vi.useRealTimers()
-    vi.unstubAllEnvs()
+    jest.useRealTimers()
     stopMetricsPoller()
   })
 
   it('does nothing when disabled', () => {
     expect(startMetricsPoller({ enabled: false, intervalMs: 300000, runOnStartup: true, startupDelayMs: 5000 })).toBeNull()
-    expect(mocks.mockRunRefresh).not.toHaveBeenCalled()
+    expect(jest.mocked(mockRunRefresh)).not.toHaveBeenCalled()
   })
 
   it('starts a guarded loop and avoids duplicate startups in the same process', async () => {
@@ -92,8 +115,8 @@ describe('startMetricsPoller', () => {
     })
 
     expect(runtime).toBeTruthy()
-    await vi.runOnlyPendingTimersAsync()
-    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+    jest.runOnlyPendingTimers()
+    expect(jest.mocked(mockRunRefresh)).toHaveBeenCalledTimes(1)
 
     const secondRuntime = startMetricsPoller({
       enabled: true,
@@ -102,12 +125,12 @@ describe('startMetricsPoller', () => {
       startupDelayMs: 0,
     })
     expect(secondRuntime).toBe(runtime)
-    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+    expect(jest.mocked(mockRunRefresh)).toHaveBeenCalledTimes(1)
     runtime?.stop()
   })
 
   it('clears the pending timer and in-memory state on stop', async () => {
-    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+    const clearTimeoutSpy = jest.spyOn(globalThis, 'clearTimeout')
 
     const runtime = startMetricsPoller({
       enabled: true,
@@ -120,8 +143,8 @@ describe('startMetricsPoller', () => {
     runtime?.stop()
     expect(clearTimeoutSpy).toHaveBeenCalled()
 
-    await vi.runOnlyPendingTimersAsync()
-    expect(mocks.mockRunRefresh).not.toHaveBeenCalled()
+    jest.runOnlyPendingTimers()
+    expect(jest.mocked(mockRunRefresh)).not.toHaveBeenCalled()
 
     clearTimeoutSpy.mockRestore()
   })
@@ -136,8 +159,8 @@ describe('startMetricsPoller', () => {
     expect(runtime).toBeTruthy()
 
     runtime?.stop()
-    await vi.runOnlyPendingTimersAsync()
-    expect(mocks.mockRunRefresh).not.toHaveBeenCalled()
+    jest.runOnlyPendingTimers()
+    expect(jest.mocked(mockRunRefresh)).not.toHaveBeenCalled()
 
     const restarted = startMetricsPoller({
       enabled: true,
@@ -148,8 +171,8 @@ describe('startMetricsPoller', () => {
     expect(restarted).toBeTruthy()
     expect(restarted).not.toBe(runtime)
 
-    await vi.runOnlyPendingTimersAsync()
-    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+    jest.runOnlyPendingTimers()
+    expect(jest.mocked(mockRunRefresh)).toHaveBeenCalledTimes(1)
 
     restarted?.stop()
   })
@@ -173,7 +196,7 @@ describe('startMetricsPoller', () => {
     const pendingPromise = new Promise<unknown>((resolve) => {
       releaseFirst = () => { resolve(pendingResult) }
     })
-    mocks.mockRunRefresh.mockImplementation(() => {
+    ;(jest.mocked(mockRunRefresh) as jest.Mock).mockImplementation(() => {
       calls += 1
       if (calls === 1) {
         return pendingPromise
@@ -189,15 +212,16 @@ describe('startMetricsPoller', () => {
     })
     expect(runtime).toBeTruthy()
 
-    await vi.runOnlyPendingTimersAsync()
-    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+    jest.runOnlyPendingTimers()
+    expect(jest.mocked(mockRunRefresh)).toHaveBeenCalledTimes(1)
 
-    await vi.advanceTimersByTimeAsync(15000 * 5)
-    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+    jest.advanceTimersByTime(15000 * 5)
+    expect(jest.mocked(mockRunRefresh)).toHaveBeenCalledTimes(1)
 
     releaseFirst()
-    await vi.advanceTimersByTimeAsync(15000)
-    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(2)
+    await pendingPromise
+    jest.advanceTimersByTime(15000)
+    expect(jest.mocked(mockRunRefresh)).toHaveBeenCalledTimes(2)
 
     runtime?.stop()
   })

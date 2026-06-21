@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -99,7 +99,6 @@ beforeEach(() => {
 afterEach(() => {
   close()
   rmSync(tmpDir, { recursive: true, force: true })
-  vi.unstubAllEnvs()
 })
 
 describe('runRetention', () => {

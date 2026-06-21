@@ -1,13 +1,31 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals'
 import { createSessionCollector } from '../collector'
 import { execFileSync } from 'node:child_process'
 
-vi.mock('node:child_process')
+jest.mock('node:child_process')
 
-const mockExecFileSync = vi.mocked(execFileSync)
+const mockExecFileSync = jest.mocked(execFileSync)
+
+const ENV_KEYS = ['OPENCODE_BIN', 'OPENCODE_COMMAND']
+let savedEnv: Record<string, string | undefined>
 
 beforeEach(() => {
-  vi.resetAllMocks()
+  jest.resetAllMocks()
+  savedEnv = {}
+  for (const key of ENV_KEYS) {
+    savedEnv[key] = process.env[key]
+    delete process.env[key]
+  }
+})
+
+afterEach(() => {
+  for (const key of ENV_KEYS) {
+    if (savedEnv[key] === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = savedEnv[key]
+    }
+  }
 })
 
 function enoentErr(): Error {
@@ -354,8 +372,8 @@ describe('createSessionCollector', () => {
   })
 
   it('respects prior env vars over defaults but config over env', async () => {
-    vi.stubEnv('OPENCODE_BIN', '/env/opencode')
-    vi.stubEnv('OPENCODE_COMMAND', '/env/old-opencode')
+    process.env['OPENCODE_BIN'] = '/env/opencode'
+    process.env['OPENCODE_COMMAND'] = '/env/old-opencode'
 
     mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
     mockExecFileSync.mockReturnValueOnce(cliOutput({ Sessions: 5, Messages: 0, Days: 30 }, []) + '\n')
@@ -370,7 +388,5 @@ describe('createSessionCollector', () => {
       ['session', 'list'],
       expect.objectContaining({ encoding: 'utf-8' }),
     )
-
-    vi.unstubAllEnvs()
   })
 })
