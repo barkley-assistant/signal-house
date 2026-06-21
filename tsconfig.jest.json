@@ -11,7 +11,11 @@
     "isolatedModules": true,
     "allowJs": true,
     "skipLibCheck": true,
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["frontend/src/*"]
+    }
   },
   "include": [
     "server/**/*.ts",
