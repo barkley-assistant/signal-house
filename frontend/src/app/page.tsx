@@ -494,12 +494,7 @@ export default function Home() {
                 }
               />
             ))}
-<motion.div
-              className="relative h-16 w-16 overflow-hidden rounded-full"
-              initial="idle"
-              whileHover="lit"
-              whileFocus="lit"
-            >
+<motion.div className="relative h-16 w-16 overflow-hidden rounded-full">
               <Image
                 src="/signal-house-logo.png"
                 alt="Signal House logo"
@@ -516,15 +511,20 @@ export default function Home() {
                     "radial-gradient(circle, rgba(241, 250, 255, 0.92) 0%, rgba(125, 211, 252, 0.58) 24%, rgba(56, 189, 248, 0.22) 52%, rgba(56, 189, 248, 0) 76%)",
                   mixBlendMode: "screen",
                 }}
-                variants={{
-                  idle: { opacity: 0, scale: 0.45 },
-                  lit: shouldReduceMotion
+                animate={
+                  shouldReduceMotion
                     ? { opacity: 0.74, scale: 1 }
-                    : { opacity: [0, 0.86, 0.72], scale: [0.45, 1.1, 1] },
-                }}
-                transition={
-                  shouldReduceMotion ? { duration: 0 } : { duration: 0.42, ease: "easeOut" }
+                    : {
+                        opacity: [0, 0, 0.92, 0.86, 0, 0],
+                        scale: [0.45, 0.45, 1.1, 1, 0.45, 0.45],
+                      }
                 }
+                transition={{
+                  duration: 8,
+                  repeat: Infinity,
+                  times: [0, 0.55, 0.65, 0.72, 0.85, 1],
+                  ease: "easeInOut",
+                }}
               />
               <motion.div
                 aria-hidden="true"
@@ -534,15 +534,20 @@ export default function Home() {
                     "linear-gradient(90deg, rgba(56, 189, 248, 0), rgba(186, 230, 253, 0.62), rgba(56, 189, 248, 0))",
                   mixBlendMode: "screen",
                 }}
-                variants={{
-                  idle: { opacity: 0, scaleX: 0.35 },
-                  lit: shouldReduceMotion
+                animate={
+                  shouldReduceMotion
                     ? { opacity: 0.44, scaleX: 1 }
-                    : { opacity: [0, 0.5, 0.38], scaleX: [0.35, 1.08, 1] },
-                }}
-                transition={
-                  shouldReduceMotion ? { duration: 0 } : { duration: 0.5, ease: "easeOut" }
+                    : {
+                        opacity: [0, 0, 0.5, 0.38, 0, 0],
+                        scaleX: [0.35, 0.35, 1.08, 1, 0.35, 0.35],
+                      }
                 }
+                transition={{
+                  duration: 8,
+                  repeat: Infinity,
+                  times: [0, 0.55, 0.65, 0.72, 0.85, 1],
+                  ease: "easeInOut",
+                }}
               />
             </motion.div>
           </div>
