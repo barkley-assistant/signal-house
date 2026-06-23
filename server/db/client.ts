@@ -8,7 +8,8 @@ import { getRefreshHistoryLimit, getStaleThresholdMs, getRetentionConfig } from 
 import type { MetricSnapshot, LatestState, RefreshRunRecord, RefreshRunState, RefreshSourceHealth, RefreshRunStatus, SourceDiagnostics } from '../../types/snapshot'
 import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate, TokenUsageAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
-import type { TokenUsageInsert, TokenUsageRow } from '../../types/opencode'
+import type { TokenUsageRow } from '../../types/opencode'
+import type { DailyTokenUsageInsert, DailyTokenUsageRow } from '../../types/daily-token-usage'
 import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryIdentity, SessionMetric, LocalGitRepoMetric } from '../../types/metrics'
 import { computeDailyMetrics } from '../lib/daily-metrics'
 
@@ -122,7 +123,7 @@ function migrate(db: Db): void {
   const runMigrations = db.transaction(() => {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
-    db.exec(SQL.createTokenUsageTable)
+    db.exec(SQL.createDailyTokenUsageTable)
     const row = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value?: unknown } | undefined
     const current = row ? Number(row.value) : 0
     if (current >= SCHEMA_VERSION) return
@@ -135,7 +136,7 @@ function migrate(db: Db): void {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
     db.exec(SQL.createDailyMetricsV3)
-    db.exec(SQL.createTokenUsageTable)
+    db.exec(SQL.createDailyTokenUsageTable)
     db.exec(`
       ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics;
       CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
@@ -438,22 +439,40 @@ export function getLatestDailyDayForRepo(repoKey: string): string | null {
   return row ? String(row.day) : null
 }
 
-function rowToTokenUsage(row: Record<string, unknown>): TokenUsageRow {
+// ── Daily token usage write / read helpers ────────────────────────
+
+export function upsertDailyTokenUsage(row: DailyTokenUsageInsert): void {
+  const db = getDb()
+  db.prepare(SQL.upsertDailyTokenUsage).run({
+    date: row.date,
+    totalSessions: row.totalSessions,
+    totalMessages: row.totalMessages,
+    totalTokens: row.totalTokens,
+    totalCost: row.totalCost,
+    modelUsage: JSON.stringify(row.modelUsage),
+    rawJson: row.rawJson,
+  })
+}
+
+function rowToDailyTokenUsage(row: Record<string, unknown>): DailyTokenUsageRow {
   return {
-    periodStart: String(row.period_start),
-    periodEnd: String(row.period_end),
-    source: String(row.source),
-    toolName: String(row.tool_name),
+    date: String(row.date),
     totalSessions: Number(row.total_sessions),
     totalMessages: Number(row.total_messages),
     totalTokens: Number(row.total_tokens),
     totalCost: row.total_cost != null ? Number(row.total_cost) : null,
-    modelUsage: JSON.parse(String(row.data)).modelUsage ?? [],
+    modelUsage: JSON.parse(String(row.model_usage)) as DailyTokenUsageRow['modelUsage'],
     rawJson: row.raw_json != null ? String(row.raw_json) : null,
-    collectedAt: String(row.collected_at),
+    createdAt: String(row.created_at),
   }
 }
 
+export function getDailyTokenUsageRange(fromDate: string | null, toDate: string | null): DailyTokenUsageRow[] {
+  const db = getDb()
+  const stmt = db.prepare(SQL.getDailyTokenUsageRange)
+  const rows = stmt.all({ fromDate, toDate }) as Record<string, unknown>[]
+  return rows.map(rowToDailyTokenUsage)
+}
 
 // ── Normalized source data write helpers ──────────────────────────
 

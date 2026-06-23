@@ -28,6 +28,7 @@ export type {
   DailyMetricsInsert,
   SessionUsageAggregate,
   DashboardAggregates,
-  TokenUsageInsert,
   TokenUsageRow,
+  DailyTokenUsageRow,
+  DailyTokenUsageInsert,
 } from "../../../types";

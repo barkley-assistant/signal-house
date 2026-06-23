@@ -40,7 +40,7 @@ function escapeRegExp(value: string): string { return value.replace(/[.*+?^${}()
 function extractOverviewValue(lines: string[], label: string): number | null { const pattern = new RegExp(`│\\s*${escapeRegExp(label)}\\s+([^│]+?)\\s*│`, 'i'); for (const line of lines) { const match = line.match(pattern); if (!match) continue; const valueMatch = match[1]?.match(/-?\$?[\d,]+(?:\.\d+)?(?:[KMB])?/i); return parseNumber(valueMatch?.[0]); } return null }
 function isLikelyModelName(name: string): boolean { return /^(?:[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*)$/i.test(name) }
 
-function parseTokenUsage(stdout: string) {
+export function parseTokenUsage(stdout: string) {
   const lines = stdout.split('\n')
   const totalSessions = extractOverviewValue(lines, 'Sessions') ?? 0
   const totalMessages = extractOverviewValue(lines, 'Messages') ?? 0

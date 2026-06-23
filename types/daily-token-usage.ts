@@ -1,8 +1,5 @@
-export interface TokenUsageRow {
-  periodStart: string
-  periodEnd: string
-  source: string
-  toolName: string
+export interface DailyTokenUsageRow {
+  date: string
   totalSessions: number
   totalMessages: number
   totalTokens: number
@@ -17,7 +14,15 @@ export interface TokenUsageRow {
     cost: number | null
   }>
   rawJson: string | null
-  collectedAt: string
+  createdAt: string
 }
 
-
+export interface DailyTokenUsageInsert {
+  date: string
+  totalSessions: number
+  totalMessages: number
+  totalTokens: number
+  totalCost: number | null
+  modelUsage: DailyTokenUsageRow['modelUsage']
+  rawJson: string | null
+}
