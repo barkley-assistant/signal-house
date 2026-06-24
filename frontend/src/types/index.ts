@@ -31,6 +31,4 @@ export type {
   SessionUsageAggregate,
   DashboardAggregates,
   TokenUsageRow,
-  DailyTokenUsageRow,
-  DailyTokenUsageInsert,
 } from "../../../types";
