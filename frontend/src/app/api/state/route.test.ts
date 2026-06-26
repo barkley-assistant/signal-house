@@ -248,7 +248,7 @@ describe("GET /api/state", () => {
             id: "issue-issue-1",
             kind: "issue",
             title: "Investigate stale issue",
-            repo: "github:demo/repo",
+            repo: "demo/repo",
             priorityTier: "stale",
             statusLabel: "Stale",
           },
