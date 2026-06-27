@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { formatCycleTime } from "@/lib/format-cycle-time";
 import { SectionState, useSectionState } from "@/components/section-state";
 import { StatusStrip, formatTimeAgo } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
@@ -221,6 +222,10 @@ function buildCycleTimeOption(days: DashboardWindowDay[]): EChartsOption | null 
       backgroundColor: "#1a1d24",
       borderColor: "#262a33",
       textStyle: { color: "#f1f5f9", fontSize: 12 },
+      formatter: (params: { value: number | null }) => {
+        const val = params.value;
+        return val != null ? formatCycleTime(val) : "—";
+      },
     },
     series: [
       {
@@ -310,7 +315,6 @@ function computeCycleTimeFooter(days: DashboardWindowDay[]): string {
   );
   if (nonNull.length < 3) return "Insufficient PR data for cycle time trend";
   const latestSeconds = nonNull[nonNull.length - 1].metrics!.medianCycleTimeSeconds!;
-  const latestDays = latestSeconds / 86400;
   // Trend: compare first half vs second half. Down = improving for cycle time.
   const mid = Math.floor(nonNull.length / 2);
   const firstHalf = nonNull.slice(0, mid);
@@ -321,7 +325,7 @@ function computeCycleTimeFooter(days: DashboardWindowDay[]): string {
     secondHalf.reduce((s, d) => s + (d.metrics?.medianCycleTimeSeconds ?? 0), 0) / secondHalf.length;
   const trend =
     secondAvg < firstAvg ? "Improving" : secondAvg > firstAvg ? "Slowing" : "Steady";
-  return `Daily median \u00B7 ${latestDays.toFixed(1)}d latest \u00B7 ${trend} over window`;
+  return `Daily median \u00B7 ${formatCycleTime(latestSeconds)} latest \u00B7 ${trend} over window`;
 }
 
 function computeCIFooter(days: DashboardWindowDay[]): string {
@@ -588,18 +592,17 @@ export default function Home() {
             label="Cycle Time"
             value={
               cards?.cycleTime.medianSeconds != null
-                ? (cards.cycleTime.medianSeconds / 86400).toFixed(1)
+                ? formatCycleTime(cards.cycleTime.medianSeconds)
                 : cards?.cycleTime.averageSeconds != null
-                  ? (cards.cycleTime.averageSeconds / 86400).toFixed(1)
+                  ? formatCycleTime(cards.cycleTime.averageSeconds)
                   : null
             }
-            unit="d"
             trend="neutral"
             status={cycleTimeStatus(cards?.cycleTime)}
             detail={
               cards
                 ? cards.cycleTime.p95Seconds != null
-                  ? `P95: ${(cards.cycleTime.p95Seconds / 86400).toFixed(1)}d · ${cards.cycleTime.sampleSize} items`
+                  ? `P95: ${formatCycleTime(cards.cycleTime.p95Seconds)} · ${cards.cycleTime.sampleSize} items`
                   : `${cards.cycleTime.sampleSize} items`
                 : null
             }
