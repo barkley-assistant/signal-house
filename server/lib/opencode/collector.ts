@@ -1,25 +1,7 @@
 import { connectOpencodeDb, querySessionsByDay, queryModelBreakdown } from './db-collector'
+import type { TokenUsageRow } from '../../../types/opencode'
 
-export interface TokenUsageCollectorResult {
-  periodStart: string
-  periodEnd: string
-  source: string
-  toolName: string
-  totalSessions: number
-  totalMessages: number
-  totalTokens: number
-  totalCost: number | null
-  modelUsage: Array<{
-    modelName: string
-    messages: number
-    inputTokens: number | null
-    outputTokens: number | null
-    cacheReadTokens: number | null
-    cacheWriteTokens: number | null
-    cost: number | null
-  }>
-  rawJson: string | null
-  collectedAt: string
+export interface TokenUsageCollectorResult extends TokenUsageRow {
   errors: string[]
 }
 
