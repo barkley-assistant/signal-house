@@ -1,5 +1,6 @@
 export interface SessionCollectorConfig {
   periodDays?: number
+  dbPath?: string
   opencodeCommand?: string
   opencodeBin?: string
 }
