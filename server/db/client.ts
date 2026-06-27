@@ -124,33 +124,64 @@ function migrate(db: Db): void {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
     db.exec(SQL.createDailyTokenUsageTable)
+
     const row = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value?: unknown } | undefined
     const current = row ? Number(row.value) : 0
     if (current >= SCHEMA_VERSION) return
 
-    // Preserve existing snapshot markers (id + captured_at) so the foreign
-    // keys in the aggregates table stay valid after the migration.
-    const existingSnapshots = db.prepare(`SELECT id, captured_at FROM snapshots`).all() as Array<{ id: string; captured_at: string }>
+    if (current >= 10) {
+      // Non-destructive migration path for v10+.
+      // No tables are dropped — we only adjust the daily_metrics schema.
 
-    db.exec(SQL.dropTables)
-    db.exec(SQL.createTables)
-    db.exec(SQL.createSourceDataTables)
-    db.exec(SQL.createDailyMetricsV3)
-    db.exec(SQL.createDailyTokenUsageTable)
-    db.exec(`
-      ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics;
-      CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
-        ON daily_metrics(repo_key, day DESC);
-    `)
+      // Ensure daily_metrics table exists (fresh install path).
+      const dmExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='daily_metrics'`).get()
+      if (!dmExists) {
+        db.exec(SQL.createDailyMetricsV3)
+        db.exec(`ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics`)
+      }
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key ON daily_metrics(repo_key, day DESC)`)
 
-    // Restore the snapshot marker rows. The blob payload was removed in
-    // SCHEMA_VERSION 8, so we only carry forward the id and captured_at.
-    const insertSnap = db.prepare(SQL.insertSnapshot)
-    for (const snap of existingSnapshots) {
-      insertSnap.run({
-        id: snap.id,
-        capturedAt: snap.captured_at,
-      })
+      // Migrate _days columns → _seconds columns if present (v10 schema).
+      const columns = db.prepare(`PRAGMA table_info(daily_metrics)`).all() as Array<{ name: string }>
+      if (columns.some(c => c.name === 'avg_cycle_time_days')) {
+        if (!columns.some(c => c.name === 'avg_cycle_time_seconds')) {
+          db.exec(`ALTER TABLE daily_metrics ADD COLUMN avg_cycle_time_seconds REAL`)
+          db.exec(`ALTER TABLE daily_metrics ADD COLUMN median_cycle_time_seconds REAL`)
+          db.exec(`ALTER TABLE daily_metrics ADD COLUMN p95_cycle_time_seconds REAL`)
+        }
+
+        // Convert days to seconds (× 86400).
+        db.exec(`UPDATE daily_metrics SET avg_cycle_time_seconds = avg_cycle_time_days * 86400 WHERE avg_cycle_time_days IS NOT NULL`)
+        db.exec(`UPDATE daily_metrics SET median_cycle_time_seconds = median_cycle_time_days * 86400 WHERE median_cycle_time_days IS NOT NULL`)
+        db.exec(`UPDATE daily_metrics SET p95_cycle_time_seconds = p95_cycle_time_days * 86400 WHERE p95_cycle_time_days IS NOT NULL`)
+
+        db.exec(`ALTER TABLE daily_metrics DROP COLUMN avg_cycle_time_days`)
+        db.exec(`ALTER TABLE daily_metrics DROP COLUMN median_cycle_time_days`)
+        db.exec(`ALTER TABLE daily_metrics DROP COLUMN p95_cycle_time_days`)
+      }
+    } else {
+      // Destructive migration for old schemas (< v10). We need to drop and
+      // recreate tables whose shape has changed over earlier versions.
+      const existingSnapshots = db.prepare(`SELECT id, captured_at FROM snapshots`).all() as Array<{ id: string; captured_at: string }>
+
+      db.exec(SQL.dropTables)
+      db.exec(SQL.createTables)
+      db.exec(SQL.createSourceDataTables)
+      db.exec(SQL.createDailyMetricsV3)
+      db.exec(SQL.createDailyTokenUsageTable)
+      db.exec(`
+        ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics;
+        CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
+          ON daily_metrics(repo_key, day DESC);
+      `)
+
+      const insertSnap = db.prepare(SQL.insertSnapshot)
+      for (const snap of existingSnapshots) {
+        insertSnap.run({
+          id: snap.id,
+          capturedAt: snap.captured_at,
+        })
+      }
     }
 
     db.prepare(SQL.upsertLatestState).run({
