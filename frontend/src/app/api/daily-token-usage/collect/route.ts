@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { collectAndStoreDailyTokenUsage } from "../../../../../../server/lib/daily-token-usage/collector";
+import { maybeCollectDailyTokenUsage } from "../../../../../../server/lib/daily-token-usage/collector";
 import { ensureDb } from "../../_lib/ensure-db";
 
 export const maxDuration = 30;
@@ -8,21 +8,15 @@ export async function POST(request: Request) {
   try {
     await ensureDb();
 
-    let targetDate: string | undefined;
-    try {
-      const body = (await request.json().catch(() => null)) as { date?: string } | null;
-      targetDate = body?.date;
-    } catch {
-      targetDate = undefined;
-    }
-
-    const result = await collectAndStoreDailyTokenUsage(targetDate);
+    const result = await maybeCollectDailyTokenUsage();
 
     if (!result.success) {
       return NextResponse.json(
         {
           success: false,
-          date: result.date,
+          dates: result.dates,
+          upserted: result.upserted,
+          skipped: result.skipped,
           errors: result.errors,
         },
         { status: 502 },
