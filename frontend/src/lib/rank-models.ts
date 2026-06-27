@@ -25,19 +25,24 @@ function sumOrNull(values: (number | null)[]): number | null {
   return has ? sum : null;
 }
 
+function totalTokens(entry: ModelUsageEntry): number {
+  return (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0);
+}
+
 /**
- * Ranks model usage entries by cost descending, applies a 95%
- * cumulative-cost-share cutoff, and groups remaining models (2+) into
- * a single "Other" row.  Returns a new sorted array; does not mutate input.
+ * Ranks model usage entries by total tokens (input + output) descending,
+ * applies a 95% cumulative-token-share cutoff, and groups remaining
+ * models (2+) into a single "Other" row.  Returns a new sorted array;
+ * does not mutate input.
  */
 export function rankModelUsage(entries: ModelUsageEntry[]): RankedModelEntry[] {
   if (entries.length === 0) return [];
 
-  const sorted = [...entries].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
+  const sorted = [...entries].sort((a, b) => totalTokens(b) - totalTokens(a));
   const totalMessages = sorted.reduce((sum, e) => sum + e.messages, 0);
-  const totalCost = sorted.reduce((sum, e) => sum + (e.cost ?? 0), 0);
+  const totalTokenSum = sorted.reduce((sum, e) => sum + totalTokens(e), 0);
 
-  if (totalCost === 0) {
+  if (totalTokenSum === 0) {
     return sorted.map((e) => ({
       ...e,
       isOther: false,
@@ -48,7 +53,7 @@ export function rankModelUsage(entries: ModelUsageEntry[]): RankedModelEntry[] {
   let cumulative = 0;
   let topEnd = 0;
   for (let i = 0; i < sorted.length; i++) {
-    cumulative += (sorted[i].cost ?? 0) / totalCost;
+    cumulative += totalTokens(sorted[i]) / totalTokenSum;
     topEnd = i + 1;
     if (cumulative >= 0.95) break;
   }
