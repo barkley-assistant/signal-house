@@ -109,8 +109,12 @@ function normalizeModelName(value: unknown): string | null {
 
     try {
       const parsed = JSON.parse(trimmed) as Record<string, unknown>
-      const candidate = parsed.id ?? parsed.modelID ?? parsed.model_id ?? parsed.name
-      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+      // Prefer id > modelID > model_id > name > providerID
+      if (typeof parsed.id === 'string' && parsed.id.trim()) return parsed.id.trim()
+      if (typeof parsed.modelID === 'string' && parsed.modelID.trim()) return parsed.modelID.trim()
+      if (typeof parsed.model_id === 'string' && parsed.model_id.trim()) return parsed.model_id.trim()
+      if (typeof parsed.name === 'string' && parsed.name.trim()) return parsed.name.trim()
+      if (typeof parsed.providerID === 'string' && parsed.providerID.trim()) return parsed.providerID.trim()
     } catch {
       // Plain string model ids are also valid.
     }
@@ -120,8 +124,12 @@ function normalizeModelName(value: unknown): string | null {
 
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>
-    const candidate = record.id ?? record.modelID ?? record.model_id ?? record.name
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    // Prefer id > modelID > model_id > name > providerID
+    if (typeof record.id === 'string' && record.id.trim()) return record.id.trim()
+    if (typeof record.modelID === 'string' && record.modelID.trim()) return record.modelID.trim()
+    if (typeof record.model_id === 'string' && record.model_id.trim()) return record.model_id.trim()
+    if (typeof record.name === 'string' && record.name.trim()) return record.name.trim()
+    if (typeof record.providerID === 'string' && record.providerID.trim()) return record.providerID.trim()
   }
 
   return null
