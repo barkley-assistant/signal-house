@@ -643,13 +643,13 @@ describe('createOrchestrator', () => {
         workflowRuns: [
           {
             id: 'w1', name: 'CI', status: 'completed', conclusion: 'success',
-            createdAt: '2026-06-01T10:00:00Z', completedAt: '2026-06-01T11:00:00Z',
+            createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), completedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
             headSha: 'abc', repo: 'test/repo', repoKey: 'github:test/repo',
             branch: 'main', workflowName: 'CI', url: null,
           },
           {
             id: 'w2', name: 'CI', status: 'completed', conclusion: 'failure',
-            createdAt: '2026-06-02T10:00:00Z', completedAt: '2026-06-02T11:00:00Z',
+            createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
             headSha: 'def', repo: 'test/repo', repoKey: 'github:test/repo',
             branch: 'main', workflowName: 'CI', url: null,
           },
@@ -908,7 +908,7 @@ describe('createOrchestrator', () => {
         capturedAt: new Date().toISOString(),
         issues: [{
           id: 'i1', title: 'Issue 1', state: 'open' as const,
-          createdAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-01T10:00:00Z', closedAt: null, repo: 'test/repo', repoKey: 'github:test/repo',
+          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), closedAt: null, repo: 'test/repo', repoKey: 'github:test/repo',
           labels: [], assignee: null, milestone: null, url: '',
         }],
         pullRequests: [],
