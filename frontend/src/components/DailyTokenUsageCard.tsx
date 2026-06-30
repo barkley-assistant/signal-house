@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { EChartsOption } from "echarts-for-react";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/format-cost";
+import { formatCompactNumber } from "../../../utils/format";
 
 interface DailyTokenUsageCardProps {
   rows: DailyTokenUsageRow[];
@@ -82,7 +83,11 @@ function buildDailyTokenUsageOption(
       {
         type: "value",
         splitLine: { lineStyle: { color: "#1e2128", type: "dashed" } },
-        axisLabel: { fontSize: 10, color: "#64748b" },
+        axisLabel: {
+          fontSize: 10,
+          color: "#64748b",
+          formatter: (value: number) => formatCompactNumber(value),
+        },
       },
       {
         type: "value",

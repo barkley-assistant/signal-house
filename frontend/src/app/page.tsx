@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { formatCycleTime } from "@/lib/format-cycle-time";
+import { formatCompactNumber } from "../../../utils/format";
 import { SectionState, useSectionState } from "@/components/section-state";
 import { StatusStrip, formatTimeAgo } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
@@ -169,7 +170,11 @@ function buildThroughputOption(days: DashboardWindowDay[]): EChartsOption | null
     yAxis: {
       type: "value",
       splitLine: { lineStyle: { color: "#1e2128", type: "dashed" } },
-      axisLabel: { fontSize: 10, color: "#64748b" },
+      axisLabel: {
+        fontSize: 10,
+        color: "#64748b",
+        formatter: (value: number) => formatCompactNumber(value),
+      },
     },
     tooltip: {
       backgroundColor: "#1a1d24",
@@ -262,7 +267,11 @@ function buildCIOption(days: DashboardWindowDay[]): EChartsOption | null {
     yAxis: {
       type: "value",
       splitLine: { lineStyle: { color: "#1e2128", type: "dashed" } },
-      axisLabel: { fontSize: 10, color: "#64748b" },
+      axisLabel: {
+        fontSize: 10,
+        color: "#64748b",
+        formatter: (value: number) => formatCompactNumber(value),
+      },
     },
     tooltip: {
       backgroundColor: "#1a1d24",
