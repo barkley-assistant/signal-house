@@ -1031,7 +1031,7 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="text-text-primary">Model Usage</CardTitle>
             <CardDescription>
-              Usage breakdown by model
+              Models ranked by total tokens (input + output), with messages and cost
             </CardDescription>
           </CardHeader>
           <CardContent>
