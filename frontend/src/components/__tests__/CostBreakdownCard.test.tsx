@@ -81,7 +81,7 @@ describe("CostBreakdownCard", () => {
     expect(html).toContain("No cost data available");
   });
 
-  it("shows both warning flags on a model with high cost, low usage AND lower efficiency than average", () => {
+  it("shows high-cost-low-usage badge and color-coded cost bar for inefficient model", () => {
     const tokenUsage = makeTokenUsage([
       {
         modelName: "expensive",
@@ -104,7 +104,8 @@ describe("CostBreakdownCard", () => {
     ]);
     const html = renderToStaticMarkup(<CostBreakdownCard tokenUsage={tokenUsage} />);
     expect(html).toContain("High cost, low usage");
-    expect(html).toContain("Lower efficiency than average");
+    expect(html).not.toContain("Lower efficiency than average");
+    expect(html).toContain("bg-status-error");
   });
 
   it("renders a single model without crashing", () => {

@@ -45,6 +45,29 @@ function barAriaLabel(row: CostRow, maxCost: number): string {
   return `${row.modelName}: ${percent}% of total cost`;
 }
 
+type BarColorTier = "efficient" | "normal" | "below-average" | "inefficient";
+
+function getEfficiencyTier(
+  costPerMessage: number | null,
+  avgCpm: number | null,
+): BarColorTier {
+  if (costPerMessage == null || avgCpm == null || avgCpm === 0) {
+    return "normal";
+  }
+  const ratio = costPerMessage / avgCpm;
+  if (ratio <= 0.5) return "efficient";
+  if (ratio <= 1.0) return "normal";
+  if (ratio <= 2.0) return "below-average";
+  return "inefficient";
+}
+
+const BAR_COLORS: Record<BarColorTier, string> = {
+  efficient: "bg-status-success",
+  normal: "bg-chart-2",
+  "below-average": "bg-status-warning",
+  inefficient: "bg-status-error",
+};
+
 function CostRowView({
   row,
   maxCost,
@@ -54,7 +77,7 @@ function CostRowView({
   maxCost: number;
   avgCpm: number | null;
 }) {
-  const flags = useMemo(
+  const { highCostLowUsage } = useMemo(
     () => computeEfficiencyFlags(row, avgCpm),
     [row, avgCpm],
   );
@@ -68,16 +91,8 @@ function CostRowView({
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary">
           {row.modelName}
         </span>
-        {flags.highCostLowUsage && (
+        {highCostLowUsage && (
           <Badge variant="destructive">High cost, low usage</Badge>
-        )}
-        {flags.lowerThanAverage && (
-          <Badge
-            variant="outline"
-            className="border-status-warning text-status-warning"
-          >
-            Lower efficiency than average
-          </Badge>
         )}
         <span
           className={cn(
@@ -100,7 +115,7 @@ function CostRowView({
         <UsageBar
           value={row.cost}
           max={maxCost}
-          color="bg-chart-2"
+          color={BAR_COLORS[getEfficiencyTier(row.costPerMessage, avgCpm)]}
           label={barAriaLabel(row, maxCost)}
           className="mt-2"
         />
