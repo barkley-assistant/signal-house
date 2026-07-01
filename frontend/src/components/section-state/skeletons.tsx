@@ -88,6 +88,22 @@ function SessionUsageSkeleton() {
   );
 }
 
+function CostBreakdownSkeleton() {
+  return (
+    <div className="space-y-3" aria-label="Loading cost breakdown">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="flex flex-col gap-2 rounded-lg border border-card-border bg-card-bg p-3">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-1/3 bg-divider" />
+            <Skeleton className="h-4 w-16 bg-divider" />
+          </div>
+          <Skeleton className="h-3 w-full rounded bg-divider" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const skeletonMap: Record<SectionKind, React.FC> = {
   health: HealthSkeleton,
   trends: TrendsSkeleton,
@@ -95,6 +111,7 @@ const skeletonMap: Record<SectionKind, React.FC> = {
   "model-usage": ModelUsageSkeleton,
   "session-usage": SessionUsageSkeleton,
   diagnostics: DiagnosticsSkeleton,
+  "cost-breakdown": CostBreakdownSkeleton,
 };
 
 export function SectionSkeleton({ section }: SectionSkeletonProps) {

@@ -10,6 +10,7 @@ describe("emptyStateConfigs", () => {
     "model-usage",
     "session-usage",
     "diagnostics",
+    "cost-breakdown",
   ];
 
   it("has a config for every section kind", () => {
@@ -73,6 +74,15 @@ describe("emptyStateConfigs", () => {
     );
     expect(emptyStateConfigs.diagnostics.hint).toBe(
       "Diagnostics appear after the first data refresh"
+    );
+  });
+
+  it("cost-breakdown config has expected values", () => {
+    expect(emptyStateConfigs["cost-breakdown"].message).toBe(
+      "No cost data available"
+    );
+    expect(emptyStateConfigs["cost-breakdown"].hint).toBe(
+      "Cost data appears once model usage includes cost information"
     );
   });
 });

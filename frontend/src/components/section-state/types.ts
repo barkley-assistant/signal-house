@@ -13,7 +13,8 @@ export type SectionKind =
   | "attention"
   | "model-usage"
   | "session-usage"
-  | "diagnostics";
+  | "diagnostics"
+  | "cost-breakdown";
 
 export interface EmptyStateConfig {
   message: string;

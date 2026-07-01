@@ -23,6 +23,7 @@ import { formatCompactNumber } from "../../../utils/format";
 import { SectionState, useSectionState } from "@/components/section-state";
 import { StatusStrip, formatTimeAgo } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
+import { CostBreakdownCard } from "@/components/CostBreakdownCard";
 import { DailyTokenUsageCard } from "@/components/DailyTokenUsageCard";
 import { TrendCard } from "@/components/TrendCard";
 import type {
@@ -460,6 +461,12 @@ export default function Home() {
   const healthSummaryError = cards == null ? error : null;
 
   const modelUsageState = useSectionState({
+    isLoading: !hasEverLoaded && isLoading,
+    error,
+    isEmpty: false,
+  });
+
+  const costBreakdownState = useSectionState({
     isLoading: !hasEverLoaded && isLoading,
     error,
     isEmpty: false,
@@ -1056,6 +1063,28 @@ export default function Home() {
               minHeight="160px"
             >
               <ModelUsageRankList tokenUsage={tokenUsage} />
+            </SectionState>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-label="Cost breakdown" className="mt-6">
+        <Card className="border-card-border bg-card-bg">
+          <CardHeader>
+            <CardTitle className="text-text-primary">Cost Breakdown</CardTitle>
+            <CardDescription>
+              Models ranked by cost, with per-message efficiency and warnings
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SectionState
+              state={costBreakdownState}
+              section="cost-breakdown"
+              errorMessage={error ?? undefined}
+              onRetry={() => fetch()}
+              minHeight="160px"
+            >
+              <CostBreakdownCard tokenUsage={tokenUsage} />
             </SectionState>
           </CardContent>
         </Card>

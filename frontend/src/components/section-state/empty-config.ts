@@ -25,4 +25,8 @@ export const emptyStateConfigs: Record<SectionKind, EmptyStateConfig> = {
     message: "No diagnostics available",
     hint: "Diagnostics appear after the first data refresh",
   },
+  "cost-breakdown": {
+    message: "No cost data available",
+    hint: "Cost data appears once model usage includes cost information",
+  },
 };
