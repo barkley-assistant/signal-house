@@ -363,12 +363,9 @@ export function DailyTokenUsageCard({
                             key={m.modelName}
                             className="rounded-lg border border-card-border bg-card-bg p-3"
                           >
-                            <div className="mb-2 flex items-center justify-between">
+                            <div className="mb-2">
                               <span className="truncate text-sm font-semibold text-text-primary">
                                 {m.modelName}
-                              </span>
-                              <span className="shrink-0 text-xs font-mono tabular-nums text-accent-primary">
-                                {formatCost(m.cost)}
                               </span>
                             </div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
