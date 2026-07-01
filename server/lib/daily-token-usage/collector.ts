@@ -1,12 +1,11 @@
 import { connectOpencodeDb, querySessionsByDay, queryModelBreakdown } from '../opencode/db-collector'
-import { upsertDailyTokenUsage, getDailyTokenUsageRange } from '../../db/client'
+import { upsertDailyTokenUsage } from '../../db/client'
 import type { DailyTokenUsageInsert } from '../../../types/daily-token-usage'
 
 export interface DailyTokenUsageCollectorResult {
   success: boolean
   dates: string[]
   upserted: number
-  skipped: number
   errors: string[]
 }
 
@@ -14,41 +13,20 @@ export async function maybeCollectDailyTokenUsage(): Promise<DailyTokenUsageColl
   const errors: string[] = []
   const dates: string[] = []
   let upserted = 0
-  let skipped = 0
 
   const db = connectOpencodeDb()
   if (!db) {
     errors.push('OpenCode DB not found: unable to connect to opencode.db')
-    return { success: false, dates: [], upserted: 0, skipped: 0, errors }
+    return { success: false, dates: [], upserted: 0, errors }
   }
   db.close()
 
   const dailyAggs = querySessionsByDay(365)
   if (dailyAggs.length === 0) {
-    return { success: true, dates: [], upserted: 0, skipped: 0, errors: [] }
-  }
-
-  // Find date range from aggregates
-  const allDayStrings = dailyAggs.map(d => d.day).sort()
-  const minDay = allDayStrings[0]!
-  const maxDay = allDayStrings[allDayStrings.length - 1]!
-
-  // Get existing days from DB
-  let existingDays: Set<string>
-  try {
-    const existingRows = getDailyTokenUsageRange(minDay, maxDay)
-    existingDays = new Set(existingRows.map(r => r.date))
-  } catch (err) {
-    errors.push(`Failed to query existing token usage: ${err instanceof Error ? err.message : String(err)}`)
-    return { success: false, dates: [], upserted: 0, skipped: 0, errors }
+    return { success: true, dates: [], upserted: 0, errors: [] }
   }
 
   for (const agg of dailyAggs) {
-    if (existingDays.has(agg.day)) {
-      skipped++
-      continue
-    }
-
     // Compute day start/end as UTC ms timestamps for queryModelBreakdown
     const [yearStr, monthStr, dayStr] = agg.day.split('-')
     const year = parseInt(yearStr!, 10)
@@ -88,5 +66,5 @@ export async function maybeCollectDailyTokenUsage(): Promise<DailyTokenUsageColl
     dates.push(agg.day)
   }
 
-  return { success: errors.length === 0, dates, upserted, skipped, errors }
+  return { success: errors.length === 0, dates, upserted, errors }
 }
