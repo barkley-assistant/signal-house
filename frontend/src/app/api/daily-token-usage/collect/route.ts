@@ -16,7 +16,6 @@ export async function POST(request: Request) {
           success: false,
           dates: result.dates,
           upserted: result.upserted,
-          skipped: result.skipped,
           errors: result.errors,
         },
         { status: 502 },
