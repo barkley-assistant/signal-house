@@ -3,17 +3,18 @@
 import { useMemo } from "react";
 import { BarChart3 } from "lucide-react";
 import { UsageBar } from "@/components/UsageBar";
-import { Badge } from "@/components/ui/badge";
 import { StatsBar } from "@/components/ui/stats-bar";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/format-cost";
 import {
   aggregateCostRows,
-  computeEfficiencyFlags,
+  computeEfficiencyMultiplier,
   formatCostPerMessage,
+  getCheapestCpm,
+  getEfficiencyTier,
   rankByCost,
 } from "@/lib/cost-efficiency";
-import type { CostRow } from "@/lib/cost-efficiency";
+import type { CostRow, EfficiencyTier } from "@/lib/cost-efficiency";
 import type { TokenUsageRow } from "@/types";
 
 export interface CostBreakdownCardProps {
@@ -45,21 +46,7 @@ function barAriaLabel(row: CostRow, maxCost: number): string {
   return `${row.modelName}: ${percent}% of total cost`;
 }
 
-type BarColorTier = "efficient" | "normal" | "below-average" | "inefficient";
-
-function getEfficiencyTier(
-  costPerMessage: number | null,
-  avgCpm: number | null,
-): BarColorTier {
-  if (costPerMessage == null || avgCpm == null || avgCpm === 0) {
-    return "normal";
-  }
-  const ratio = costPerMessage / avgCpm;
-  if (ratio <= 0.5) return "efficient";
-  if (ratio <= 1.0) return "normal";
-  if (ratio <= 2.0) return "below-average";
-  return "inefficient";
-}
+type BarColorTier = EfficiencyTier;
 
 const BAR_COLORS: Record<BarColorTier, string> = {
   efficient: "bg-status-success",
@@ -71,16 +58,20 @@ const BAR_COLORS: Record<BarColorTier, string> = {
 function CostRowView({
   row,
   maxCost,
-  avgCpm,
+  cheapestCpm,
+  isSingle,
 }: {
   row: CostRow;
   maxCost: number;
-  avgCpm: number | null;
+  cheapestCpm: number | null;
+  isSingle: boolean;
 }) {
-  const { highCostLowUsage } = useMemo(
-    () => computeEfficiencyFlags(row, avgCpm),
-    [row, avgCpm],
-  );
+  const tier: BarColorTier = isSingle
+    ? "normal"
+    : getEfficiencyTier(row.costPerMessage, cheapestCpm);
+  const multiplier = isSingle
+    ? null
+    : computeEfficiencyMultiplier(row, cheapestCpm);
 
   return (
     <div
@@ -91,9 +82,6 @@ function CostRowView({
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary">
           {row.modelName}
         </span>
-        {highCostLowUsage && (
-          <Badge variant="destructive">High cost, low usage</Badge>
-        )}
         <span
           className={cn(
             "font-mono text-sm tabular-nums",
@@ -110,12 +98,17 @@ function CostRowView({
         <span className="text-xs text-text-muted tabular-nums">
           {row.messages} msgs
         </span>
+        {multiplier != null && (
+          <span className="text-xs text-text-muted tabular-nums">
+            {multiplier.toFixed(1)}×
+          </span>
+        )}
       </div>
       {row.cost != null && (
         <UsageBar
           value={row.cost}
           max={maxCost}
-          color={BAR_COLORS[getEfficiencyTier(row.costPerMessage, avgCpm)]}
+          color={BAR_COLORS[tier]}
           label={barAriaLabel(row, maxCost)}
           className="mt-2"
         />
@@ -157,6 +150,10 @@ export function CostBreakdownCard({ tokenUsage }: CostBreakdownCardProps) {
     [totalCost, totalMessages],
   );
 
+  const cheapestCpm = useMemo(() => getCheapestCpm(rows), [rows]);
+
+  const isSingle = rows.length === 1;
+
   if (!hasAnyCost) {
     return <EmptyCostState />;
   }
@@ -177,7 +174,8 @@ export function CostBreakdownCard({ tokenUsage }: CostBreakdownCardProps) {
             key={row.modelName}
             row={row}
             maxCost={maxCost}
-            avgCpm={avgCpm}
+            cheapestCpm={cheapestCpm}
+            isSingle={isSingle}
           />
         ))}
       </div>

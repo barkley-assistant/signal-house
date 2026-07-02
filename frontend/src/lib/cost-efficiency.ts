@@ -7,16 +7,11 @@ export interface CostRow {
   costPerMessage: number | null;
 }
 
-export interface EfficiencyFlags {
-  highCostLowUsage: boolean;
-  lowerThanAverage: boolean;
-}
-
-export const EFFICIENCY_THRESHOLDS = {
-  highCost: 5.0,
-  lowUsageMessages: 100,
-  cpmMultiplier: 2,
-} as const;
+export type EfficiencyTier =
+  | "efficient"
+  | "normal"
+  | "below-average"
+  | "inefficient";
 
 interface ModelUsageLike {
   modelName: string;
@@ -71,23 +66,33 @@ export function formatCostPerMessage(cpm: number | null): string {
   return `${formatCost(cpm)}/msg`;
 }
 
-export function computeEfficiencyFlags(
+export function getCheapestCpm(rows: CostRow[]): number | null {
+  const cpms = rows
+    .map((r) => r.costPerMessage)
+    .filter((v): v is number => v != null);
+  return cpms.length === 0 ? null : Math.min(...cpms);
+}
+
+export function computeEfficiencyMultiplier(
   row: CostRow,
-  avgCostPerMessage: number | null,
-): EfficiencyFlags {
-  if (row.cost == null) {
-    return { highCostLowUsage: false, lowerThanAverage: false };
+  cheapestCpm: number | null,
+): number | null {
+  if (row.costPerMessage == null || cheapestCpm == null || cheapestCpm === 0) {
+    return null;
   }
+  return Math.round((row.costPerMessage / cheapestCpm) * 10) / 10;
+}
 
-  const highCostLowUsage =
-    row.cost > EFFICIENCY_THRESHOLDS.highCost &&
-    row.messages < EFFICIENCY_THRESHOLDS.lowUsageMessages;
-
-  const lowerThanAverage =
-    row.costPerMessage != null &&
-    avgCostPerMessage != null &&
-    avgCostPerMessage > 0 &&
-    row.costPerMessage > EFFICIENCY_THRESHOLDS.cpmMultiplier * avgCostPerMessage;
-
-  return { highCostLowUsage, lowerThanAverage };
+export function getEfficiencyTier(
+  costPerMessage: number | null,
+  cheapestCpm: number | null,
+): EfficiencyTier {
+  if (costPerMessage == null || cheapestCpm == null || cheapestCpm === 0) {
+    return "normal";
+  }
+  const ratio = costPerMessage / cheapestCpm;
+  if (ratio <= 3.0) return "efficient";
+  if (ratio <= 12.0) return "normal";
+  if (ratio <= 25.0) return "below-average";
+  return "inefficient";
 }
