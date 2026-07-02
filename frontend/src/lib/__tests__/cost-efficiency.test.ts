@@ -1,21 +1,14 @@
 import { describe, expect, it } from "@jest/globals";
 import {
-  EFFICIENCY_THRESHOLDS,
   aggregateCostRows,
-  computeEfficiencyFlags,
+  computeEfficiencyMultiplier,
   formatCostPerMessage,
+  getCheapestCpm,
+  getEfficiencyTier,
   rankByCost,
 } from "../cost-efficiency";
 import type { CostRow } from "../cost-efficiency";
 import type { ModelUsageEntry } from "../rank-models";
-
-describe("EFFICIENCY_THRESHOLDS", () => {
-  it("exposes the documented threshold values", () => {
-    expect(EFFICIENCY_THRESHOLDS.highCost).toBe(5.0);
-    expect(EFFICIENCY_THRESHOLDS.lowUsageMessages).toBe(100);
-    expect(EFFICIENCY_THRESHOLDS.cpmMultiplier).toBe(2);
-  });
-});
 
 function makeRow(overrides: Partial<CostRow> = {}): CostRow {
   return {
@@ -146,83 +139,148 @@ describe("rankByCost", () => {
   });
 });
 
-describe("computeEfficiencyFlags", () => {
-  it("flags high-cost + low-usage when cost > 5 and messages < 100", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 8.5, messages: 42, costPerMessage: 0.2 }),
-      0.05
-    );
-    expect(flags.highCostLowUsage).toBe(true);
-    expect(flags.lowerThanAverage).toBe(true);
+describe("getCheapestCpm", () => {
+  it("returns null for an empty row set", () => {
+    expect(getCheapestCpm([])).toBeNull();
   });
 
-  it("flags lowerThanAverage when cpm > 2 * avgCpm even if cost is below $5", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 2.0, messages: 10, costPerMessage: 0.2 }),
-      0.03
-    );
-    expect(flags.highCostLowUsage).toBe(false);
-    expect(flags.lowerThanAverage).toBe(true);
+  it("returns null when every row has null costPerMessage", () => {
+    expect(
+      getCheapestCpm([
+        makeRow({ modelName: "A", cost: null, costPerMessage: null }),
+        makeRow({ modelName: "B", cost: null, costPerMessage: null }),
+      ]),
+    ).toBeNull();
   });
 
-  it("does not flag an efficient model", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 1.0, messages: 500, costPerMessage: 0.002 }),
-      0.01
-    );
-    expect(flags.highCostLowUsage).toBe(false);
-    expect(flags.lowerThanAverage).toBe(false);
+  it("returns the minimum across mixed null and defined costPerMessage values", () => {
+    expect(
+      getCheapestCpm([
+        makeRow({ modelName: "A", costPerMessage: 0.05 }),
+        makeRow({ modelName: "B", costPerMessage: null }),
+        makeRow({ modelName: "C", costPerMessage: 0.12 }),
+        makeRow({ modelName: "D", costPerMessage: 0.01 }),
+      ]),
+    ).toBe(0.01);
   });
 
-  it("suppresses both flags when cost is null", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: null, messages: 50, costPerMessage: null }),
-      0.05
-    );
-    expect(flags.highCostLowUsage).toBe(false);
-    expect(flags.lowerThanAverage).toBe(false);
+  it("returns the shared value when two rows tie at the lowest CPM", () => {
+    expect(
+      getCheapestCpm([
+        makeRow({ modelName: "A", costPerMessage: 0.02 }),
+        makeRow({ modelName: "B", costPerMessage: 0.02 }),
+      ]),
+    ).toBe(0.02);
+  });
+});
+
+describe("computeEfficiencyMultiplier", () => {
+  it("returns 1.0 when row CPM equals cheapest CPM", () => {
+    expect(
+      computeEfficiencyMultiplier(
+        makeRow({ costPerMessage: 0.01 }),
+        0.01,
+      ),
+    ).toBe(1.0);
   });
 
-  it("does not flag lowerThanAverage when cpm is null", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 8.5, messages: 42, costPerMessage: null }),
-      0.05
-    );
-    expect(flags.highCostLowUsage).toBe(true);
-    expect(flags.lowerThanAverage).toBe(false);
+  it("rounds the ratio to one decimal place (1.04 → 1.0)", () => {
+    expect(
+      computeEfficiencyMultiplier(
+        makeRow({ costPerMessage: 0.0104 }),
+        0.01,
+      ),
+    ).toBe(1.0);
   });
 
-  it("does not flag lowerThanAverage when avgCpm is null", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 8.5, messages: 42, costPerMessage: 0.2 }),
-      null
-    );
-    expect(flags.highCostLowUsage).toBe(true);
-    expect(flags.lowerThanAverage).toBe(false);
+  it("rounds the ratio to one decimal place (1.05 → 1.1)", () => {
+    expect(
+      computeEfficiencyMultiplier(
+        makeRow({ costPerMessage: 0.0105 }),
+        0.01,
+      ),
+    ).toBe(1.1);
   });
 
-  it("does not flag lowerThanAverage when avgCpm is zero (division guard)", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 8.5, messages: 42, costPerMessage: 0.2 }),
-      0
-    );
-    expect(flags.highCostLowUsage).toBe(true);
-    expect(flags.lowerThanAverage).toBe(false);
+  it("returns a multi-x ratio rounded to one decimal (5.27 → 5.3)", () => {
+    expect(
+      computeEfficiencyMultiplier(
+        makeRow({ costPerMessage: 0.0527 }),
+        0.01,
+      ),
+    ).toBe(5.3);
   });
 
-  it("does not flag highCostLowUsage when cost is exactly $5 (strict greater-than)", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 5.0, messages: 42, costPerMessage: 0.12 }),
-      0.05
-    );
-    expect(flags.highCostLowUsage).toBe(false);
+  it("returns null when row costPerMessage is null", () => {
+    expect(
+      computeEfficiencyMultiplier(
+        makeRow({ costPerMessage: null }),
+        0.01,
+      ),
+    ).toBeNull();
   });
 
-  it("does not flag highCostLowUsage when messages is exactly 100 (strict less-than)", () => {
-    const flags = computeEfficiencyFlags(
-      makeRow({ cost: 8.5, messages: 100, costPerMessage: 0.085 }),
-      0.05
-    );
-    expect(flags.highCostLowUsage).toBe(false);
+  it("returns null when cheapest CPM is null", () => {
+    expect(
+      computeEfficiencyMultiplier(
+        makeRow({ costPerMessage: 0.05 }),
+        null,
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when cheapest CPM is zero (division guard)", () => {
+    expect(
+      computeEfficiencyMultiplier(
+        makeRow({ costPerMessage: 0.05 }),
+        0,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("getEfficiencyTier", () => {
+  it("classifies a 1× ratio (cheapest) as efficient", () => {
+    expect(getEfficiencyTier(0.01, 0.01)).toBe("efficient");
+  });
+
+  it("classifies a ratio at the upper boundary of efficient (3.0) as efficient", () => {
+    expect(getEfficiencyTier(0.03, 0.01)).toBe("efficient");
+  });
+
+  it("classifies a ratio just above the efficient boundary (3.01) as normal", () => {
+    expect(getEfficiencyTier(0.0301, 0.01)).toBe("normal");
+  });
+
+  it("classifies a ratio at the upper boundary of normal (12.0) as normal", () => {
+    expect(getEfficiencyTier(0.12, 0.01)).toBe("normal");
+  });
+
+  it("classifies a ratio just above the normal boundary (12.01) as below-average", () => {
+    expect(getEfficiencyTier(0.1201, 0.01)).toBe("below-average");
+  });
+
+  it("classifies a ratio at the upper boundary of below-average (25.0) as below-average", () => {
+    expect(getEfficiencyTier(0.25, 0.01)).toBe("below-average");
+  });
+
+  it("classifies a ratio just above the below-average boundary (25.01) as inefficient", () => {
+    expect(getEfficiencyTier(0.2501, 0.01)).toBe("inefficient");
+  });
+
+  it("classifies a very high ratio as inefficient", () => {
+    expect(getEfficiencyTier(1.0, 0.01)).toBe("inefficient");
+  });
+
+  it("returns normal when costPerMessage is null", () => {
+    expect(getEfficiencyTier(null, 0.01)).toBe("normal");
+  });
+
+  it("returns normal when cheapestCpm is null", () => {
+    expect(getEfficiencyTier(0.05, null)).toBe("normal");
+  });
+
+  it("returns normal when cheapestCpm is zero (division guard)", () => {
+    expect(getEfficiencyTier(0.05, 0)).toBe("normal");
   });
 });

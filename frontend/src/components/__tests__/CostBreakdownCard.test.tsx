@@ -55,6 +55,10 @@ describe("CostBreakdownCard", () => {
     expect(bigIndex).toBeLessThan(smallIndex);
 
     expect(html).toContain("$10.00");
+
+    // Multipliers are shown for each model in a multi-model card.
+    expect(html).toContain("1.0×");
+    expect(html).toContain("18.0×");
   });
 
   it("renders the custom empty state when modelUsage is empty", () => {
@@ -81,7 +85,7 @@ describe("CostBreakdownCard", () => {
     expect(html).toContain("No cost data available");
   });
 
-  it("shows high-cost-low-usage badge and color-coded cost bar for inefficient model", () => {
+  it("renders multiplier and inefficient bar color for a wildly expensive model without a high-cost-low-usage badge", () => {
     const tokenUsage = makeTokenUsage([
       {
         modelName: "expensive",
@@ -103,12 +107,20 @@ describe("CostBreakdownCard", () => {
       },
     ]);
     const html = renderToStaticMarkup(<CostBreakdownCard tokenUsage={tokenUsage} />);
-    expect(html).toContain("High cost, low usage");
+
+    // Badge is gone.
+    expect(html).not.toContain("High cost, low usage");
     expect(html).not.toContain("Lower efficiency than average");
+
+    // Multipliers are rendered: cheapest shows 1.0×, expensive shows its ratio (≈202.4×).
+    expect(html).toContain("1.0×");
+    expect(html).toContain("202.4×");
+
+    // Expensive model sits well above 25× cheapest → "inefficient" → bg-status-error.
     expect(html).toContain("bg-status-error");
   });
 
-  it("renders a single model without crashing", () => {
+  it("renders a single model with the normal tier and no multiplier", () => {
     const tokenUsage = makeTokenUsage([
       {
         modelName: "solo",
@@ -123,9 +135,12 @@ describe("CostBreakdownCard", () => {
     const html = renderToStaticMarkup(<CostBreakdownCard tokenUsage={tokenUsage} />);
     expect(html).toContain("solo");
     expect(html).toContain("$3.00");
+
+    // Single-model guard: no multiplier is rendered.
+    expect(html).not.toContain("×</span>");
   });
 
-  it("renders a zero-cost model with em-dash cost-per-message and no warning badges", () => {
+  it("renders a zero-cost model with em-dash cost-per-message and no multiplier or warning badges", () => {
     const tokenUsage = makeTokenUsage([
       {
         modelName: "free",
@@ -142,6 +157,8 @@ describe("CostBreakdownCard", () => {
     expect(html).toContain("0.0¢/msg");
     expect(html).not.toContain("High cost, low usage");
     expect(html).not.toContain("Lower efficiency than average");
+    // No multiplier when the only model has zero cost.
+    expect(html).not.toContain("×</span>");
   });
 
   it("includes accessible aria-labels on the rows and bars", () => {
