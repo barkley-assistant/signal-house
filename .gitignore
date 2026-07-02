@@ -5,3 +5,5 @@ dist/
 *.sqlite
 .env
 .DS_Store
+# Local AI runtime state
+.atl/

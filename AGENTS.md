@@ -11,7 +11,7 @@ Ensure to keep the `README.md` and `.env.example` up to date.
 For any task:
 
 * Read the relevant files in `docs/` before starting.
-* Use the relevant skill from `skills/`.
+* Update any files in `docs/` on task completion. 
 
 For frontend/UI work:
 
