@@ -17,7 +17,7 @@ function daysBetween(a: string, b: string): number {
   return Math.max(0, ms / 1000)
 }
 
-export function deriveThroughput(
+function deriveThroughput(
   issues: IssueMetric[],
   prs: PullRequestMetric[],
   periodStart: string,
@@ -57,7 +57,7 @@ export function deriveThroughput(
   }
 }
 
-export function deriveCycleTime(
+function deriveCycleTime(
   prs: PullRequestMetric[],
   periodStart: string,
   periodEnd: string,
@@ -81,7 +81,7 @@ export function deriveCycleTime(
   return { periodStart, periodEnd, averageSeconds, medianSeconds, p95Seconds, sampleSize: n }
 }
 
-export function deriveStaleWork(
+function deriveStaleWork(
   issues: IssueMetric[],
   prs: PullRequestMetric[],
   thresholdDays: number,
@@ -111,7 +111,7 @@ export function deriveStaleWork(
   return { asOf, staleIssues, stalePRs, staleThresholdDays: thresholdDays, oldestItemDays }
 }
 
-export function deriveCI(
+function deriveCI(
   workflowRuns: WorkflowRunMetric[],
   periodStart: string,
   periodEnd: string,
