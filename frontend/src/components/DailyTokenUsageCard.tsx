@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { EChartsOption } from "echarts-for-react";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/format-cost";
-import { formatCompactNumber } from "../../../utils/format";
+import { formatCompactNumber, formatNumber } from "../../../utils/format";
 
 interface DailyTokenUsageCardProps {
   rows: DailyTokenUsageRow[];
@@ -19,13 +19,12 @@ interface DailyTokenUsageCardProps {
   error?: string | null;
 }
 
-type ModelEntry = DailyTokenUsageRow["modelUsage"][number];
+type ChartTooltipValue = number | null;
 
-function formatNumber(value: number | null | undefined): string {
-  if (value == null) return "—";
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return String(value);
+interface ChartTooltipParam {
+  marker?: string;
+  seriesName?: string;
+  value?: ChartTooltipValue | [string | number, ChartTooltipValue];
 }
 
 function formatDayLabel(dayStr: string): string {
@@ -105,14 +104,14 @@ function buildDailyTokenUsageOption(
       borderColor: "#262a33",
       textStyle: { color: "#f1f5f9", fontSize: 12 },
       axisPointer: { type: "cross", label: { backgroundColor: "#262a33" } },
-      formatter: (params: any[]) => {
+      formatter: (params: ChartTooltipParam[]) => {
         return params
           .map((p) => {
             const rawValue = Array.isArray(p.value) ? p.value[1] : p.value;
             const value =
               p.seriesName === "Cost"
                 ? formatCost(rawValue)
-                : rawValue ?? "—";
+                : formatNumber(rawValue);
             return `${p.marker ?? ""} ${p.seriesName}: ${value}`;
           })
           .join("<br/>");

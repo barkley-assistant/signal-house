@@ -81,7 +81,7 @@ describe("StatsBar", () => {
     expect(html).toContain('data-variant="card"');
   });
 
-  it("formats numeric values with the number helper (1,234 -> 1.2K)", () => {
+  it("formats numeric values with the number helper (1,234 -> 1,234)", () => {
     const html = renderToStaticMarkup(
       <StatsBar
         stats={[
@@ -93,8 +93,8 @@ describe("StatsBar", () => {
     );
 
     expect(html).toContain("42");
-    expect(html).toContain("1.2K");
-    expect(html).toContain("2.5M");
+    expect(html).toContain("1,234");
+    expect(html).toContain("2,500,000");
   });
 
   it("formats numeric values with the cost helper ($45.67)", () => {

@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/format-cost";
+import { formatNumber } from "../../../../utils/format";
 
 export type StatFormat = "number" | "cost" | "percentage";
 export type StatsBarVariant = "compact" | "default" | "card";
@@ -25,12 +26,6 @@ const VARIANT_STYLES: Record<StatsBarVariant, string> = {
   default: "gap-4",
   card: "gap-4 rounded-lg border border-card-border bg-card-bg px-3 py-2",
 };
-
-function formatNumber(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return String(value);
-}
 
 function formatPercentage(value: number): string {
   return `${(value * 100).toFixed(1)}%`;

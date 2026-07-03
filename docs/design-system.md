@@ -130,6 +130,12 @@ Per frontend guidelines — dramatic jumps, not timid increments:
 - Body: 400
 - Metric values: 700 (monospace condensed)
 
+### Number formatting
+
+- Dashboard values use grouped full numbers by default, for example `1,234,567`.
+- Compact notation, such as `1.2M`, is reserved for cramped chart axes or similarly tight spaces.
+- Use the shared number-formatting utility rather than local component helpers, so tables, cards, and tooltips stay consistent.
+
 ### Line height
 
 - Body: 1.5–1.6

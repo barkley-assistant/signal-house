@@ -43,7 +43,7 @@ describe("ModelUsageRankList", () => {
     expect(html).toContain("Sessions");
     expect(html).toContain("4");
     expect(html).toContain("16");
-    expect(html).toContain("2000");
+    expect(html).toContain("2,000");
     expect(html).toContain("$1.25");
     expect(html).toContain("opencode-go/minimax-m3");
   });

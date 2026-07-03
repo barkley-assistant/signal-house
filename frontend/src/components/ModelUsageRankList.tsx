@@ -9,15 +9,9 @@ import { UsageBar } from "@/components/UsageBar";
 import { StatsBar } from "@/components/ui/stats-bar";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/format-cost";
+import { formatNumber } from "../../../utils/format";
 import { averageCostPerMessage, hasDetailData, totalTokens as sumEntryTokens } from "./model-usage-utils";
 import type { TokenUsageRow } from "@/types";
-
-function formatNumber(value: number | null | undefined): string {
-  if (value == null) return "—";
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return String(value);
-}
 
 export interface ModelUsageRankListProps {
   tokenUsage: TokenUsageRow | null;
@@ -60,7 +54,7 @@ function ModelRow({
       role="button"
       tabIndex={0}
       aria-expanded={expanded}
-      aria-label={`${entry.modelName}: ${entry.messages} messages`}
+      aria-label={`${entry.modelName}: ${formatNumber(entry.messages)} messages`}
     >
       <div className="flex w-full items-center gap-2 text-left">
         {expanded ? (
