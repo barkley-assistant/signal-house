@@ -7,7 +7,6 @@ export type {
   SessionMetric,
   LocalGitRepoMetric,
   ErrorMetric,
-  MetricDomain,
   MetricRecord,
 } from './metrics'
 

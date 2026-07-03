@@ -107,6 +107,4 @@ export interface LocalGitRepoMetric {
   error: string | null
 }
 
-export type MetricDomain = 'issues' | 'pullRequests' | 'workflowRuns' | 'repositories' | 'sessions' | 'localGit' | 'errors'
-
 export type MetricRecord = IssueMetric | PullRequestMetric | WorkflowRunMetric | RepositoryMetric | SessionMetric | LocalGitRepoMetric | ErrorMetric
