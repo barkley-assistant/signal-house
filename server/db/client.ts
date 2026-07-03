@@ -124,6 +124,7 @@ function migrate(db: Db): void {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
     db.exec(SQL.createDailyTokenUsageTable)
+    db.exec('DROP TABLE IF EXISTS opencode_daily_usage')
 
     const row = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value?: unknown } | undefined
     const current = row ? Number(row.value) : 0

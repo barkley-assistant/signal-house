@@ -264,6 +264,58 @@ describe('initDb on fresh database', () => {
   })
 })
 
+describe('migration: drop opencode_daily_usage', () => {
+  it('drops orphaned opencode_daily_usage table from existing v12 DB', async () => {
+    // Seed a v12 DB with the orphaned table
+    const dbPath = join(tmpDir, 'metrics.db')
+    const seedDb = new Database(dbPath)
+    seedDb.exec(`
+      CREATE TABLE IF NOT EXISTS snapshots (id TEXT PRIMARY KEY, captured_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS aggregates (id TEXT PRIMARY KEY, type TEXT NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL, data TEXT NOT NULL, snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS latest_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+      INSERT INTO latest_state (key, value) VALUES ('schema_version', '12');
+      CREATE TABLE opencode_daily_usage (date TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'opencode', total_sessions INTEGER NOT NULL DEFAULT 0, total_messages INTEGER NOT NULL DEFAULT 0, total_tokens INTEGER NOT NULL DEFAULT 0, total_cost REAL, raw_json TEXT, collected_at TEXT NOT NULL, PRIMARY KEY (date, source));
+    `)
+    seedDb.close()
+
+    await initDb()
+
+    // Verify table was dropped
+    const db = new Database(dbPath)
+    const tableRow = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='opencode_daily_usage'`).get()
+    expect(tableRow).toBeUndefined()
+
+    // Verify schema version was bumped
+    const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
+    expect(versionRow?.value).toBe('13')
+    db.close()
+  })
+
+  it('is idempotent on already-migrated database', async () => {
+    const dbPath = join(tmpDir, 'metrics.db')
+    const seedDb = new Database(dbPath)
+    seedDb.exec(`
+      CREATE TABLE IF NOT EXISTS snapshots (id TEXT PRIMARY KEY, captured_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS aggregates (id TEXT PRIMARY KEY, type TEXT NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL, data TEXT NOT NULL, snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS latest_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+      INSERT INTO latest_state (key, value) VALUES ('schema_version', '12');
+      CREATE TABLE opencode_daily_usage (date TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'opencode', total_sessions INTEGER NOT NULL DEFAULT 0, total_messages INTEGER NOT NULL DEFAULT 0, total_tokens INTEGER NOT NULL DEFAULT 0, total_cost REAL, raw_json TEXT, collected_at TEXT NOT NULL, PRIMARY KEY (date, source));
+      INSERT INTO opencode_daily_usage (date, source, collected_at) VALUES ('2026-01-01', 'opencode', '2026-01-01T00:00:00Z');
+    `)
+    seedDb.close()
+
+    await initDb()
+    close()
+
+    // Re-init (simulate second startup)
+    const db = await initDb()
+
+    // Table should be gone
+    const tableRow = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='opencode_daily_usage'`).get()
+    expect(tableRow).toBeUndefined()
+  })
+})
+
 describe('getDbPath resolution (issue #179)', () => {
   const originalDbDir = process.env['DB_DIR']
   let cwdSpy: ReturnType<typeof jest.spyOn>
