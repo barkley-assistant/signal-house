@@ -248,20 +248,20 @@ describe('createSessionCollector', () => {
     expect(result.sessionUsage!.modelUsage).toEqual([
       {
         modelName: 'claude-4',
-        sessions: 2,
         messages: 3,
         inputTokens: 120,
         outputTokens: 80,
+        tokensReasoning: 30,
         cacheReadTokens: 10,
         cacheWriteTokens: 5,
         cost: 1.25,
       },
       {
         modelName: 'gpt-4.1',
-        sessions: 1,
         messages: 3,
         inputTokens: 300,
         outputTokens: 200,
+        tokensReasoning: 50,
         cacheReadTokens: 40,
         cacheWriteTokens: 20,
         cost: 2,

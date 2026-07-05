@@ -433,6 +433,7 @@ describe('buildDashboardWindow — extended coverage', () => {
         messages: 12,
         inputTokens: 80,
         outputTokens: 20,
+        tokensReasoning: 0,
         cacheReadTokens: 5,
         cacheWriteTokens: 2,
         cost: 1.2,

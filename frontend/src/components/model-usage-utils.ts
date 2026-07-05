@@ -1,8 +1,7 @@
-import type { DashboardWindowSessionUsageSummary } from "@/types";
 import type { RankedModelEntry } from "@/lib/rank-models";
 
-export function totalTokens(s: DashboardWindowSessionUsageSummary | RankedModelEntry): number | null {
-  const fields = [s.inputTokens, s.outputTokens, s.cacheReadTokens, s.cacheWriteTokens];
+export function totalTokens(s: RankedModelEntry): number | null {
+  const fields = [s.inputTokens, s.outputTokens, s.tokensReasoning, s.cacheReadTokens, s.cacheWriteTokens];
   let has = false;
   let sum = 0;
   for (const f of fields) {
@@ -20,5 +19,5 @@ export function averageCostPerMessage(entry: RankedModelEntry): number | null {
 }
 
 export function hasDetailData(entry: RankedModelEntry): boolean {
-  return [entry.inputTokens, entry.outputTokens, entry.cacheReadTokens, entry.cacheWriteTokens, entry.cost].some((value) => value != null && value !== 0);
+  return [entry.inputTokens, entry.outputTokens, entry.tokensReasoning, entry.cacheReadTokens, entry.cacheWriteTokens, entry.cost].some((value) => value != null && value !== 0);
 }

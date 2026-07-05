@@ -166,6 +166,16 @@ function migrate(db: Db): void {
       if (current < 14) {
         db.exec(SQL.migrateSourcePullRequestsV14)
       }
+
+      // Drop the redundant total_tokens column (issue #317). The total is now
+      // derived from the model_usage JSON breakdown on read. Guarded for
+      // fresh installs where the column was never created.
+      if (current < 15) {
+        const dtuColumns = db.prepare(`PRAGMA table_info(daily_token_usage)`).all() as Array<{ name: string }>
+        if (dtuColumns.some(c => c.name === 'total_tokens')) {
+          db.exec(SQL.migrateDailyTokenUsageV15)
+        }
+      }
     } else {
       // Destructive migration for old schemas (< v10). We need to drop and
       // recreate tables whose shape has changed over earlier versions.
@@ -480,13 +490,22 @@ export function getLatestDailyDayForRepo(repoKey: string): string | null {
 // ── Daily token usage helpers ──────────────────────────────────────
 
 function rowToDailyTokenUsageRow(row: Record<string, unknown>): DailyTokenUsageRow {
+  const usage: DailyTokenUsageRow['modelUsage'] = JSON.parse(String(row.model_usage))
+  const totalTokens = usage.reduce((sum, m) => {
+    return sum
+      + (m.inputTokens ?? 0)
+      + (m.outputTokens ?? 0)
+      + (m.tokensReasoning ?? 0)
+      + (m.cacheReadTokens ?? 0)
+      + (m.cacheWriteTokens ?? 0)
+  }, 0)
   return {
     date: String(row.date),
     totalSessions: Number(row.total_sessions),
     totalMessages: Number(row.total_messages),
-    totalTokens: Number(row.total_tokens),
+    totalTokens,
     totalCost: row.total_cost != null ? Number(row.total_cost) : null,
-    modelUsage: JSON.parse(String(row.model_usage)),
+    modelUsage: usage,
     rawJson: row.raw_json != null ? String(row.raw_json) : null,
     createdAt: String(row.created_at),
   }
@@ -498,7 +517,6 @@ export function upsertDailyTokenUsage(row: DailyTokenUsageInsert): void {
     date: row.date,
     totalSessions: row.totalSessions,
     totalMessages: row.totalMessages,
-    totalTokens: row.totalTokens,
     totalCost: row.totalCost,
     modelUsage: JSON.stringify(row.modelUsage),
     rawJson: row.rawJson,

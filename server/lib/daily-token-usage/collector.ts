@@ -48,6 +48,7 @@ export async function maybeCollectDailyTokenUsage(): Promise<DailyTokenUsageColl
         messages: m.messages,
         inputTokens: m.inputTokens,
         outputTokens: m.outputTokens,
+        tokensReasoning: m.reasoningTokens,
         cacheReadTokens: m.cacheReadTokens,
         cacheWriteTokens: m.cacheWriteTokens,
         cost: m.cost,

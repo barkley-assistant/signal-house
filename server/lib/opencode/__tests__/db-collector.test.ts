@@ -333,6 +333,7 @@ describe('opencode db collector', () => {
         messages: 5,
         inputTokens: 180,
         outputTokens: 120,
+        reasoningTokens: 35,
         cacheReadTokens: 18,
         cacheWriteTokens: 9,
         cost: 2,
@@ -343,6 +344,7 @@ describe('opencode db collector', () => {
         messages: 2,
         inputTokens: 300,
         outputTokens: 200,
+        reasoningTokens: 50,
         cacheReadTokens: 40,
         cacheWriteTokens: 20,
         cost: 2,
@@ -353,6 +355,7 @@ describe('opencode db collector', () => {
         messages: 2,
         inputTokens: 50,
         outputTokens: 25,
+        reasoningTokens: 10,
         cacheReadTokens: 2,
         cacheWriteTokens: 1,
         cost: 0.5,
@@ -363,11 +366,31 @@ describe('opencode db collector', () => {
         messages: 1,
         inputTokens: 15,
         outputTokens: 5,
+        reasoningTokens: 0,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
         cost: 0.1,
       },
     ])
+  })
+
+  it('aggregates reasoningTokens per model in queryModelBreakdown', () => {
+    const rows = queryModelBreakdown(utc(2026, 6, 26), undefined, { dbPath: dbPath ?? undefined })
+    // Every entry must carry a numeric reasoningTokens field, summed across
+    // sessions of the same model. From the seed data:
+    //   claude-4   = 30 + 0 + 5 = 35
+    //   gpt-4.1    = 50
+    //   old-model  = 10
+    //   (unknown)  = 0
+    for (const row of rows) {
+      expect(typeof row.reasoningTokens).toBe('number')
+      expect(row.reasoningTokens).toBeGreaterThanOrEqual(0)
+    }
+    const byName = new Map(rows.map(r => [r.modelName, r.reasoningTokens]))
+    expect(byName.get('claude-4')).toBe(35)
+    expect(byName.get('gpt-4.1')).toBe(50)
+    expect(byName.get('old-model')).toBe(10)
+    expect(byName.get('(unknown)')).toBe(0)
   })
 
   it('aggregates sessions by agent', () => {

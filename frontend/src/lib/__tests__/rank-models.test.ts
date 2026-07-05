@@ -8,8 +8,9 @@ function makeEntry(overrides: Partial<ModelUsageEntry> = {}): ModelUsageEntry {
     messages: 100,
     inputTokens: 5000,
     outputTokens: 2000,
-    cacheReadTokens: 1000,
-    cacheWriteTokens: 500,
+    tokensReasoning: null,
+    cacheReadTokens: null,
+    cacheWriteTokens: null,
     cost: 0.05,
     ...overrides,
   };
@@ -128,8 +129,8 @@ describe("rankModelUsage", () => {
 
   it("handles all-zero-token entries with proportion 0", () => {
     const entries = [
-      { modelName: "a", messages: 0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null },
-      { modelName: "b", messages: 0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null },
+      { modelName: "a", messages: 0, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null },
+      { modelName: "b", messages: 0, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null },
     ];
     const result = rankModelUsage(entries);
     expect(result).toHaveLength(2);
@@ -140,8 +141,8 @@ describe("rankModelUsage", () => {
 
   it("Other row tokens are null when all remainder tokens are null", () => {
     const dominant = makeEntry({ modelName: "d", messages: 960, inputTokens: 9600, outputTokens: 0, cost: 0.96 });
-    const tiny1: ModelUsageEntry = { modelName: "t1", messages: 20, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null };
-    const tiny2: ModelUsageEntry = { modelName: "t2", messages: 20, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null };
+    const tiny1: ModelUsageEntry = { modelName: "t1", messages: 20, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null };
+    const tiny2: ModelUsageEntry = { modelName: "t2", messages: 20, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null };
     const result = rankModelUsage([dominant, tiny1, tiny2]);
     expect(result).toHaveLength(2);
     const other = result[1];
@@ -154,8 +155,8 @@ describe("rankModelUsage", () => {
 
   it("Other row tokens sum non-null values when mixed", () => {
     const dominant = makeEntry({ modelName: "d", messages: 960, inputTokens: 9600, outputTokens: 50, cost: 0.96 });
-    const tiny1: ModelUsageEntry = { modelName: "t1", messages: 20, inputTokens: 100, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cost: 0.02 };
-    const tiny2: ModelUsageEntry = { modelName: "t2", messages: 20, inputTokens: null, outputTokens: 50, cacheReadTokens: null, cacheWriteTokens: null, cost: null };
+    const tiny1: ModelUsageEntry = { modelName: "t1", messages: 20, inputTokens: 100, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: 0.02 };
+    const tiny2: ModelUsageEntry = { modelName: "t2", messages: 20, inputTokens: null, outputTokens: 50, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null };
     const result = rankModelUsage([dominant, tiny1, tiny2]);
     expect(result).toHaveLength(2);
     const other = result[1];
@@ -204,5 +205,51 @@ describe("rankModelUsage", () => {
     expect(result).toHaveLength(5);
     result.forEach((r) => expect(r.isOther).toBe(false));
     expect(result.map((r) => r.modelName)).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("totalTokens includes reasoning and cache fields", () => {
+    const { totalTokens } = require("../rank-models");
+    const entry = makeEntry({
+      inputTokens: 100,
+      outputTokens: 50,
+      tokensReasoning: 25,
+      cacheReadTokens: 10,
+      cacheWriteTokens: 5,
+    });
+    expect(totalTokens(entry)).toBe(100 + 50 + 25 + 10 + 5);
+  });
+
+  it("Other row sums reasoning tokens across remainder models", () => {
+    const dominant = makeEntry({
+      modelName: "d",
+      messages: 960,
+      inputTokens: 9600,
+      outputTokens: 0,
+      cost: 0.96,
+    });
+    const r1: ModelUsageEntry = {
+      modelName: "r1",
+      messages: 20,
+      inputTokens: 100,
+      outputTokens: null,
+      tokensReasoning: 7,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cost: 0.02,
+    };
+    const r2: ModelUsageEntry = {
+      modelName: "r2",
+      messages: 20,
+      inputTokens: 100,
+      outputTokens: null,
+      tokensReasoning: 3,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cost: 0.02,
+    };
+    const result = rankModelUsage([dominant, r1, r2]);
+    const other = result[1];
+    expect(other.isOther).toBe(true);
+    expect(other.tokensReasoning).toBe(10);
   });
 });

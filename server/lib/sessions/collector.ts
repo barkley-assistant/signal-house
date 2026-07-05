@@ -44,7 +44,17 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
 
         const sessionsByDay = querySessionsByDay(periodDays, dbConfig)
         const sessions = querySessions(since, now, dbConfig)
-        const modelUsage = queryModelBreakdown(since, now, dbConfig)
+        const modelBreakdown = queryModelBreakdown(since, now, dbConfig)
+        const modelUsage = modelBreakdown.map(m => ({
+          modelName: m.modelName,
+          messages: m.messages,
+          inputTokens: m.inputTokens,
+          outputTokens: m.outputTokens,
+          tokensReasoning: m.reasoningTokens,
+          cacheReadTokens: m.cacheReadTokens,
+          cacheWriteTokens: m.cacheWriteTokens,
+          cost: m.cost,
+        }))
         const toolUsageData = queryToolUsage(since, now, dbConfig)
 
         const totalSessions = sessions.length

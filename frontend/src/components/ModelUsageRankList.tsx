@@ -188,6 +188,10 @@ export function ModelUsageRankList({ tokenUsage }: ModelUsageRankListProps) {
   );
   const totalMessages = useMemo(() => ranked.reduce((sum, e) => sum + e.messages, 0), [ranked]);
   const totalCost = useMemo(() => ranked.reduce((sum, e) => sum + (e.cost ?? 0), 0), [ranked]);
+  const computedTotalTokens = useMemo(
+    () => ranked.reduce((sum, e) => sum + modelTotalTokens(e), 0),
+    [ranked],
+  );
 
   if (modelUsage.length === 0) {
     return (
@@ -220,7 +224,7 @@ export function ModelUsageRankList({ tokenUsage }: ModelUsageRankListProps) {
           },
           {
             label: "Tokens",
-            value: tokenUsage!.totalTokens,
+            value: computedTotalTokens,
             format: "number",
           },
           {

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 14
+export const SCHEMA_VERSION = 15
 
 export const SQL = {
 
@@ -243,7 +243,6 @@ export const SQL = {
       date             TEXT NOT NULL,
       total_sessions   INTEGER NOT NULL DEFAULT 0,
       total_messages   INTEGER NOT NULL DEFAULT 0,
-      total_tokens     INTEGER NOT NULL DEFAULT 0,
       total_cost       REAL,
       model_usage      TEXT NOT NULL DEFAULT '[]',
       raw_json         TEXT,
@@ -253,15 +252,18 @@ export const SQL = {
   `,
 
   upsertDailyTokenUsage: `
-    INSERT INTO daily_token_usage (date, total_sessions, total_messages, total_tokens, total_cost, model_usage, raw_json)
-    VALUES (@date, @totalSessions, @totalMessages, @totalTokens, @totalCost, @modelUsage, @rawJson)
+    INSERT INTO daily_token_usage (date, total_sessions, total_messages, total_cost, model_usage, raw_json)
+    VALUES (@date, @totalSessions, @totalMessages, @totalCost, @modelUsage, @rawJson)
     ON CONFLICT(date) DO UPDATE SET
       total_sessions = excluded.total_sessions,
       total_messages = excluded.total_messages,
-      total_tokens = excluded.total_tokens,
       total_cost = excluded.total_cost,
       model_usage = excluded.model_usage,
       raw_json = excluded.raw_json;
+  `,
+
+  migrateDailyTokenUsageV15: `
+    ALTER TABLE daily_token_usage DROP COLUMN total_tokens;
   `,
 
   getDailyTokenUsageRange: `

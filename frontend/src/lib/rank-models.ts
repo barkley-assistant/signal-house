@@ -3,6 +3,7 @@ export interface ModelUsageEntry {
   messages: number;
   inputTokens: number | null;
   outputTokens: number | null;
+  tokensReasoning: number | null;
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   cost: number | null;
@@ -26,7 +27,11 @@ function sumOrNull(values: (number | null)[]): number | null {
 }
 
 export function totalTokens(entry: ModelUsageEntry): number {
-  return (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0);
+  return (entry.inputTokens ?? 0)
+    + (entry.outputTokens ?? 0)
+    + (entry.tokensReasoning ?? 0)
+    + (entry.cacheReadTokens ?? 0)
+    + (entry.cacheWriteTokens ?? 0);
 }
 
 /**
@@ -85,6 +90,7 @@ export function rankModelUsage(entries: ModelUsageEntry[]): RankedModelEntry[] {
       messages: otherMessages,
       inputTokens: sumOrNull(rest.map((e) => e.inputTokens)),
       outputTokens: sumOrNull(rest.map((e) => e.outputTokens)),
+      tokensReasoning: sumOrNull(rest.map((e) => e.tokensReasoning)),
       cacheReadTokens: sumOrNull(rest.map((e) => e.cacheReadTokens)),
       cacheWriteTokens: sumOrNull(rest.map((e) => e.cacheWriteTokens)),
       cost: sumOrNull(rest.map((e) => e.cost)),

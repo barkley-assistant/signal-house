@@ -175,19 +175,20 @@ describe('maybeCollectDailyTokenUsage', () => {
   it('handles model breakdown mapping correctly', async () => {
     mocks.mockQuerySessionsByDay.mockReturnValue([makeAgg('2026-06-02')])
     mocks.mockQueryModelBreakdown.mockReturnValue([
-      { modelName: 'model-a', sessions: 3, messages: 12, inputTokens: 100, outputTokens: 50, cacheReadTokens: 20, cacheWriteTokens: 5, cost: 0.1 },
+      { modelName: 'model-a', sessions: 3, messages: 12, inputTokens: 100, outputTokens: 50, reasoningTokens: 17, cacheReadTokens: 20, cacheWriteTokens: 5, cost: 0.1 },
     ])
 
     await maybeCollectDailyTokenUsage()
 
     expect(mocks.mockUpsertDailyTokenUsage).toHaveBeenCalledTimes(1)
-    const inserted = mocks.mockUpsertDailyTokenUsage.mock.calls[0]![0] as { modelUsage: Array<{ modelName: string; messages: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; cost: number }> }
+    const inserted = mocks.mockUpsertDailyTokenUsage.mock.calls[0]![0] as { modelUsage: Array<{ modelName: string; messages: number; inputTokens: number; outputTokens: number; tokensReasoning: number; cacheReadTokens: number; cacheWriteTokens: number; cost: number }> }
     expect(inserted.modelUsage).toEqual([
       {
         modelName: 'model-a',
         messages: 12,
         inputTokens: 100,
         outputTokens: 50,
+        tokensReasoning: 17,
         cacheReadTokens: 20,
         cacheWriteTokens: 5,
         cost: 0.1,
@@ -208,5 +209,17 @@ describe('maybeCollectDailyTokenUsage', () => {
     expect(inserted.totalMessages).toBe(7)
     expect(inserted.totalTokens).toBe(100 + 50 + 10 + 20 + 5)
     expect(inserted.rawJson).toBeNull()
+  })
+
+  it('carries tokensReasoning through the modelUsage items in the upsert payload', async () => {
+    mocks.mockQuerySessionsByDay.mockReturnValue([makeAgg('2026-06-04')])
+    mocks.mockQueryModelBreakdown.mockReturnValue([
+      { modelName: 'model-a', sessions: 1, messages: 1, inputTokens: 10, outputTokens: 20, reasoningTokens: 7, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0 },
+    ])
+
+    await maybeCollectDailyTokenUsage()
+
+    const inserted = mocks.mockUpsertDailyTokenUsage.mock.calls[0]![0] as { modelUsage: Array<{ tokensReasoning: number | null }> }
+    expect(inserted.modelUsage[0]?.tokensReasoning).toBe(7)
   })
 })
