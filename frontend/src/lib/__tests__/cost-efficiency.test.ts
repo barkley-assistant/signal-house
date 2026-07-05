@@ -51,7 +51,7 @@ describe("aggregateCostRows", () => {
 
   it("preserves cost and messages when there is a single entry per model", () => {
     const rows = aggregateCostRows([
-      { modelName: "alpha", messages: 100, cost: 4.0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
+      { modelName: "alpha", messages: 100, cost: 4.0, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0].modelName).toBe("alpha");
@@ -62,8 +62,8 @@ describe("aggregateCostRows", () => {
 
   it("sums cost and messages across multiple rows for the same model", () => {
     const rows = aggregateCostRows([
-      { modelName: "alpha", messages: 100, cost: 4.0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
-      { modelName: "alpha", messages: 50, cost: 2.0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
+      { modelName: "alpha", messages: 100, cost: 4.0, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
+      { modelName: "alpha", messages: 50, cost: 2.0, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0].modelName).toBe("alpha");
@@ -74,7 +74,7 @@ describe("aggregateCostRows", () => {
 
   it("preserves null cost in the aggregated row", () => {
     const rows = aggregateCostRows([
-      { modelName: "alpha", messages: 100, cost: null, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
+      { modelName: "alpha", messages: 100, cost: null, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
     ]);
     expect(rows[0].cost).toBeNull();
     expect(rows[0].costPerMessage).toBeNull();
@@ -82,7 +82,7 @@ describe("aggregateCostRows", () => {
 
   it("sets costPerMessage to null when messages is zero", () => {
     const rows = aggregateCostRows([
-      { modelName: "alpha", messages: 0, cost: 5.0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
+      { modelName: "alpha", messages: 0, cost: 5.0, inputTokens: null, outputTokens: null, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null } satisfies ModelUsageEntry,
     ]);
     expect(rows[0].cost).toBe(5.0);
     expect(rows[0].messages).toBe(0);

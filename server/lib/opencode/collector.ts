@@ -22,7 +22,7 @@ export function collectTokenUsageSnapshot(): TokenUsageCollectorResult {
 
   const dailyAggs = querySessionsByDay(28)
   const totalSessions = dailyAggs.reduce((sum, d) => sum + d.sessions, 0)
-  const totalTokens = dailyAggs.reduce((sum, d) => sum + d.tokensInput + d.tokensOutput, 0)
+  const totalTokens = dailyAggs.reduce((sum, d) => sum + d.tokensInput + d.tokensOutput + d.tokensReasoning + d.tokensCacheRead + d.tokensCacheWrite, 0)
   const totalCost = dailyAggs.reduce((sum, d) => sum + d.cost, 0)
 
   const models = queryModelBreakdown(since)
@@ -31,6 +31,7 @@ export function collectTokenUsageSnapshot(): TokenUsageCollectorResult {
     messages: m.messages,
     inputTokens: m.inputTokens,
     outputTokens: m.outputTokens,
+    tokensReasoning: m.reasoningTokens,
     cacheReadTokens: m.cacheReadTokens,
     cacheWriteTokens: m.cacheWriteTokens,
     cost: m.cost,

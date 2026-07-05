@@ -43,6 +43,7 @@ export interface ModelBreakdownEntry {
   messages: number
   inputTokens: number
   outputTokens: number
+  reasoningTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
   cost: number
@@ -329,6 +330,7 @@ export function queryModelBreakdown(since: number, until?: number, config?: Open
       messages: 0,
       inputTokens: 0,
       outputTokens: 0,
+      reasoningTokens: 0,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
       cost: 0,
@@ -338,6 +340,7 @@ export function queryModelBreakdown(since: number, until?: number, config?: Open
     current.messages += messageCounts.get(row.id) ?? 0
     current.inputTokens += toNumber(row.tokens_input)
     current.outputTokens += toNumber(row.tokens_output)
+    current.reasoningTokens += toNumber(row.tokens_reasoning)
     current.cacheReadTokens += toNumber(row.tokens_cache_read)
     current.cacheWriteTokens += toNumber(row.tokens_cache_write)
     current.cost += toNumber(row.cost)

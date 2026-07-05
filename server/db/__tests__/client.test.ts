@@ -287,7 +287,7 @@ describe('migration: drop opencode_daily_usage', () => {
 
     // Verify schema version was bumped
     const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
-    expect(versionRow?.value).toBe('14')
+    expect(versionRow?.value).toBe('15')
     db.close()
   })
 
@@ -313,6 +313,75 @@ describe('migration: drop opencode_daily_usage', () => {
     // Table should be gone
     const tableRow = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='opencode_daily_usage'`).get()
     expect(tableRow).toBeUndefined()
+  })
+})
+
+describe('migration: v15 drops total_tokens from daily_token_usage', () => {
+  it('drops the total_tokens column when migrating from v14 to v15', async () => {
+    // Seed a v14 DB whose daily_token_usage still has the total_tokens column
+    // we want to drop.
+    const dbPath = join(tmpDir, 'metrics.db')
+    const seedDb = new Database(dbPath)
+    seedDb.exec(`
+      CREATE TABLE IF NOT EXISTS snapshots (id TEXT PRIMARY KEY, captured_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS aggregates (id TEXT PRIMARY KEY, type TEXT NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL, data TEXT NOT NULL, snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS latest_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE daily_token_usage (
+        date TEXT NOT NULL,
+        total_sessions INTEGER NOT NULL DEFAULT 0,
+        total_messages INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        total_cost REAL,
+        model_usage TEXT NOT NULL DEFAULT '[]',
+        raw_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (date)
+      );
+      INSERT INTO latest_state (key, value) VALUES ('schema_version', '14');
+      INSERT INTO daily_token_usage (date, model_usage)
+      VALUES ('2026-06-01', '[{"modelName":"m","messages":1,"inputTokens":100,"outputTokens":50,"tokensReasoning":0,"cacheReadTokens":10,"cacheWriteTokens":5,"cost":0.1}]');
+    `)
+    seedDb.close()
+
+    await initDb()
+
+    const db = new Database(dbPath)
+    const columns = db.prepare(`PRAGMA table_info(daily_token_usage)`).all() as Array<{ name: string }>
+    expect(columns.some(c => c.name === 'total_tokens')).toBe(false)
+
+    // The historical row's model_usage is preserved and the computed total
+    // matches the sum of all 5 token fields.
+    const row = db.prepare(`SELECT date, model_usage FROM daily_token_usage WHERE date = '2026-06-01'`).get() as { date: string; model_usage: string }
+    expect(row.date).toBe('2026-06-01')
+    const parsed = JSON.parse(row.model_usage)
+    expect(parsed[0].inputTokens).toBe(100)
+
+    const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
+    expect(versionRow?.value).toBe('15')
+    db.close()
+  })
+
+  it('is a no-op on fresh installs (the column was never created)', async () => {
+    const dbPath = join(tmpDir, 'metrics.db')
+    const seedDb = new Database(dbPath)
+    seedDb.exec(`
+      CREATE TABLE IF NOT EXISTS snapshots (id TEXT PRIMARY KEY, captured_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS aggregates (id TEXT PRIMARY KEY, type TEXT NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL, data TEXT NOT NULL, snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS latest_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+      INSERT INTO latest_state (key, value) VALUES ('schema_version', '14');
+    `)
+    seedDb.close()
+
+    // initDb should not throw even though daily_token_usage does not exist
+    // yet (createDailyTokenUsageTable will create it without total_tokens).
+    await initDb()
+
+    const db = new Database(dbPath)
+    const columns = db.prepare(`PRAGMA table_info(daily_token_usage)`).all() as Array<{ name: string }>
+    expect(columns.some(c => c.name === 'total_tokens')).toBe(false)
+    const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
+    expect(versionRow?.value).toBe('15')
+    db.close()
   })
 })
 

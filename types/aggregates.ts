@@ -61,6 +61,7 @@ export interface SessionUsageAggregate {
     messages: number
     inputTokens: number | null
     outputTokens: number | null
+    tokensReasoning: number | null
     cacheReadTokens: number | null
     cacheWriteTokens: number | null
     cost: number | null
