@@ -406,6 +406,41 @@ describe('repeated refreshes without unbounded duplicates', () => {
     expect(issue2.title).toBe('Second Issue')
     db.close()
   })
+
+  it('stores PRs from different repos with same number as separate rows', async () => {
+    await initDb()
+    const snapshot = makeSnapshot({
+      id: 'snap-1',
+      pullRequests: [
+        {
+          id: 'pr-83', title: 'PR from Repo A', state: 'open',
+          createdAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-02T10:00:00Z',
+          headSha: 'aaa', mergedAt: null, closedAt: null,
+          repo: 'org-a/repo', repoKey: 'github:org-a/repo', author: 'alice',
+          labels: [], additions: 10, deletions: 5, changedFiles: 2, url: 'https://github.com/org-a/repo/pull/83', ciStatus: null,
+        },
+        {
+          id: 'pr-83', title: 'PR from Repo B', state: 'merged',
+          createdAt: '2026-06-01T11:00:00Z', updatedAt: '2026-06-03T10:00:00Z',
+          headSha: 'bbb', mergedAt: '2026-06-03T10:00:00Z', closedAt: null,
+          repo: 'org-b/repo', repoKey: 'github:org-b/repo', author: 'bob',
+          labels: [], additions: 50, deletions: 20, changedFiles: 5, url: 'https://github.com/org-b/repo/pull/83', ciStatus: 'success',
+        },
+      ],
+    })
+    persistSnapshot(snapshot)
+
+    const db = new Database(join(tmpDir, 'metrics.db'))
+    const rows = db.prepare('SELECT id, repo_key, title FROM source_pull_requests ORDER BY repo_key').all() as Array<{ id: string; repo_key: string; title: string }>
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.id).toBe('pr-83')
+    expect(rows[0]!.repo_key).toBe('github:org-a/repo')
+    expect(rows[0]!.title).toBe('PR from Repo A')
+    expect(rows[1]!.id).toBe('pr-83')
+    expect(rows[1]!.repo_key).toBe('github:org-b/repo')
+    expect(rows[1]!.title).toBe('PR from Repo B')
+    db.close()
+  })
 })
 
 describe('failed refresh preserves previous good state', () => {
@@ -514,6 +549,17 @@ describe('empty source data handled', () => {
     expect(countRows(db, 'source_sessions')).toBe(0)
     expect(countRows(db, 'source_repositories')).toBe(0)
     expect(countRows(db, 'source_local_git')).toBe(0)
+    db.close()
+  })
+})
+
+describe('schema version', () => {
+  it('fresh install starts at schema version 14', async () => {
+    await initDb()
+    const db = new Database(join(tmpDir, 'metrics.db'))
+    const row = db.prepare("SELECT value FROM latest_state WHERE key = 'schema_version'").get() as { value: string } | undefined
+    expect(row).toBeDefined()
+    expect(Number(row!.value)).toBe(14)
     db.close()
   })
 })

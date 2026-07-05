@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 export const SQL = {
 
@@ -77,7 +77,7 @@ export const SQL = {
       changed_files    INTEGER,
       url              TEXT NOT NULL,
       ci_status        TEXT,
-      PRIMARY KEY (id)
+      PRIMARY KEY (repo_key, id)
     );
 
     CREATE TABLE IF NOT EXISTS source_workflow_runs (
@@ -157,6 +157,39 @@ export const SQL = {
       ON source_sessions(tool_name);
     CREATE INDEX IF NOT EXISTS idx_source_local_git_source
       ON source_local_git(source);
+  `,
+
+  migrateSourcePullRequestsV14: `
+    CREATE TABLE IF NOT EXISTS source_pull_requests_v2 (
+      id               TEXT NOT NULL,
+      last_snapshot_id TEXT NOT NULL,
+      title            TEXT NOT NULL,
+      state            TEXT NOT NULL,
+      created_at       TEXT NOT NULL,
+      updated_at       TEXT NOT NULL,
+      head_sha         TEXT,
+      merged_at        TEXT,
+      closed_at        TEXT,
+      repo             TEXT NOT NULL,
+      repo_key         TEXT NOT NULL,
+      author           TEXT NOT NULL,
+      labels           TEXT NOT NULL DEFAULT '[]',
+      additions        INTEGER,
+      deletions        INTEGER,
+      changed_files    INTEGER,
+      url              TEXT NOT NULL,
+      ci_status        TEXT,
+      PRIMARY KEY (repo_key, id)
+    );
+
+    INSERT OR IGNORE INTO source_pull_requests_v2 SELECT * FROM source_pull_requests;
+
+    DROP TABLE source_pull_requests;
+
+    ALTER TABLE source_pull_requests_v2 RENAME TO source_pull_requests;
+
+    CREATE INDEX IF NOT EXISTS idx_source_pull_requests_repo_key ON source_pull_requests(repo_key);
+    CREATE INDEX IF NOT EXISTS idx_source_pull_requests_state ON source_pull_requests(state);
   `,
 
   dropTables: `
@@ -384,7 +417,7 @@ export const SQL = {
   upsertPullRequest: `
     INSERT INTO source_pull_requests (id, last_snapshot_id, title, state, created_at, updated_at, head_sha, merged_at, closed_at, repo, repo_key, author, labels, additions, deletions, changed_files, url, ci_status)
     VALUES (@id, @snapshotId, @title, @state, @createdAt, @updatedAt, @headSha, @mergedAt, @closedAt, @repo, @repoKey, @author, @labels, @additions, @deletions, @changedFiles, @url, @ciStatus)
-    ON CONFLICT(id) DO UPDATE SET
+    ON CONFLICT(repo_key, id) DO UPDATE SET
       last_snapshot_id = excluded.last_snapshot_id,
       title = excluded.title,
       state = excluded.state,

@@ -287,7 +287,7 @@ describe('migration: drop opencode_daily_usage', () => {
 
     // Verify schema version was bumped
     const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
-    expect(versionRow?.value).toBe('13')
+    expect(versionRow?.value).toBe('14')
     db.close()
   })
 

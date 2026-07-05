@@ -160,6 +160,12 @@ function migrate(db: Db): void {
         db.exec(`ALTER TABLE daily_metrics DROP COLUMN median_cycle_time_days`)
         db.exec(`ALTER TABLE daily_metrics DROP COLUMN p95_cycle_time_days`)
       }
+
+      // Migrate source_pull_requests to PRIMARY KEY (repo_key, id) so PRs from
+      // different repos with the same id can coexist (issue #315).
+      if (current < 14) {
+        db.exec(SQL.migrateSourcePullRequestsV14)
+      }
     } else {
       // Destructive migration for old schemas (< v10). We need to drop and
       // recreate tables whose shape has changed over earlier versions.
