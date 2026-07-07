@@ -324,18 +324,25 @@ export function createOrchestrator(config: OrchestratorConfig) {
         metadata: {},
       }))
 
+      const deduplicatedRepos = dedupeRepositories(repositories)
+      const privacyMap: Record<string, boolean> = {}
+      for (const repo of deduplicatedRepos) {
+        privacyMap[repo.repoKey] = repo.isPrivate ?? false
+      }
+
       const snapshot: MetricSnapshot = {
         id: snapshotId,
         capturedAt,
         issues,
         pullRequests,
         workflowRuns,
-        repositories: dedupeRepositories(repositories),
+        repositories: deduplicatedRepos,
         sessions,
         localGit,
         errors: errorMetrics,
         aggregates: {
           ...aggregates,
+          repositoryPrivacy: { privacyMap },
           computedAt: capturedAt,
         },
         metadata: {

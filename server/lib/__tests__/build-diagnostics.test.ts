@@ -33,11 +33,14 @@ describe('buildDiagnostics — private repo filtering', () => {
         makeLocalRepo({ repoKey: 'local:/gamma', repoName: 'gamma', githubOwner: 'acme', githubRepo: 'gamma' }),
       ],
       repositories: [
-        makeRepository({ repoKey: 'github:acme/alpha', githubOwner: 'acme', githubRepo: 'alpha', isPrivate: false }),
-        makeRepository({ repoKey: 'github:acme/beta', githubOwner: 'acme', githubRepo: 'beta', isPrivate: true }),
-        makeRepository({ repoKey: 'github:acme/gamma', githubOwner: 'acme', githubRepo: 'gamma', isPrivate: false }),
+        makeRepository({ repoKey: 'github:acme/alpha', githubOwner: 'acme', githubRepo: 'alpha' }),
+        makeRepository({ repoKey: 'github:acme/beta', githubOwner: 'acme', githubRepo: 'beta' }),
+        makeRepository({ repoKey: 'github:acme/gamma', githubOwner: 'acme', githubRepo: 'gamma' }),
       ],
     })
+    snapshot.aggregates!.repositoryPrivacy = {
+      privacyMap: { 'github:acme/alpha': false, 'github:acme/beta': true, 'github:acme/gamma': false },
+    }
 
     const result = buildDiagnostics(state, snapshot, true)
 
@@ -54,11 +57,14 @@ describe('buildDiagnostics — private repo filtering', () => {
         makeLocalRepo({ repoKey: 'local:/gamma', repoName: 'gamma', githubOwner: 'acme', githubRepo: 'gamma' }),
       ],
       repositories: [
-        makeRepository({ repoKey: 'github:acme/alpha', githubOwner: 'acme', githubRepo: 'alpha', isPrivate: false }),
-        makeRepository({ repoKey: 'github:acme/beta', githubOwner: 'acme', githubRepo: 'beta', isPrivate: true }),
-        makeRepository({ repoKey: 'github:acme/gamma', githubOwner: 'acme', githubRepo: 'gamma', isPrivate: false }),
+        makeRepository({ repoKey: 'github:acme/alpha', githubOwner: 'acme', githubRepo: 'alpha' }),
+        makeRepository({ repoKey: 'github:acme/beta', githubOwner: 'acme', githubRepo: 'beta' }),
+        makeRepository({ repoKey: 'github:acme/gamma', githubOwner: 'acme', githubRepo: 'gamma' }),
       ],
     })
+    snapshot.aggregates!.repositoryPrivacy = {
+      privacyMap: { 'github:acme/alpha': false, 'github:acme/beta': true, 'github:acme/gamma': false },
+    }
 
     const result = buildDiagnostics(state, snapshot, false)
 
@@ -74,9 +80,12 @@ describe('buildDiagnostics — private repo filtering', () => {
         makeLocalRepo({ repoKey: 'local:/orphan', repoName: 'orphan', githubOwner: null, githubRepo: null }),
       ],
       repositories: [
-        makeRepository({ repoKey: 'github:acme/other', githubOwner: 'acme', githubRepo: 'other', isPrivate: true }),
+        makeRepository({ repoKey: 'github:acme/other', githubOwner: 'acme', githubRepo: 'other' }),
       ],
     })
+    snapshot.aggregates!.repositoryPrivacy = {
+      privacyMap: { 'github:acme/other': true },
+    }
 
     const result = buildDiagnostics(state, snapshot, false)
 
@@ -90,9 +99,12 @@ describe('buildDiagnostics — private repo filtering', () => {
     const snapshot = makeSnapshot({
       localGit: [],
       repositories: [
-        makeRepository({ repoKey: 'github:acme/secret', githubOwner: 'acme', githubRepo: 'secret', isPrivate: true }),
+        makeRepository({ repoKey: 'github:acme/secret', githubOwner: 'acme', githubRepo: 'secret' }),
       ],
     })
+    snapshot.aggregates!.repositoryPrivacy = {
+      privacyMap: { 'github:acme/secret': true },
+    }
 
     const hiddenResult = buildDiagnostics(state, snapshot, false)
     const shownResult = buildDiagnostics(state, snapshot, true)

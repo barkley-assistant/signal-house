@@ -3,7 +3,7 @@ import { getLatestState, getDailyMetricsRange, getDailyTokenUsageRange } from ".
 import { buildDashboardWindow } from "../../../../../server/lib/dashboard-state";
 import { getDashboardWindowDays, getShowPrivateRepoItems } from "../../../../../server/lib/runtime-config";
 import { ensureDb } from "../_lib/ensure-db";
-import type { DashboardAttentionItem, DashboardStateResponse, IssueMetric, PullRequestMetric, RepositoryIdentity } from "@/types";
+import type { DashboardAttentionItem, DashboardStateResponse, IssueMetric, PullRequestMetric } from "@/types";
 
 const STALE_THRESHOLD_DAYS_FALLBACK = 14;
 
@@ -11,18 +11,6 @@ function daysSince(dateStr: string, nowMs: number): number {
   const updated = new Date(dateStr).getTime();
   if (Number.isNaN(updated)) return 0;
   return Math.max(0, Math.floor((nowMs - updated) / 86_400_000));
-}
-
-function buildPrivateRepoKeySet(
-  repositories: RepositoryIdentity[],
-): Set<string> {
-  const keys = new Set<string>();
-  for (const repo of repositories) {
-    if (repo.isPrivate === true) {
-      keys.add(repo.repoKey);
-    }
-  }
-  return keys;
 }
 
 function buildAttentionItems(
@@ -115,7 +103,11 @@ export async function GET() {
 
     const privateRepoKeys = getShowPrivateRepoItems()
       ? new Set<string>()
-      : buildPrivateRepoKeySet(state.snapshot?.repositories ?? []);
+      : new Set<string>(
+          Object.entries(state.snapshot?.aggregates?.repositoryPrivacy?.privacyMap ?? {})
+            .filter(([, isPrivate]) => isPrivate)
+            .map(([repoKey]) => repoKey),
+        );
 
     const body: DashboardStateResponse = {
       window: {

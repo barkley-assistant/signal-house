@@ -282,9 +282,12 @@ describe("GET /api/state", () => {
   it("hides private repo issues from the attention queue by default", async () => {
     const state = makeLatestState();
     state.snapshot!.repositories = [
-      { repoKey: "github:demo/repo", name: "demo/repo", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "repo", source: "github", isPrivate: false },
-      { repoKey: "github:demo/secret", name: "demo/secret", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "secret", source: "github", isPrivate: true },
+      { repoKey: "github:demo/repo", name: "demo/repo", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "repo", source: "github" },
+      { repoKey: "github:demo/secret", name: "demo/secret", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "secret", source: "github" },
     ];
+    state.snapshot!.aggregates.repositoryPrivacy = {
+      privacyMap: { "github:demo/repo": false, "github:demo/secret": true },
+    };
     state.snapshot!.issues = [
       {
         id: "issue-1",
@@ -355,9 +358,12 @@ describe("GET /api/state", () => {
   it("includes private repo issues when SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS=true", async () => {
     const state = makeLatestState();
     state.snapshot!.repositories = [
-      { repoKey: "github:demo/repo", name: "demo/repo", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "repo", source: "github", isPrivate: false },
-      { repoKey: "github:demo/secret", name: "demo/secret", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "secret", source: "github", isPrivate: true },
+      { repoKey: "github:demo/repo", name: "demo/repo", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "repo", source: "github" },
+      { repoKey: "github:demo/secret", name: "demo/secret", localPath: null, remoteUrl: null, githubOwner: "demo", githubRepo: "secret", source: "github" },
     ];
+    state.snapshot!.aggregates.repositoryPrivacy = {
+      privacyMap: { "github:demo/repo": false, "github:demo/secret": true },
+    };
     state.snapshot!.issues = [
       {
         id: "issue-1",

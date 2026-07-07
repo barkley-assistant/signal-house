@@ -6,7 +6,7 @@ import { getBooleanEnv } from '../lib/env'
 import { buildDiagnostics } from '../lib/build-diagnostics'
 import { getRefreshHistoryLimit, getStaleThresholdMs, getRetentionConfig, getShowPrivateRepoItems } from '../lib/runtime-config'
 import type { MetricSnapshot, LatestState, RefreshRunRecord, RefreshRunState, RefreshSourceHealth, RefreshRunStatus, SourceDiagnostics } from '../../types/snapshot'
-import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate, TokenUsageAggregate } from '../../types/aggregates'
+import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate, TokenUsageAggregate, RepositoryPrivacyAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
 import type { TokenUsageRow } from '../../types/opencode'
 import type { DailyTokenUsageRow, DailyTokenUsageInsert } from '../../types/daily-token-usage'
@@ -665,6 +665,9 @@ function upsertAggregatesFromSnapshot(snapshot: MetricSnapshot): void {
   if (snapshot.aggregates.tokenUsage) {
     aggEntries.push({ type: 'tokenUsage', data: snapshot.aggregates.tokenUsage })
   }
+  if (snapshot.aggregates.repositoryPrivacy) {
+    aggEntries.push({ type: 'repositoryPrivacy', data: snapshot.aggregates.repositoryPrivacy })
+  }
   for (const { type, data } of aggEntries) {
     if (data !== null) {
       insertAggregate(
@@ -875,6 +878,7 @@ function readAggregatesForSnapshot(snapshotId: string): DashboardAggregates | nu
   let staleWork: StaleWorkAggregate | null = null
   let sessionUsage: SessionUsageAggregate | null = null
   let tokenUsage: TokenUsageAggregate | null = null
+  let repositoryPrivacy: RepositoryPrivacyAggregate | null = null
 
   for (const row of rows) {
     const data = JSON.parse(row.data)
@@ -885,6 +889,7 @@ function readAggregatesForSnapshot(snapshotId: string): DashboardAggregates | nu
       case 'staleWork': staleWork = data as StaleWorkAggregate; break
       case 'sessionUsage': sessionUsage = data as SessionUsageAggregate; break
       case 'tokenUsage': tokenUsage = data as TokenUsageAggregate; break
+      case 'repositoryPrivacy': repositoryPrivacy = data as RepositoryPrivacyAggregate; break
     }
   }
 
@@ -897,6 +902,7 @@ function readAggregatesForSnapshot(snapshotId: string): DashboardAggregates | nu
     staleWork,
     sessionUsage,
     tokenUsage,
+    repositoryPrivacy,
     computedAt: staleWork.asOf,
   }
 }

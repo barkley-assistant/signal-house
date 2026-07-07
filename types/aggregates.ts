@@ -84,6 +84,10 @@ export interface TokenUsageAggregate {
   collectedAt: string
 }
 
+export interface RepositoryPrivacyAggregate {
+  privacyMap: Record<string, boolean>
+}
+
 export interface DashboardAggregates {
   throughput: ThroughputAggregate
   cycleTime: CycleTimeAggregate | null
@@ -91,7 +95,8 @@ export interface DashboardAggregates {
   staleWork: StaleWorkAggregate
   sessionUsage: SessionUsageAggregate | null
   tokenUsage?: TokenUsageAggregate | null
+  repositoryPrivacy?: RepositoryPrivacyAggregate | null
   computedAt: string
 }
 
-export type AggregateType = 'throughput' | 'cycleTime' | 'ci' | 'staleWork' | 'sessionUsage' | 'tokenUsage'
+export type AggregateType = 'throughput' | 'cycleTime' | 'ci' | 'staleWork' | 'sessionUsage' | 'tokenUsage' | 'repositoryPrivacy'
