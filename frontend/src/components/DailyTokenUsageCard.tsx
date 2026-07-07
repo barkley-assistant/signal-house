@@ -57,16 +57,14 @@ interface FilledDay {
 
 function buildDailyTokenUsageOption(
   filled: FilledDay[],
-): EChartsOption | null {
-  const nonNull = filled.filter((d) => !d.isGap && d.row);
-  if (nonNull.length === 0) return null;
+): EChartsOption {
   const labels = filled.map((d) => formatDayLabel(d.date));
-  const tokens = filled.map((d) => (d.isGap ? null : d.row!.totalTokens));
+  const tokens = filled.map((d) => (d.isGap ? 0 : d.row!.totalTokens));
   const cost = filled.map((d) =>
-    d.isGap ? null : d.row!.totalCost,
+    d.isGap ? 0 : d.row!.totalCost,
   );
   const sessions = filled.map((d) =>
-    d.isGap ? null : d.row!.totalSessions,
+    d.isGap ? 0 : d.row!.totalSessions,
   );
   return {
     grid: { top: 16, right: 52, bottom: 24, left: 40, containLabel: false },
@@ -189,21 +187,14 @@ export function DailyTokenUsageCard({
     [spine, rowByDate],
   );
 
-  const availableDays = useMemo(
-    () => rows.map((r) => r.date).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-    [rows],
-  );
-
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const effectiveSelectedDay =
-    selectedDay ?? availableDays[availableDays.length - 1] ?? null;
+    selectedDay ?? spine[spine.length - 1] ?? null;
   const selectedRow =
     effectiveSelectedDay != null ? rowByDate.get(effectiveSelectedDay) ?? null : null;
 
-  const option = useMemo<EChartsOption | null>(() => {
-    const base = buildDailyTokenUsageOption(filled);
-    if (!base) return null;
-    return { ...theme, ...base };
+  const option = useMemo<EChartsOption>(() => {
+    return { ...theme, ...buildDailyTokenUsageOption(filled) };
   }, [filled, theme]);
 
   const isEmpty = rows.length === 0;
@@ -243,38 +234,42 @@ export function DailyTokenUsageCard({
             <Skeleton className="h-[220px] w-full bg-divider" />
             <Skeleton className="h-8 w-2/3 bg-divider" />
           </div>
-        ) : isEmpty || !option ? (
-          <div className="flex h-[220px] items-center justify-center rounded-lg border border-dashed border-divider">
-            <p className="px-2 text-center text-xs text-text-muted">
-              No daily token usage data in this window
-            </p>
-          </div>
         ) : (
           <>
-            <div className="h-[220px]">
-              <TrendEChart option={option} height={220} />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4">
-              {LEGEND.map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center gap-1.5 text-xs text-text-muted"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="inline-block size-2 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  {item.label}
+            {isEmpty ? (
+              <div className="flex h-[220px] items-center justify-center rounded-lg border border-dashed border-divider">
+                <p className="px-2 text-center text-xs text-text-muted">
+                  No daily token usage data in this window
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="h-[220px]">
+                  <TrendEChart option={option} height={220} />
                 </div>
-              ))}
-            </div>
 
-            {availableDays.length > 0 && (
+                <div className="flex flex-wrap items-center gap-4">
+                  {LEGEND.map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center gap-1.5 text-xs text-text-muted"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="inline-block size-2 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      {item.label}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {spine.length > 0 && (
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-1">
-                  {availableDays.map((day) => {
+                  {spine.map((day) => {
                     const active = effectiveSelectedDay === day;
                     return (
                       <button
@@ -296,7 +291,11 @@ export function DailyTokenUsageCard({
                 </div>
 
                 <div>
-                  {sortedModelUsage.length > 0 ? (
+                  {!effectiveSelectedDay || !selectedRow ? (
+                    <p className="text-xs text-text-muted">
+                      No session data collected for this day.
+                    </p>
+                  ) : sortedModelUsage.length > 0 ? (
                     <div>
                       <div className="hidden sm:block">
                         <div role="table" className="w-full">
