@@ -1,15 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DailyTokenUsageRow } from "@/types";
 import { TrendEChart } from "@/components/TrendEChart";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { useEChartsTheme } from "@/hooks/useEChartsTheme";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EChartsOption } from "echarts-for-react";
-import { cn } from "@/lib/utils";
+import type { EChartsInstance } from "echarts-for-react";
 import { formatCost } from "@/lib/format-cost";
 import { formatCompactNumber, formatNumber } from "../../../utils/format";
+import { useReducedMotion } from "framer-motion";
+import { lastNonGapDay } from "./daily-token-usage-utils";
 
 interface DailyTokenUsageCardProps {
   rows: DailyTokenUsageRow[];
@@ -166,6 +169,7 @@ export function DailyTokenUsageCard({
   error,
 }: DailyTokenUsageCardProps) {
   const theme = useEChartsTheme();
+  const prefersReducedMotion = useReducedMotion();
 
   const rowByDate = useMemo(() => {
     const map = new Map<string, DailyTokenUsageRow>();
@@ -187,17 +191,113 @@ export function DailyTokenUsageCard({
     [spine, rowByDate],
   );
 
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Split state: pinnedDay (click-to-lock) and hoveredDay (ephemeral preview)
+  const [pinnedDay, setPinnedDay] = useState<string | null>(null);
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+
+  // Effective selection: pinned ?? hovered ?? latest day with data
   const effectiveSelectedDay =
-    selectedDay ?? spine[spine.length - 1] ?? null;
+    pinnedDay ?? hoveredDay ?? lastNonGapDay(spine, rows);
   const selectedRow =
-    effectiveSelectedDay != null ? rowByDate.get(effectiveSelectedDay) ?? null : null;
+    effectiveSelectedDay != null
+      ? rowByDate.get(effectiveSelectedDay) ?? null
+      : null;
 
   const option = useMemo<EChartsOption>(() => {
     return { ...theme, ...buildDailyTokenUsageOption(filled) };
   }, [filled, theme]);
 
   const isEmpty = rows.length === 0;
+
+  // --- ECharts event binding ---
+  const [chartInstance, setChartInstance] = useState<EChartsInstance | null>(
+    null,
+  );
+
+  const handleChartReady = useCallback((instance: EChartsInstance) => {
+    setChartInstance(instance);
+  }, []);
+
+  useEffect(() => {
+    if (!chartInstance) return;
+
+    const handleMouseover = (params: { dataIndex?: number }) => {
+      if (
+        params.dataIndex != null &&
+        params.dataIndex >= 0 &&
+        params.dataIndex < spine.length
+      ) {
+        setHoveredDay(spine[params.dataIndex]);
+      }
+    };
+
+    const handleMouseout = () => {
+      setHoveredDay(null);
+    };
+
+    const handleClick = (params: { dataIndex?: number }) => {
+      if (
+        params.dataIndex == null ||
+        params.dataIndex < 0 ||
+        params.dataIndex >= spine.length
+      ) {
+        // Click on empty chart area → unpin
+        setPinnedDay(null);
+      } else {
+        const date = spine[params.dataIndex];
+        setPinnedDay((prev) => (prev === date ? null : date));
+      }
+    };
+
+    chartInstance.on("mouseover", handleMouseover);
+    chartInstance.on("mouseout", handleMouseout);
+    chartInstance.on("click", handleClick);
+
+    return () => {
+      chartInstance.off(
+        "mouseover",
+        handleMouseover as (...args: unknown[]) => void,
+      );
+      chartInstance.off(
+        "mouseout",
+        handleMouseout as (...args: unknown[]) => void,
+      );
+      chartInstance.off(
+        "click",
+        handleClick as (...args: unknown[]) => void,
+      );
+    };
+  }, [chartInstance, spine]);
+
+  // --- Keyboard navigation ---
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (spine.length === 0) return;
+
+      const currentDate =
+        pinnedDay ?? hoveredDay ?? lastNonGapDay(spine, rows);
+      const currentIndex = currentDate ? spine.indexOf(currentDate) : -1;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const nextIndex = currentIndex > 0 ? currentIndex - 1 : 0;
+        setHoveredDay(spine[nextIndex]);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const nextIndex =
+          currentIndex < spine.length - 1
+            ? currentIndex + 1
+            : spine.length - 1;
+        setHoveredDay(spine[nextIndex]);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (currentDate) {
+          setPinnedDay((prev) => (prev === currentDate ? null : currentDate));
+        }
+      }
+    },
+    [spine, pinnedDay, hoveredDay, rows],
+  );
 
   const sortedModelUsage = useMemo(() => {
     if (!selectedRow) return [];
@@ -212,6 +312,8 @@ export function DailyTokenUsageCard({
     () => Math.max(...sortedModelUsage.map((m) => m.cost ?? 0), 0),
     [sortedModelUsage],
   );
+
+  const animDuration = prefersReducedMotion ? 0 : 0.18;
 
   return (
     <Card className="border-card-border bg-card-bg">
@@ -244,8 +346,16 @@ export function DailyTokenUsageCard({
               </div>
             ) : (
               <>
-                <div className="h-[220px]">
-                  <TrendEChart option={option} height={220} />
+                <div
+                  className="h-[220px]"
+                  tabIndex={0}
+                  onKeyDown={handleKeyDown}
+                >
+                  <TrendEChart
+                    option={option}
+                    height={220}
+                    onReady={handleChartReady}
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4">
@@ -263,40 +373,17 @@ export function DailyTokenUsageCard({
                     </div>
                   ))}
                 </div>
-              </>
-            )}
 
-            {spine.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-1">
-                  {spine.map((day) => {
-                    const active = effectiveSelectedDay === day;
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => setSelectedDay(day)}
-                        aria-pressed={active}
-                        className={cn(
-                          "cursor-pointer rounded px-2 py-1 text-xs tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          active
-                            ? "bg-accent-primary text-primary-foreground"
-                            : "border border-card-border text-text-muted hover:bg-card-hover",
-                        )}
-                      >
-                        {formatDayLabel(day)}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Date tab strip removed — replaced by hover/pin on chart */}
 
                 <div>
                   {!effectiveSelectedDay || !selectedRow ? (
                     <p className="text-xs text-text-muted">
-                      No session data collected for this day.
+                      No session data collected for this day
                     </p>
                   ) : sortedModelUsage.length > 0 ? (
                     <div>
+                      {/* Desktop table */}
                       <div className="hidden sm:block">
                         <div role="table" className="w-full">
                           <div
@@ -304,12 +391,24 @@ export function DailyTokenUsageCard({
                             className="grid grid-cols-[2fr_repeat(5,1fr)_minmax(100px,1fr)] gap-x-3 px-3 py-1.5 text-[10px] uppercase tracking-[0.06em] text-text-muted"
                           >
                             <div role="columnheader">Model</div>
-                            <div role="columnheader" className="text-right">Input</div>
-                            <div role="columnheader" className="text-right">Output</div>
-                            <div role="columnheader" className="text-right">Cache R</div>
-                            <div role="columnheader" className="text-right">Cache W</div>
-                            <div role="columnheader" className="text-right">Msgs</div>
-                            <div role="columnheader" className="text-right">Cost</div>
+                            <div role="columnheader" className="text-right">
+                              Input
+                            </div>
+                            <div role="columnheader" className="text-right">
+                              Output
+                            </div>
+                            <div role="columnheader" className="text-right">
+                              Cache R
+                            </div>
+                            <div role="columnheader" className="text-right">
+                              Cache W
+                            </div>
+                            <div role="columnheader" className="text-right">
+                              Msgs
+                            </div>
+                            <div role="columnheader" className="text-right">
+                              Cost
+                            </div>
                           </div>
                           {sortedModelUsage.map((m) => (
                             <div
@@ -323,17 +422,31 @@ export function DailyTokenUsageCard({
                               >
                                 {m.modelName}
                               </div>
-                              {([m.inputTokens, m.outputTokens, m.cacheReadTokens, m.cacheWriteTokens, m.messages] as const).map(
-                                (val, i) => (
-                                  <div
-                                    key={i}
-                                    role="cell"
-                                    className="text-right text-xs font-mono tabular-nums text-text-secondary self-center"
-                                  >
-                                    {formatNumber(val)}
-                                  </div>
-                                ),
-                              )}
+                              {(
+                                [
+                                  m.inputTokens,
+                                  m.outputTokens,
+                                  m.cacheReadTokens,
+                                  m.cacheWriteTokens,
+                                  m.messages,
+                                ] as const
+                              ).map((val, i) => (
+                                <div
+                                  key={i}
+                                  role="cell"
+                                  className="text-right text-xs font-mono tabular-nums text-text-secondary self-center"
+                                >
+                                  {val != null ? (
+                                    <AnimatedNumber
+                                      value={val}
+                                      format={formatNumber}
+                                      duration={animDuration}
+                                    />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </div>
+                              ))}
                               <div
                                 role="cell"
                                 className="text-right self-center"
@@ -342,11 +455,24 @@ export function DailyTokenUsageCard({
                                   {maxCost > 0 && m.cost != null && (
                                     <span
                                       className="block h-1.5 rounded-full bg-accent-primary/40"
-                                      style={{ width: `${Math.max(2, (m.cost / maxCost) * 40)}px` }}
+                                      style={{
+                                        width: `${Math.max(2, (m.cost / maxCost) * 40)}px`,
+                                        transition: prefersReducedMotion
+                                          ? "none"
+                                          : "width 200ms ease",
+                                      }}
                                     />
                                   )}
                                   <span className="text-xs font-mono tabular-nums text-accent-primary">
-                                    {formatCost(m.cost)}
+                                    {m.cost != null ? (
+                                      <AnimatedNumber
+                                        value={m.cost}
+                                        format={formatCost}
+                                        duration={animDuration}
+                                      />
+                                    ) : (
+                                      "—"
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -355,6 +481,7 @@ export function DailyTokenUsageCard({
                         </div>
                       </div>
 
+                      {/* Mobile cards */}
                       <div className="space-y-2 sm:hidden">
                         {sortedModelUsage.map((m) => (
                           <div
@@ -369,27 +496,87 @@ export function DailyTokenUsageCard({
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-text-muted">Input</span>
-                                <span className="font-mono tabular-nums text-text-secondary">{formatNumber(m.inputTokens)}</span>
+                                <span className="font-mono tabular-nums text-text-secondary">
+                                  {m.inputTokens != null ? (
+                                    <AnimatedNumber
+                                      value={m.inputTokens}
+                                      format={formatNumber}
+                                      duration={animDuration}
+                                    />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </span>
                               </div>
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-text-muted">Output</span>
-                                <span className="font-mono tabular-nums text-text-secondary">{formatNumber(m.outputTokens)}</span>
+                                <span className="font-mono tabular-nums text-text-secondary">
+                                  {m.outputTokens != null ? (
+                                    <AnimatedNumber
+                                      value={m.outputTokens}
+                                      format={formatNumber}
+                                      duration={animDuration}
+                                    />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </span>
                               </div>
                               <div className="flex items-center justify-between text-xs">
-                                <span className="text-text-muted">Cache R</span>
-                                <span className="font-mono tabular-nums text-text-secondary">{formatNumber(m.cacheReadTokens)}</span>
+                                <span className="text-text-muted">
+                                  Cache R
+                                </span>
+                                <span className="font-mono tabular-nums text-text-secondary">
+                                  {m.cacheReadTokens != null ? (
+                                    <AnimatedNumber
+                                      value={m.cacheReadTokens}
+                                      format={formatNumber}
+                                      duration={animDuration}
+                                    />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </span>
                               </div>
                               <div className="flex items-center justify-between text-xs">
-                                <span className="text-text-muted">Cache W</span>
-                                <span className="font-mono tabular-nums text-text-secondary">{formatNumber(m.cacheWriteTokens)}</span>
+                                <span className="text-text-muted">
+                                  Cache W
+                                </span>
+                                <span className="font-mono tabular-nums text-text-secondary">
+                                  {m.cacheWriteTokens != null ? (
+                                    <AnimatedNumber
+                                      value={m.cacheWriteTokens}
+                                      format={formatNumber}
+                                      duration={animDuration}
+                                    />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </span>
                               </div>
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-text-muted">Msgs</span>
-                                <span className="font-mono tabular-nums text-text-secondary">{formatNumber(m.messages)}</span>
+                                <span className="font-mono tabular-nums text-text-secondary">
+                                  <AnimatedNumber
+                                    value={m.messages}
+                                    format={formatNumber}
+                                    duration={animDuration}
+                                  />
+                                </span>
                               </div>
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-text-muted">Cost</span>
-                                <span className="font-mono tabular-nums text-accent-primary">{formatCost(m.cost)}</span>
+                                <span className="font-mono tabular-nums text-accent-primary">
+                                  {m.cost != null ? (
+                                    <AnimatedNumber
+                                      value={m.cost}
+                                      format={formatCost}
+                                      duration={animDuration}
+                                    />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -402,7 +589,7 @@ export function DailyTokenUsageCard({
                     </p>
                   )}
                 </div>
-              </div>
+              </>
             )}
           </>
         )}
