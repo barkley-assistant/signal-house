@@ -1,6 +1,6 @@
 # Signal House
 
-Signal House is a local operator dashboard for Clawd/OpenClaw. It answers one practical question: is work actually healthy, or just looking busy?
+Signal House is a local operator dashboard for AI coding agents. It answers one practical question: is work actually healthy, or just looking busy?
 
 It is not a generic analytics platform. It is a small local dashboard for workstream health, stale work, PR progress, CI status, refresh health, and local session usage where available.
 
@@ -14,7 +14,7 @@ Signal House is built around operator questions:
 * Are issues or PRs stale?
 * Are PRs getting merged?
 * Is CI passing or failing?
-* Are local OpenCode/OpenClaw sessions being used?
+* Are local AI coding sessions being used?
 * Did the last refresh succeed?
 * Is displayed data fresh, stale, partial, or missing?
 
@@ -102,7 +102,7 @@ npm run build
 
 ## Configuration
 
-The service reads from `~/.config/clawd/signal-house.env`. Local dev can use a root `.env` file. Start from `.env.example` for the current variable list and safe placeholders.
+The service reads from `~/.config/signal-house/.env`. Local dev can use a root `.env` file. Start from `.env.example` for the current variable list and safe placeholders.
 
 Runtime defaults are centralized in `server/lib/runtime-config.ts`.
 

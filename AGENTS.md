@@ -1,6 +1,6 @@
 # Agent instructions
 
-This repository is worked on by AI coding agents through OpenCode/OpenCLaw.
+This repository is worked on by AI coding agents.
 
 Before making changes, read the relevant project docs and skill files.
 
