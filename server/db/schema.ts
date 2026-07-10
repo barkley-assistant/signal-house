@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 15
+export const SCHEMA_VERSION = 16
 
 export const SQL = {
 
@@ -241,20 +241,21 @@ export const SQL = {
   createDailyTokenUsageTable: `
     CREATE TABLE IF NOT EXISTS daily_token_usage (
       date             TEXT NOT NULL,
+      source           TEXT NOT NULL DEFAULT 'opencode',
       total_sessions   INTEGER NOT NULL DEFAULT 0,
       total_messages   INTEGER NOT NULL DEFAULT 0,
       total_cost       REAL,
       model_usage      TEXT NOT NULL DEFAULT '[]',
       raw_json         TEXT,
       created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-      PRIMARY KEY (date)
+      PRIMARY KEY (date, source)
     );
   `,
 
   upsertDailyTokenUsage: `
-    INSERT INTO daily_token_usage (date, total_sessions, total_messages, total_cost, model_usage, raw_json)
-    VALUES (@date, @totalSessions, @totalMessages, @totalCost, @modelUsage, @rawJson)
-    ON CONFLICT(date) DO UPDATE SET
+    INSERT INTO daily_token_usage (date, source, total_sessions, total_messages, total_cost, model_usage, raw_json)
+    VALUES (@date, @source, @totalSessions, @totalMessages, @totalCost, @modelUsage, @rawJson)
+    ON CONFLICT(date, source) DO UPDATE SET
       total_sessions = excluded.total_sessions,
       total_messages = excluded.total_messages,
       total_cost = excluded.total_cost,
@@ -266,9 +267,37 @@ export const SQL = {
     ALTER TABLE daily_token_usage DROP COLUMN total_tokens;
   `,
 
+  migrateDailyTokenUsageV16: `
+    ALTER TABLE daily_token_usage ADD COLUMN source TEXT NOT NULL DEFAULT 'opencode';
+
+    CREATE TABLE IF NOT EXISTS daily_token_usage_v16 (
+      date             TEXT NOT NULL,
+      source           TEXT NOT NULL DEFAULT 'opencode',
+      total_sessions   INTEGER NOT NULL DEFAULT 0,
+      total_messages   INTEGER NOT NULL DEFAULT 0,
+      total_cost       REAL,
+      model_usage      TEXT NOT NULL DEFAULT '[]',
+      raw_json         TEXT,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (date, source)
+    );
+
+    INSERT OR IGNORE INTO daily_token_usage_v16 SELECT date, source, total_sessions, total_messages, total_cost, model_usage, raw_json, created_at FROM daily_token_usage;
+
+    DROP TABLE daily_token_usage;
+
+    ALTER TABLE daily_token_usage_v16 RENAME TO daily_token_usage;
+  `,
+
   getDailyTokenUsageRange: `
     SELECT * FROM daily_token_usage
     WHERE date >= @fromDate AND date <= @toDate
+    ORDER BY date DESC;
+  `,
+
+  getDailyTokenUsageRangeBySource: `
+    SELECT * FROM daily_token_usage
+    WHERE date >= @fromDate AND date <= @toDate AND source = @source
     ORDER BY date DESC;
   `,
 

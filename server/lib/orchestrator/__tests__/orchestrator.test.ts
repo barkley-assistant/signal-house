@@ -37,6 +37,23 @@ jest.mock('../../opencode/collector', () => ({
   }),
 }))
 
+jest.mock('../../hermes/collector', () => ({
+  collectHermesTokenUsageSnapshot: jest.fn().mockReturnValue({
+    periodStart: '2026-05-22T12:00:00.000Z',
+    periodEnd: '2026-06-19T12:00:00.000Z',
+    source: 'hermesdb',
+    toolName: 'hermes-agent',
+    totalSessions: 0,
+    totalMessages: 0,
+    totalTokens: 0,
+    totalCost: null,
+    modelUsage: [],
+    rawJson: null,
+    collectedAt: '2026-06-19T12:00:00.000Z',
+    errors: [],
+  }),
+}))
+
 import { createCollector as mockGhCreate } from '../../github/collector'
 import { createLocalGitCollector as mockGitCreate } from '../../git/collector'
 import { createSessionCollector as mockSessionCreate } from '../../sessions/collector'
@@ -53,7 +70,7 @@ describe('createOrchestrator', () => {
 
     expect(result.snapshotId).toBeTruthy()
     expect(result.capturedAt).toBeTruthy()
-    expect(result.sources).toEqual(['tokenUsage'])
+    expect(result.sources).toEqual(['tokenUsage', 'hermesTokenUsage'])
     expect(result.errors).toHaveLength(0)
     expect(result.partialData).toBe(false)
     expect(db.persistSnapshot).toHaveBeenCalledTimes(1)

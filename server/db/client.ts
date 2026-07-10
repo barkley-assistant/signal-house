@@ -9,7 +9,7 @@ import type { MetricSnapshot, LatestState, RefreshRunRecord, RefreshRunState, Re
 import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate, TokenUsageAggregate, RepositoryPrivacyAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
 import type { TokenUsageRow } from '../../types/opencode'
-import type { DailyTokenUsageRow, DailyTokenUsageInsert } from '../../types/daily-token-usage'
+import type { DailyTokenUsageRow, DailyTokenUsageInsert, TokenUsageSource } from '../../types/daily-token-usage'
 import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryIdentity, SessionMetric, LocalGitRepoMetric } from '../../types/metrics'
 import { computeDailyMetrics } from '../lib/daily-metrics'
 
@@ -174,6 +174,15 @@ function migrate(db: Db): void {
         const dtuColumns = db.prepare(`PRAGMA table_info(daily_token_usage)`).all() as Array<{ name: string }>
         if (dtuColumns.some(c => c.name === 'total_tokens')) {
           db.exec(SQL.migrateDailyTokenUsageV15)
+        }
+      }
+
+      // Add source discriminator to daily_token_usage (issue #330).
+      // PK changes from (date) to (date, source). Non-destructive rebuild.
+      if (current < 16) {
+        const dtuColumnsV16 = db.prepare(`PRAGMA table_info(daily_token_usage)`).all() as Array<{ name: string }>
+        if (!dtuColumnsV16.some(c => c.name === 'source')) {
+          db.exec(SQL.migrateDailyTokenUsageV16)
         }
       }
     } else {
@@ -482,6 +491,7 @@ function rowToDailyTokenUsageRow(row: Record<string, unknown>): DailyTokenUsageR
   }, 0)
   return {
     date: String(row.date),
+    source: String(row.source ?? 'opencode') as TokenUsageSource,
     totalSessions: Number(row.total_sessions),
     totalMessages: Number(row.total_messages),
     totalTokens,
@@ -496,6 +506,7 @@ export function upsertDailyTokenUsage(row: DailyTokenUsageInsert): void {
   const db = getDb()
   db.prepare(SQL.upsertDailyTokenUsage).run({
     date: row.date,
+    source: row.source ?? 'opencode',
     totalSessions: row.totalSessions,
     totalMessages: row.totalMessages,
     totalCost: row.totalCost,
@@ -507,6 +518,12 @@ export function upsertDailyTokenUsage(row: DailyTokenUsageInsert): void {
 export function getDailyTokenUsageRange(fromDate: string, toDate: string): DailyTokenUsageRow[] {
   const db = getDb()
   const rows = db.prepare(SQL.getDailyTokenUsageRange).all({ fromDate, toDate }) as Record<string, unknown>[]
+  return rows.map(rowToDailyTokenUsageRow)
+}
+
+export function getDailyTokenUsageRangeForSource(fromDate: string, toDate: string, source: string): DailyTokenUsageRow[] {
+  const db = getDb()
+  const rows = db.prepare(SQL.getDailyTokenUsageRangeBySource).all({ fromDate, toDate, source }) as Record<string, unknown>[]
   return rows.map(rowToDailyTokenUsageRow)
 }
 

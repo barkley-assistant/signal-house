@@ -559,7 +559,7 @@ describe('schema version', () => {
     const db = new Database(join(tmpDir, 'metrics.db'))
     const row = db.prepare("SELECT value FROM latest_state WHERE key = 'schema_version'").get() as { value: string } | undefined
     expect(row).toBeDefined()
-    expect(Number(row!.value)).toBe(15)
+    expect(Number(row!.value)).toBe(16)
     db.close()
   })
 })

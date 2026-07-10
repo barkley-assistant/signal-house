@@ -17,6 +17,7 @@ import type { LocalGitRepoInfo } from '../git/types'
 import { deriveAll } from '../github/aggregates'
 import { collectWithConcurrency, createCollector as createGitHubCollector } from '../github/collector'
 import { collectTokenUsageSnapshot } from '../opencode/collector'
+import { collectHermesTokenUsageSnapshot } from '../hermes/collector'
 import { getRuntimeConfig } from '../runtime-config'
 import { createSessionCollector } from '../sessions/collector'
 import type { OrchestratorConfig, OrchestratorResult } from './types'
@@ -239,6 +240,30 @@ async function collectTokenUsage(): Promise<SourceTaskResult> {
   }
 }
 
+async function collectHermesTokenUsage(): Promise<SourceTaskResult> {
+  const tokenResult = collectHermesTokenUsageSnapshot()
+
+  return {
+    source: 'hermesTokenUsage',
+    tokenUsage: tokenResult.errors.length > 0
+      ? null
+      : {
+        periodStart: tokenResult.periodStart,
+        periodEnd: tokenResult.periodEnd,
+        source: tokenResult.source,
+        toolName: tokenResult.toolName,
+        totalSessions: tokenResult.totalSessions,
+        totalMessages: tokenResult.totalMessages,
+        totalTokens: tokenResult.totalTokens,
+        totalCost: tokenResult.totalCost,
+        modelUsage: tokenResult.modelUsage,
+        rawJson: tokenResult.rawJson,
+        collectedAt: tokenResult.collectedAt,
+      },
+    errors: tokenResult.errors,
+  }
+}
+
 export function createOrchestrator(config: OrchestratorConfig) {
   return {
     async collect(): Promise<OrchestratorResult> {
@@ -252,6 +277,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
         collectLocalGit(config),
         collectSessions(config),
         collectTokenUsage(),
+        collectHermesTokenUsage(),
       ])
 
       const allErrors: string[] = []

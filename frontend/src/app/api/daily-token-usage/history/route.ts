@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getDailyTokenUsageRange } from "../../../../../../server/db/client";
+import { getDailyTokenUsageRange, getDailyTokenUsageRangeForSource } from "../../../../../../server/db/client";
 import { ensureDb } from "../../_lib/ensure-db";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const VALID_SOURCES = new Set(['opencode', 'hermes', 'all']);
 
 function isParsableDate(value: string): boolean {
   const d = new Date(`${value}T00:00:00Z`);
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    const source = searchParams.get("source") ?? "all";
 
     if (!from || !to) {
       return NextResponse.json(
@@ -33,9 +35,21 @@ export async function GET(request: Request) {
         { status: 400 },
       );
     }
+    if (!VALID_SOURCES.has(source)) {
+      return NextResponse.json(
+        { error: `Invalid source '${source}'; expected opencode, hermes, or all` },
+        { status: 400 },
+      );
+    }
 
     await ensureDb();
-    const rows = getDailyTokenUsageRange(from, to);
+
+    let rows;
+    if (source === 'all') {
+      rows = getDailyTokenUsageRange(from, to);
+    } else {
+      rows = getDailyTokenUsageRangeForSource(from, to, source);
+    }
 
     return NextResponse.json(rows, {
       headers: {

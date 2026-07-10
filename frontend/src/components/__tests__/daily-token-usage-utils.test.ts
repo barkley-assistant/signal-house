@@ -4,6 +4,7 @@ import type { DailyTokenUsageRow } from "@/types";
 
 const makeRow = (date: string): DailyTokenUsageRow => ({
   date,
+  source: "opencode",
   totalSessions: 1,
   totalMessages: 5,
   totalTokens: 1000,

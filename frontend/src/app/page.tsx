@@ -25,6 +25,7 @@ import { StatusStrip, formatTimeAgo } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
 import { CostBreakdownCard } from "@/components/CostBreakdownCard";
 import { DailyTokenUsageCard } from "@/components/DailyTokenUsageCard";
+import { HermesTokenUsageCard } from "@/components/HermesTokenUsageCard";
 import { TrendCard } from "@/components/TrendCard";
 import type {
   DashboardAttentionItem,
@@ -1082,6 +1083,14 @@ export default function Home() {
           rows={data?.usage.tokenUsageDays ?? []}
           startDay={data?.window.startDay ?? ""}
           endDay={data?.window.endDay ?? ""}
+          loading={!hasEverLoaded && isLoading}
+          error={error}
+        />
+      </section>
+
+      <section aria-label="Hermes token usage" className="mt-6">
+        <HermesTokenUsageCard
+          rows={data?.usage.hermesTokenUsageDays ?? []}
           loading={!hasEverLoaded && isLoading}
           error={error}
         />

@@ -1,5 +1,5 @@
 import { GET } from "./route";
-import { getDailyMetricsRange, getDailyTokenUsageRange, getLatestState } from "../../../../../server/db/client";
+import { getDailyMetricsRange, getDailyTokenUsageRangeForSource, getLatestState } from "../../../../../server/db/client";
 import { buildDashboardWindow } from "../../../../../server/lib/dashboard-state";
 import { getShowPrivateRepoItems } from "../../../../../server/lib/runtime-config";
 import type { DashboardWindow, LatestState } from "@/types";
@@ -8,7 +8,7 @@ jest.mock("../../../../../server/db/client", () => ({
   initDb: jest.fn().mockResolvedValue({}),
   getLatestState: jest.fn(),
   getDailyMetricsRange: jest.fn(),
-  getDailyTokenUsageRange: jest.fn(),
+  getDailyTokenUsageRangeForSource: jest.fn(),
 }));
 
 jest.mock("../../../../../server/lib/dashboard-state", () => ({
@@ -217,7 +217,7 @@ describe("GET /api/state", () => {
     jest.clearAllMocks();
     (getLatestState as jest.Mock).mockReturnValue(makeLatestState());
     (getDailyMetricsRange as jest.Mock).mockReturnValue([{ day: "2026-06-23" }]);
-    (getDailyTokenUsageRange as jest.Mock).mockReturnValue([]);
+    (getDailyTokenUsageRangeForSource as jest.Mock).mockReturnValue([]);
     (buildDashboardWindow as jest.Mock).mockReturnValue(makeDashboardWindow());
   });
 

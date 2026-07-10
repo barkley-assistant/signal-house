@@ -5,8 +5,10 @@ const API_BASE = "";
 export async function fetchDailyTokenUsageHistory(
   from: string,
   to: string,
+  source?: string,
 ): Promise<DailyTokenUsageRow[]> {
   const params = new URLSearchParams({ from, to });
+  if (source) params.set("source", source);
   const res = await fetch(`${API_BASE}/api/daily-token-usage/history?${params.toString()}`, {
     cache: "no-store",
   });

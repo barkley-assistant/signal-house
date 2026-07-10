@@ -1,4 +1,6 @@
 import { getBooleanEnv, getEnv } from './env'
+import os from 'node:os'
+import path from 'node:path'
 
 const MIN_POLL_INTERVAL_SECONDS = 15
 const MAX_POLL_INTERVAL_SECONDS = 3600
@@ -70,6 +72,9 @@ export interface RuntimeConfig {
     sessionsDays: number
     workflowRunsDays: number
   }
+  hermes: {
+    dbPath: string
+  }
 }
 
 export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -112,13 +117,16 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
     attention: {
       showPrivateRepoItems: getBooleanEnv(env, 'SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS'),
     },
-    retention: {
-      snapshotsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS'), DEFAULT_RETENTION_SNAPSHOTS_DAYS),
-      dailyMetricsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS'), DEFAULT_RETENTION_DAILY_METRICS_DAYS),
-      dailyTokenUsageDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_DAILY_TOKEN_USAGE_DAYS'), DEFAULT_RETENTION_DAILY_TOKEN_USAGE_DAYS),
-      sessionsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_SESSIONS_DAYS'), DEFAULT_RETENTION_SESSIONS_DAYS),
-      workflowRunsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS'), DEFAULT_RETENTION_WORKFLOW_RUNS_DAYS),
-    },
+      retention: {
+        snapshotsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS'), DEFAULT_RETENTION_SNAPSHOTS_DAYS),
+        dailyMetricsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS'), DEFAULT_RETENTION_DAILY_METRICS_DAYS),
+        dailyTokenUsageDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_DAILY_TOKEN_USAGE_DAYS'), DEFAULT_RETENTION_DAILY_TOKEN_USAGE_DAYS),
+        sessionsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_SESSIONS_DAYS'), DEFAULT_RETENTION_SESSIONS_DAYS),
+        workflowRunsDays: parsePositiveInt(getEnv(env, 'SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS'), DEFAULT_RETENTION_WORKFLOW_RUNS_DAYS),
+      },
+      hermes: {
+        dbPath: getEnv(env, 'SECRET_HOUSE_HERMES_DB_PATH') ?? path.join(os.homedir(), '.hermes', 'state.db'),
+      },
   }
 }
 
@@ -156,4 +164,8 @@ export function getShowPrivateRepoItems(env: NodeJS.ProcessEnv = process.env): b
 
 export function getRetentionConfig(env: NodeJS.ProcessEnv = process.env) {
   return getRuntimeConfig(env).retention
+}
+
+export function getHermesConfig(env: NodeJS.ProcessEnv = process.env) {
+  return getRuntimeConfig(env).hermes
 }

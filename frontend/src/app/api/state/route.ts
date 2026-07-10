@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLatestState, getDailyMetricsRange, getDailyTokenUsageRange } from "../../../../../server/db/client";
+import { getLatestState, getDailyMetricsRange, getDailyTokenUsageRangeForSource } from "../../../../../server/db/client";
 import { buildDashboardWindow } from "../../../../../server/lib/dashboard-state";
 import { getDashboardWindowDays, getShowPrivateRepoItems } from "../../../../../server/lib/runtime-config";
 import { ensureDb } from "../_lib/ensure-db";
@@ -89,7 +89,8 @@ export async function GET() {
     const startDay = startDate.toISOString().slice(0, 10);
 
     const rows = getDailyMetricsRange(startDay, endDay);
-    const tokenUsageDays = getDailyTokenUsageRange(startDay, endDay);
+    const tokenUsageDays = getDailyTokenUsageRangeForSource(startDay, endDay, 'opencode');
+    const hermesTokenUsageDays = getDailyTokenUsageRangeForSource(startDay, endDay, 'hermes');
     const sessionUsageAggregate = state.snapshot?.aggregates?.sessionUsage ?? null;
     const staleThresholdDays =
       state.snapshot?.aggregates?.staleWork?.staleThresholdDays ?? STALE_THRESHOLD_DAYS_FALLBACK;
@@ -124,6 +125,7 @@ export async function GET() {
         sessionUsage: dashboardWindow.sessionUsage,
         tokenUsage: state.snapshot?.aggregates?.tokenUsage ?? null,
         tokenUsageDays,
+        hermesTokenUsageDays,
       },
       attention: {
         staleThresholdDays,

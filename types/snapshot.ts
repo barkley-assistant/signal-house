@@ -191,6 +191,7 @@ export interface DashboardStateUsage {
   sessionUsage: DashboardWindowSessionUsageSummary | null
   tokenUsage: TokenUsageRow | null
   tokenUsageDays: DailyTokenUsageRow[]
+  hermesTokenUsageDays: DailyTokenUsageRow[]
 }
 
 export interface DashboardAttentionItem {

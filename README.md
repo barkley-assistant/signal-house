@@ -30,7 +30,7 @@ If a metric is unavailable, Signal House should say that plainly. The right fix 
 | Charts | ECharts | `frontend/` |
 | Animation | Framer Motion | `frontend/` |
 | Backend / DB | Node.js, TypeScript, better-sqlite3 | `server/` |
-| Data collectors | GitHub API, git, OpenCode CLI | `server/lib/` |
+| Data collectors | GitHub API, git, OpenCode CLI, Hermes Agent | `server/lib/` |
 | Database | SQLite | `.data/metrics.db` |
 
 Backend modules in `server/db` and `server/lib` are imported by Next.js API routes. Everything runs in one local Node process.
@@ -55,7 +55,8 @@ The frontend reads local API routes only. It does not call GitHub, git, OpenCode
 ```text
 GitHub API ───────► collectors ──┐
 local git ────────► collectors ──┼──► server/db/client.ts (SQLite)
-OpenCode CLI ─────► collectors ──┘
+OpenCode CLI ─────► collectors ──┐
+Hermes Agent ─────► collectors ──┘
                                   │
                                   ▼
 API routes (Next.js) ───────────► Dashboard UI
@@ -119,6 +120,7 @@ Runtime defaults are centralized in `server/lib/runtime-config.ts`.
 | `SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH` | Discovery depth, default `3`; `0` means no recursion |
 | `SECRET_HOUSE_GIT_EXCLUDE` | Comma-separated directory names to skip |
 | `SECRET_HOUSE_SESSIONS_PERIOD_DAYS` | Number of days for session metrics |
+| `SECRET_HOUSE_HERMES_DB_PATH` | Path to Hermes Agent state.db, default `~/.hermes/state.db` |
 | `DB_DIR` | SQLite database directory, default `.data` |
 
 ### Poller Variables

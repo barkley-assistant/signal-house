@@ -1,5 +1,8 @@
+export type TokenUsageSource = 'opencode' | 'hermes'
+
 export interface DailyTokenUsageRow {
   date: string
+  source: TokenUsageSource
   totalSessions: number
   totalMessages: number
   totalTokens: number
@@ -20,6 +23,7 @@ export interface DailyTokenUsageRow {
 
 export interface DailyTokenUsageInsert {
   date: string
+  source?: TokenUsageSource
   totalSessions: number
   totalMessages: number
   totalTokens: number

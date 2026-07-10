@@ -54,6 +54,7 @@ export type {
 export type {
   DailyTokenUsageRow,
   DailyTokenUsageInsert,
+  TokenUsageSource,
 } from './daily-token-usage'
 
 export type {
