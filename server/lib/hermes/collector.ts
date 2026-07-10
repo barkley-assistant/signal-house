@@ -18,7 +18,7 @@ export function collectHermesTokenUsageSnapshot(): TokenUsageCollectorResult {
   }
   db.close()
 
-  const since = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString()
+  const since = Math.floor((Date.now() - 28 * 24 * 60 * 60 * 1000) / 1000)
 
   const dailyAggs = querySessionsByDay(28)
   const totalSessions = dailyAggs.reduce((sum, d) => sum + d.sessions, 0)

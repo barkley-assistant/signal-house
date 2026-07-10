@@ -28,8 +28,8 @@ function createSchema(db: Database.Database): void {
       message_count INTEGER,
       tool_call_count INTEGER,
       api_call_count INTEGER,
-      started_at TEXT,
-      ended_at TEXT,
+      started_at REAL,
+      ended_at REAL,
       parent_session_id TEXT
     );
   `)
@@ -49,8 +49,8 @@ function insertSession(db: Database.Database, row: {
   messageCount?: number | null
   toolCallCount?: number | null
   apiCallCount?: number | null
-  startedAt?: string | null
-  endedAt?: string | null
+  startedAt?: number | null
+  endedAt?: number | null
   parentSessionId?: string | null
 }): void {
   db.prepare(`
@@ -85,9 +85,8 @@ function insertSession(db: Database.Database, row: {
   })
 }
 
-function day(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): string {
-  const d = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
-  return d.toISOString()
+function day(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): number {
+  return Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000)
 }
 
 beforeEach(() => {
@@ -204,7 +203,7 @@ describe('hermes db collector', () => {
 
   it('aggregates sessions by UTC day including subagent sessions', () => {
     // Mock Date.now to control the 28-day lookback window
-    jest.spyOn(Date, 'now').mockReturnValue(new Date(day(2026, 7, 9, 12, 0)).getTime())
+    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
 
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     expect(rows.length).toBeGreaterThanOrEqual(2)
@@ -232,7 +231,7 @@ describe('hermes db collector', () => {
   })
 
   it('resolves cost using actual_cost_usd over estimated_cost_usd', () => {
-    jest.spyOn(Date, 'now').mockReturnValue(new Date(day(2026, 7, 9, 12, 0)).getTime())
+    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
 
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day7 = rows.find(r => r.day === '2026-07-07')
@@ -247,7 +246,7 @@ describe('hermes db collector', () => {
 
   it('uses estimated_cost_usd when actual_cost_usd is null', () => {
     // ses-002 has actualCost=null, estimatedCost=0.01
-    jest.spyOn(Date, 'now').mockReturnValue(new Date(day(2026, 7, 9, 12, 0)).getTime())
+    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
 
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day7 = rows.find(r => r.day === '2026-07-07')
@@ -259,7 +258,7 @@ describe('hermes db collector', () => {
 
   it('handles null costs gracefully (cost = 0)', () => {
     // ses-004 has both actualCost=null and estimatedCost=null
-    jest.spyOn(Date, 'now').mockReturnValue(new Date(day(2026, 7, 9, 12, 0)).getTime())
+    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
 
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day8 = rows.find(r => r.day === '2026-07-08')
@@ -272,7 +271,7 @@ describe('hermes db collector', () => {
   })
 
   it('includes subagent sessions (no parent_session_id filter)', () => {
-    jest.spyOn(Date, 'now').mockReturnValue(new Date(day(2026, 7, 9, 12, 0)).getTime())
+    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
 
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day7 = rows.find(r => r.day === '2026-07-07')
