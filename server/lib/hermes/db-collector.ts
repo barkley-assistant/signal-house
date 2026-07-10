@@ -47,8 +47,8 @@ type SessionSchemaRow = {
   message_count: number | null
   tool_call_count: number | null
   api_call_count: number | null
-  started_at: string | null
-  ended_at: string | null
+  started_at: number | null
+  ended_at: number | null
   parent_session_id: string | null
 }
 
@@ -105,6 +105,7 @@ function isErrored(_row: SessionSchemaRow): boolean {
   return false
 }
 
+// started_at and ended_at are numeric epoch seconds; numeric > comparison is correct.
 function isCompleted(row: SessionSchemaRow): boolean {
   if (row.started_at != null && row.ended_at != null) return row.ended_at > row.started_at
   return false
@@ -145,7 +146,7 @@ function readSessionRows(days: number, config?: HermesDbConfig): SessionSchemaRo
   try {
     const since = new Date()
     since.setDate(since.getDate() - Math.max(0, days))
-    const sinceIso = since.toISOString()
+    const sinceEpoch = since.getTime() / 1000
 
     const rows = db.prepare(`
       SELECT
@@ -168,7 +169,7 @@ function readSessionRows(days: number, config?: HermesDbConfig): SessionSchemaRo
       FROM sessions
       WHERE started_at >= ?
       ORDER BY started_at DESC, id DESC
-    `).all(sinceIso) as SessionSchemaRow[]
+    `).all(sinceEpoch) as SessionSchemaRow[]
 
     return rows
   } catch {
@@ -184,7 +185,8 @@ export function querySessionsByDay(days: number, config?: HermesDbConfig): Daily
   const grouped = new Map<string, DailyAggregation>()
   for (const row of rows) {
     const startedAt = row.started_at
-    const day = startedAt ? new Date(startedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+    // started_at is REAL epoch seconds; multiply by 1000 for Date constructor (expects ms)
+    const day = startedAt ? new Date(Number(startedAt) * 1000).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
 
     const current = grouped.get(day) ?? {
       day,
@@ -217,13 +219,13 @@ export function querySessionsByDay(days: number, config?: HermesDbConfig): Daily
   return [...grouped.values()].sort((a, b) => b.day.localeCompare(a.day))
 }
 
-export function queryModelBreakdown(since: string, until?: string, config?: HermesDbConfig): ModelBreakdownEntry[] {
+export function queryModelBreakdown(since: number, until?: number, config?: HermesDbConfig): ModelBreakdownEntry[] {
   const db = connectHermesDb(config)
   if (!db) return []
 
   try {
     const clauses = ['started_at >= ?']
-    const params: Array<string> = [since]
+    const params: Array<number> = [since]
     if (until != null) {
       clauses.push('started_at < ?')
       params.push(until)
