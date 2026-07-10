@@ -4,7 +4,7 @@ Signal House is a local operator dashboard for AI coding agents. It answers one 
 
 It is not a generic analytics platform. It is a small local dashboard for workstream health, stale work, PR progress, CI status, refresh health, and local session usage where available.
 
-![Signal House logo](https://raw.githubusercontent.com/barkley-clawd/signal-house/refs/heads/main/assets/signal-house-logo.png)
+![Signal House logo](https://raw.githubusercontent.com/barkley-assistant/signal-house/refs/heads/main/assets/signal-house-logo.png)
 
 ## What It Tracks
 

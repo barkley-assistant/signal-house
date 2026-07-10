@@ -1093,7 +1093,7 @@ export default function Home() {
 
       <footer className="mt-10 border-t border-divider/70 pt-6 text-center">
         <a
-          href="https://github.com/barkley-clawd/signal-house"
+          href="https://github.com/barkley-assistant/signal-house"
           target="_blank"
           rel="noreferrer"
           className="text-sm text-text-muted transition-colors hover:text-text-primary"
