@@ -6,6 +6,7 @@ import {
   setRefreshRunStatus,
 } from '../../db/client'
 import { maybeCollectDailyTokenUsage } from '../daily-token-usage/collector'
+import { maybeCollectHermesDailyTokenUsage } from '../daily-token-usage/hermes-collector'
 import { discoverGitRepos } from '../discovery/discovery'
 import { getEnv } from '../env'
 import type { LocalGitRepoConfig, RepoDiscoveryConfig } from '../git/types'
@@ -199,6 +200,12 @@ async function executeRefresh(startedAt: string, startedMs: number): Promise<Ref
       await maybeCollectDailyTokenUsage()
     } catch (e) {
       console.warn('[daily-token-usage] Daily collection failed:', e instanceof Error ? e.message : String(e))
+    }
+
+    try {
+      await maybeCollectHermesDailyTokenUsage()
+    } catch (e) {
+      console.warn('[daily-token-usage-hermes] Daily Hermes collection failed:', e instanceof Error ? e.message : String(e))
     }
 
     return result
