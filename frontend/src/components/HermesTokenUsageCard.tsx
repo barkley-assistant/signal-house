@@ -11,9 +11,12 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import type { EChartsOption } from "echarts-for-react";
 import { formatCost } from "@/lib/format-cost";
 import { formatCompactNumber, formatNumber } from "../../../utils/format";
+import { buildDateSpine } from "@/lib/date-spine";
 
 interface HermesTokenUsageCardProps {
   rows: DailyTokenUsageRow[];
+  startDay: string;
+  endDay: string;
   loading?: boolean;
   error?: string | null;
 }
@@ -27,16 +30,22 @@ function formatDayLabel(dayStr: string): string {
   });
 }
 
+interface FilledDay {
+  date: string;
+  row: DailyTokenUsageRow | null;
+  isGap: boolean;
+}
+
 function buildSparklineOption(
-  rows: DailyTokenUsageRow[],
+  filled: FilledDay[],
 ): EChartsOption {
-  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
-  const labels = sorted.map((r) => formatDayLabel(r.date));
-  const inputTokens = sorted.map((r) =>
-    r.modelUsage.reduce((sum, m) => sum + (m.inputTokens ?? 0), 0),
+  const sorted = [...filled].sort((a, b) => a.date.localeCompare(b.date));
+  const labels = sorted.map((d) => formatDayLabel(d.date));
+  const inputTokens = sorted.map((d) =>
+    d.isGap ? 0 : d.row!.modelUsage.reduce((sum, m) => sum + (m.inputTokens ?? 0), 0),
   );
-  const outputTokens = sorted.map((r) =>
-    r.modelUsage.reduce((sum, m) => sum + (m.outputTokens ?? 0), 0),
+  const outputTokens = sorted.map((d) =>
+    d.isGap ? 0 : d.row!.modelUsage.reduce((sum, m) => sum + (m.outputTokens ?? 0), 0),
   );
 
   return {
@@ -76,30 +85,65 @@ function buildSparklineOption(
 
 export function HermesTokenUsageCard({
   rows,
+  startDay,
+  endDay,
   loading,
   error,
 }: HermesTokenUsageCardProps) {
   const theme = useEChartsTheme();
   const [expanded, setExpanded] = useState(false);
 
-  const totals = useMemo(() => {
-    const totalInput = rows.reduce(
-      (sum, r) =>
-        sum + r.modelUsage.reduce((s, m) => s + (m.inputTokens ?? 0), 0),
-      0,
-    );
-    const totalOutput = rows.reduce(
-      (sum, r) =>
-        sum + r.modelUsage.reduce((s, m) => s + (m.outputTokens ?? 0), 0),
-      0,
-    );
-    const totalSessions = rows.reduce((sum, r) => sum + r.totalSessions, 0);
-    const totalCost = rows.reduce((sum, r) => sum + (r.totalCost ?? 0), 0);
-
-    // Find dominant model across all days
-    const modelSessions = new Map<string, number>();
+  const rowByDate = useMemo(() => {
+    const map = new Map<string, DailyTokenUsageRow>();
     for (const r of rows) {
-      for (const m of r.modelUsage) {
+      map.set(r.date, r);
+    }
+    return map;
+  }, [rows]);
+
+  const spine = useMemo(
+    () => buildDateSpine(startDay, endDay),
+    [startDay, endDay],
+  );
+
+  const filled = useMemo<FilledDay[]>(
+    () =>
+      spine.map((date) => {
+        const row = rowByDate.get(date) ?? null;
+        return { date, row, isGap: row === null };
+      }),
+    [spine, rowByDate],
+  );
+
+  const totals = useMemo(() => {
+    const totalInput = filled.reduce(
+      (sum, d) =>
+        d.isGap
+          ? sum
+          : sum + d.row!.modelUsage.reduce((s, m) => s + (m.inputTokens ?? 0), 0),
+      0,
+    );
+    const totalOutput = filled.reduce(
+      (sum, d) =>
+        d.isGap
+          ? sum
+          : sum + d.row!.modelUsage.reduce((s, m) => s + (m.outputTokens ?? 0), 0),
+      0,
+    );
+    const totalSessions = filled.reduce(
+      (sum, d) => (d.isGap ? sum : sum + d.row!.totalSessions),
+      0,
+    );
+    const totalCost = filled.reduce(
+      (sum, d) => (d.isGap ? sum : sum + (d.row!.totalCost ?? 0)),
+      0,
+    );
+
+    // Find dominant model across all days (only non-gap)
+    const modelSessions = new Map<string, number>();
+    for (const d of filled) {
+      if (d.isGap || !d.row) continue;
+      for (const m of d.row.modelUsage) {
         modelSessions.set(
           m.modelName,
           (modelSessions.get(m.modelName) ?? 0) + m.messages,
@@ -116,18 +160,18 @@ export function HermesTokenUsageCard({
     }
 
     return { totalInput, totalOutput, totalSessions, totalCost, dominantModel };
-  }, [rows]);
+  }, [filled]);
 
   const sparklineOption = useMemo<EChartsOption>(() => {
-    return { ...theme, ...buildSparklineOption(rows) };
-  }, [rows, theme]);
+    return { ...theme, ...buildSparklineOption(filled) };
+  }, [filled, theme]);
 
-  const isEmpty = rows.length === 0;
+  const isEmpty = rows.length === 0 && spine.length === 0;
 
-  // Per-day rows sorted by date for expanded table
-  const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => b.date.localeCompare(a.date)),
-    [rows],
+  // Per-day rows sorted by date desc for expanded table (iterate filled)
+  const effectiveRows = useMemo(
+    () => [...filled].sort((a, b) => b.date.localeCompare(a.date)),
+    [filled],
   );
 
   return (
@@ -249,22 +293,28 @@ export function HermesTokenUsageCard({
                               Top Model
                             </div>
                           </div>
-                          {sortedRows.map((r) => {
-                            const dayInput = r.modelUsage.reduce(
-                              (sum, m) => sum + (m.inputTokens ?? 0),
-                              0,
-                            );
-                            const dayOutput = r.modelUsage.reduce(
-                              (sum, m) => sum + (m.outputTokens ?? 0),
-                              0,
-                            );
-                            const topModel = [...r.modelUsage].sort(
-                              (a, b) => (b.messages ?? 0) - (a.messages ?? 0),
-                            )[0];
+                          {effectiveRows.map((d) => {
+                            const dayInput = d.isGap
+                              ? 0
+                              : d.row!.modelUsage.reduce(
+                                  (sum, m) => sum + (m.inputTokens ?? 0),
+                                  0,
+                                );
+                            const dayOutput = d.isGap
+                              ? 0
+                              : d.row!.modelUsage.reduce(
+                                  (sum, m) => sum + (m.outputTokens ?? 0),
+                                  0,
+                                );
+                            const topModel = d.isGap
+                              ? null
+                              : [...d.row!.modelUsage].sort(
+                                  (a, b) => (b.messages ?? 0) - (a.messages ?? 0),
+                                )[0];
 
                             return (
                               <div
-                                key={r.date}
+                                key={d.date}
                                 role="row"
                                 className="grid grid-cols-[1.2fr_repeat(4,1fr)_0.8fr] gap-x-3 border-t border-card-border px-3 py-2"
                               >
@@ -272,7 +322,7 @@ export function HermesTokenUsageCard({
                                   role="cell"
                                   className="text-xs font-medium text-text-primary self-center"
                                 >
-                                  {formatDayLabel(r.date)}
+                                  {formatDayLabel(d.date)}
                                 </div>
                                 <div
                                   role="cell"
@@ -290,13 +340,13 @@ export function HermesTokenUsageCard({
                                   role="cell"
                                   className="text-right text-xs font-mono tabular-nums text-accent-primary self-center"
                                 >
-                                  {formatCost(r.totalCost)}
+                                  {d.isGap ? "—" : formatCost(d.row!.totalCost)}
                                 </div>
                                 <div
                                   role="cell"
                                   className="text-right text-xs font-mono tabular-nums text-text-secondary self-center"
                                 >
-                                  {formatNumber(r.totalSessions)}
+                                  {d.isGap ? "—" : formatNumber(d.row!.totalSessions)}
                                 </div>
                                 <div
                                   role="cell"
@@ -312,40 +362,44 @@ export function HermesTokenUsageCard({
 
                       {/* Mobile cards */}
                       <div className="space-y-2 sm:hidden">
-                        {sortedRows.map((r) => (
+                        {effectiveRows.map((d) => (
                           <div
-                            key={r.date}
+                            key={d.date}
                             className="rounded-lg border border-card-border bg-card-bg p-3"
                           >
                             <div className="text-xs font-semibold text-text-primary mb-1.5">
-                              {formatDayLabel(r.date)}
+                              {formatDayLabel(d.date)}
                             </div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                               <span className="text-text-muted">Input</span>
                               <span className="font-mono tabular-nums text-text-secondary text-right">
                                 {formatCompactNumber(
-                                  r.modelUsage.reduce(
-                                    (s, m) => s + (m.inputTokens ?? 0),
-                                    0,
-                                  ),
+                                  d.isGap
+                                    ? 0
+                                    : d.row!.modelUsage.reduce(
+                                        (s, m) => s + (m.inputTokens ?? 0),
+                                        0,
+                                      ),
                                 )}
                               </span>
                               <span className="text-text-muted">Output</span>
                               <span className="font-mono tabular-nums text-text-secondary text-right">
                                 {formatCompactNumber(
-                                  r.modelUsage.reduce(
-                                    (s, m) => s + (m.outputTokens ?? 0),
-                                    0,
-                                  ),
+                                  d.isGap
+                                    ? 0
+                                    : d.row!.modelUsage.reduce(
+                                        (s, m) => s + (m.outputTokens ?? 0),
+                                        0,
+                                      ),
                                 )}
                               </span>
                               <span className="text-text-muted">Cost</span>
                               <span className="font-mono tabular-nums text-accent-primary text-right">
-                                {formatCost(r.totalCost)}
+                                {d.isGap ? "—" : formatCost(d.row!.totalCost)}
                               </span>
                               <span className="text-text-muted">Sessions</span>
                               <span className="font-mono tabular-nums text-text-secondary text-right">
-                                {formatNumber(r.totalSessions)}
+                                {d.isGap ? "—" : formatNumber(d.row!.totalSessions)}
                               </span>
                             </div>
                           </div>

@@ -204,6 +204,11 @@ describe('createOrchestrator', () => {
     expect(snapshotArg.localGit).toHaveLength(1)
     expect(snapshotArg.localGit[0]!.recentCommits).toBe(5)
     expect(snapshotArg.repositories).toHaveLength(2)
+    // Verify token usage aggregates: OpenCode and Hermes are stored independently
+    expect(snapshotArg.aggregates.tokenUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.tokenUsage!.toolName).toBe('opencode')
+    expect(snapshotArg.aggregates.hermesTokenUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.hermesTokenUsage!.toolName).toBe('hermes-agent')
   })
 
   it('collects multiple GitHub targets and merges their raw metrics', async () => {
@@ -498,6 +503,11 @@ describe('createOrchestrator', () => {
     expect(snapshotArg.sessions).toHaveLength(2)
     expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
     expect(snapshotArg.aggregates.sessionUsage!.totalSessions).toBe(2)
+    // Fallback path also includes both token usage aggregates
+    expect(snapshotArg.aggregates.tokenUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.tokenUsage!.toolName).toBe('opencode')
+    expect(snapshotArg.aggregates.hermesTokenUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.hermesTokenUsage!.toolName).toBe('hermes-agent')
   })
 
   it('preserves sessionUsage when only localGit and sessions configured', async () => {

@@ -242,6 +242,7 @@ describe("GET /api/state", () => {
         tokenUsage: {
           totalTokens: 100,
         },
+        hermesTokenUsage: null,
       },
       attention: {
         staleThresholdDays: 14,
@@ -267,6 +268,42 @@ describe("GET /api/state", () => {
     expect(body).not.toHaveProperty("snapshot");
     expect(body).not.toHaveProperty("dashboardWindow");
     expect(body).not.toHaveProperty("refreshState");
+  });
+
+  it("includes hermesTokenUsage in usage response when aggregate is present", async () => {
+    const state = makeLatestState();
+    state.snapshot!.aggregates.hermesTokenUsage = {
+      periodStart: "2026-05-27",
+      periodEnd: "2026-06-23",
+      source: "hermesdb",
+      toolName: "hermes-agent",
+      totalSessions: 3,
+      totalMessages: 5,
+      totalTokens: 200,
+      totalCost: 2.5,
+      modelUsage: [],
+      rawJson: null,
+      collectedAt: "2026-06-23T10:00:00.000Z",
+    };
+    (getLatestState as jest.Mock).mockReturnValue(state);
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.usage.hermesTokenUsage).not.toBeNull();
+    expect(body.usage.hermesTokenUsage.toolName).toBe("hermes-agent");
+    expect(body.usage.hermesTokenUsage.totalTokens).toBe(200);
+  });
+
+  it("returns hermesTokenUsage as null when snapshot is null", async () => {
+    const state = makeLatestState();
+    state.snapshot = null;
+    (getLatestState as jest.Mock).mockReturnValue(state);
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.usage.hermesTokenUsage).toBeNull();
   });
 
   it("ignores legacy repoKey query arguments", async () => {

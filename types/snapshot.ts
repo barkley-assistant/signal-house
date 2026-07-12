@@ -190,6 +190,7 @@ export interface DashboardStateStatus {
 export interface DashboardStateUsage {
   sessionUsage: DashboardWindowSessionUsageSummary | null
   tokenUsage: TokenUsageRow | null
+  hermesTokenUsage: TokenUsageRow | null
   tokenUsageDays: DailyTokenUsageRow[]
   hermesTokenUsageDays: DailyTokenUsageRow[]
 }

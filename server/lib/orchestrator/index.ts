@@ -32,6 +32,7 @@ interface SourceTaskResult {
   localGit?: LocalGitRepoMetric[]
   sessionUsage?: SessionUsageAggregate | null
   tokenUsage?: TokenUsageAggregate | null
+  hermesTokenUsage?: TokenUsageAggregate | null
   errors: string[]
 }
 
@@ -123,6 +124,7 @@ function fallbackAggregates(
   localGit: LocalGitRepoMetric[],
   sessionUsage: SessionUsageAggregate | null,
   tokenUsage: TokenUsageAggregate | null,
+  hermesTokenUsage: TokenUsageAggregate | null,
 ): DashboardAggregates {
   const runtimeConfig = getRuntimeConfig()
   const now = new Date()
@@ -149,6 +151,7 @@ function fallbackAggregates(
     },
     sessionUsage,
     tokenUsage,
+    hermesTokenUsage,
     computedAt: capturedAt,
   }
 }
@@ -245,7 +248,7 @@ async function collectHermesTokenUsage(): Promise<SourceTaskResult> {
 
   return {
     source: 'hermesTokenUsage',
-    tokenUsage: tokenResult.errors.length > 0
+    hermesTokenUsage: tokenResult.errors.length > 0
       ? null
       : {
         periodStart: tokenResult.periodStart,
@@ -290,6 +293,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
       let localGit: LocalGitRepoMetric[] = []
       let sessionUsageFromCollector: SessionUsageAggregate | null = null
       let tokenUsageFromCollector: TokenUsageAggregate | null = null
+      let hermesTokenUsageFromCollector: TokenUsageAggregate | null = null
 
       for (const settled of taskResults) {
         if (settled.status === 'rejected') {
@@ -314,6 +318,9 @@ export function createOrchestrator(config: OrchestratorConfig) {
         if (result.tokenUsage !== undefined) {
           tokenUsageFromCollector = result.tokenUsage
         }
+        if (result.hermesTokenUsage !== undefined) {
+          hermesTokenUsageFromCollector = result.hermesTokenUsage
+        }
 
         allErrors.push(...result.errors)
       }
@@ -328,6 +335,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
         aggregates.throughput.totalCommits = localGit.reduce((sum, repo) => sum + repo.recentCommits, 0)
         aggregates.sessionUsage = sessionUsageFromCollector
         aggregates.tokenUsage = tokenUsageFromCollector
+        aggregates.hermesTokenUsage = hermesTokenUsageFromCollector
       }
 
       if (!aggregates) {
@@ -336,6 +344,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
           localGit,
           sessionUsageFromCollector,
           tokenUsageFromCollector,
+          hermesTokenUsageFromCollector,
         )
       }
 

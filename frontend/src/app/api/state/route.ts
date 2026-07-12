@@ -124,6 +124,7 @@ export async function GET() {
       usage: {
         sessionUsage: dashboardWindow.sessionUsage,
         tokenUsage: state.snapshot?.aggregates?.tokenUsage ?? null,
+        hermesTokenUsage: state.snapshot?.aggregates?.hermesTokenUsage ?? null,
         tokenUsageDays,
         hermesTokenUsageDays,
       },

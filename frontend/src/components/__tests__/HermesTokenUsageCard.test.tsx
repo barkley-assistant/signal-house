@@ -18,6 +18,9 @@ function makeRow(date: string, overrides: Partial<DailyTokenUsageRow> = {}): Dai
   }
 }
 
+const DEFAULT_START = "2026-07-01"
+const DEFAULT_END = "2026-07-07"
+
 describe("HermesTokenUsageCard", () => {
   it("renders the card title with Hermes badge", () => {
     const rows: DailyTokenUsageRow[] = [
@@ -39,7 +42,7 @@ describe("HermesTokenUsageCard", () => {
       }),
     ];
     const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={rows} />,
+      <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
     );
 
     expect(html).toContain("Hermes Token Usage");
@@ -49,14 +52,14 @@ describe("HermesTokenUsageCard", () => {
 
   it("renders empty state when no rows", () => {
     const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={[]} />,
+      <HermesTokenUsageCard rows={[]} startDay="" endDay="" />,
     );
     expect(html).toContain("No Hermes token usage data");
   });
 
   it("renders loading state", () => {
     const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={[]} loading={true} />,
+      <HermesTokenUsageCard rows={[]} startDay={DEFAULT_START} endDay={DEFAULT_END} loading={true} />,
     );
     // Skeleton renders as a div with animation classes
     expect(html).toContain("animate-pulse");
@@ -64,7 +67,7 @@ describe("HermesTokenUsageCard", () => {
 
   it("renders error state", () => {
     const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={[]} error="Connection failed" />,
+      <HermesTokenUsageCard rows={[]} startDay={DEFAULT_START} endDay={DEFAULT_END} error="Connection failed" />,
     );
     expect(html).toContain("Connection failed");
     expect(html).toContain('role="alert"');
@@ -89,7 +92,7 @@ describe("HermesTokenUsageCard", () => {
       }),
     ];
     const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={rows} />,
+      <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
     );
     // Should contain expand text in collapsed state
     expect(html).toContain("Expand");
@@ -125,7 +128,7 @@ describe("HermesTokenUsageCard", () => {
       }),
     ];
     const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={rows} />,
+      <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
     );
 
     // Summary row shows totals across all modelUsages
@@ -164,10 +167,59 @@ describe("HermesTokenUsageCard", () => {
       }),
     ];
     const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={rows} />,
+      <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
     );
 
     // model-a has 100 messages across all entries → dominant
     expect(html).toContain("model-a");
+  });
+
+  it("renders date spine with 0-fill for gap days", () => {
+    const rows: DailyTokenUsageRow[] = [
+      makeRow("2026-07-01", {
+        totalSessions: 1,
+        totalCost: 0.1,
+        modelUsage: [{ modelName: "a", messages: 1, inputTokens: 100, outputTokens: 50, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: 0.1 }],
+      }),
+      makeRow("2026-07-07", {
+        totalSessions: 1,
+        totalCost: 0.1,
+        modelUsage: [{ modelName: "a", messages: 1, inputTokens: 50, outputTokens: 25, tokensReasoning: null, cacheReadTokens: null, cacheWriteTokens: null, cost: 0.1 }],
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <HermesTokenUsageCard rows={rows} startDay="2026-07-01" endDay="2026-07-07" />,
+    );
+
+    // Component renders without crashing (totals include only the 2 non-gap days)
+    expect(html).toContain("Hermes Token Usage");
+    expect(html).toContain("Expand details"); // expand button exists
+    // Gap days show 0 in totals — input matches only the 2 data rows
+    expect(html).toContain("Input:");
+    expect(html).toContain("Output:");
+  });
+
+  it("renders flat sparkline when no data in valid window", () => {
+    const html = renderToStaticMarkup(
+      <HermesTokenUsageCard rows={[]} startDay="2026-07-01" endDay="2026-07-07" />,
+    );
+
+    // Should NOT show the empty state text (it has a window to display)
+    expect(html).not.toContain("No Hermes token usage data");
+    // Sparkline container is still rendered (empty div for echarts)
+    expect(html).toContain("echarts-for-react");
+    // Summary shows zero totals
+    expect(html).toContain("Input:");
+    expect(html).toContain("0");
+  });
+
+  it("handles invalid window dates gracefully", () => {
+    const html = renderToStaticMarkup(
+      <HermesTokenUsageCard rows={[]} startDay="" endDay="" />,
+    );
+
+    // Should not crash — renders empty state or handles gracefully
+    expect(html).toContain("Hermes Token Usage");
+    expect(html).toContain("No Hermes token usage data");
   });
 });

@@ -95,8 +95,9 @@ export interface DashboardAggregates {
   staleWork: StaleWorkAggregate
   sessionUsage: SessionUsageAggregate | null
   tokenUsage?: TokenUsageAggregate | null
+  hermesTokenUsage?: TokenUsageAggregate | null
   repositoryPrivacy?: RepositoryPrivacyAggregate | null
   computedAt: string
 }
 
-export type AggregateType = 'throughput' | 'cycleTime' | 'ci' | 'staleWork' | 'sessionUsage' | 'tokenUsage' | 'repositoryPrivacy'
+export type AggregateType = 'throughput' | 'cycleTime' | 'ci' | 'staleWork' | 'sessionUsage' | 'tokenUsage' | 'hermesTokenUsage' | 'repositoryPrivacy'

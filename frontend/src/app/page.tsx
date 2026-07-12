@@ -1091,6 +1091,8 @@ export default function Home() {
       <section aria-label="Hermes token usage" className="mt-6">
         <HermesTokenUsageCard
           rows={data?.usage.hermesTokenUsageDays ?? []}
+          startDay={data?.window.startDay ?? ""}
+          endDay={data?.window.endDay ?? ""}
           loading={!hasEverLoaded && isLoading}
           error={error}
         />
