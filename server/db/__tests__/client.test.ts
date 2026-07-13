@@ -287,7 +287,7 @@ describe('migration: drop opencode_daily_usage', () => {
 
     // Verify schema version was bumped
     const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
-    expect(versionRow?.value).toBe('16')
+    expect(versionRow?.value).toBe('17')
     db.close()
   })
 
@@ -357,7 +357,7 @@ describe('migration: v15 drops total_tokens from daily_token_usage', () => {
     expect(parsed[0].inputTokens).toBe(100)
 
     const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
-    expect(versionRow?.value).toBe('16')
+    expect(versionRow?.value).toBe('17')
     // v16 migration added source column and rebuilt PK
     const v16Columns = db.prepare(`PRAGMA table_info(daily_token_usage)`).all() as Array<{ name: string }>
     expect(v16Columns.some(c => c.name === 'source')).toBe(true)
@@ -385,7 +385,7 @@ describe('migration: v15 drops total_tokens from daily_token_usage', () => {
     // v16 migration adds source column and rebuilds PK
     expect(columns.some(c => c.name === 'source')).toBe(true)
     const versionRow = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value: string } | undefined
-    expect(versionRow?.value).toBe('16')
+    expect(versionRow?.value).toBe('17')
     db.close()
   })
 })

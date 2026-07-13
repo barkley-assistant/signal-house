@@ -4,6 +4,7 @@ import * as db from '../../../db/client'
 jest.mock('../../../db/client', () => ({
   initDb: jest.fn().mockResolvedValue(undefined),
   persistSnapshot: jest.fn(),
+  markRepositoriesPresence: jest.fn(),
   }))
 
 jest.mock('../../github/collector', () => ({

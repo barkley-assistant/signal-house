@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 16
+export const SCHEMA_VERSION = 17
 
 export const SQL = {
 
@@ -118,6 +118,8 @@ export const SQL = {
       github_owner   TEXT,
       github_repo    TEXT,
       source         TEXT NOT NULL DEFAULT 'github',
+      present        INTEGER NOT NULL DEFAULT 1,
+      last_seen_at   TEXT,
       PRIMARY KEY (repo_key)
     );
 
@@ -136,6 +138,8 @@ export const SQL = {
       authors          TEXT NOT NULL DEFAULT '[]',
       latest_commit_at TEXT,
       error            TEXT,
+      present          INTEGER NOT NULL DEFAULT 1,
+      last_seen_at     TEXT,
       PRIMARY KEY (repo_key)
     );
 
@@ -287,6 +291,13 @@ export const SQL = {
     DROP TABLE daily_token_usage;
 
     ALTER TABLE daily_token_usage_v16 RENAME TO daily_token_usage;
+  `,
+
+  migrateRepositoryPresenceV17: `
+    ALTER TABLE source_repositories ADD COLUMN present INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE source_repositories ADD COLUMN last_seen_at TEXT;
+    ALTER TABLE source_local_git ADD COLUMN present INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE source_local_git ADD COLUMN last_seen_at TEXT;
   `,
 
   getDailyTokenUsageRange: `

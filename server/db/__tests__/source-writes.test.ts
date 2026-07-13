@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import Database from 'better-sqlite3'
 import {
   initDb, persistSnapshot, getLatestState, close,
+  markRepositoriesPresence,
 } from '../client'
 import type { MetricSnapshot } from '../../../types/snapshot'
 
@@ -554,12 +555,185 @@ describe('empty source data handled', () => {
 })
 
 describe('schema version', () => {
-  it('fresh install starts at schema version 15', async () => {
+  it('fresh install starts at schema version 17', async () => {
     await initDb()
     const db = new Database(join(tmpDir, 'metrics.db'))
     const row = db.prepare("SELECT value FROM latest_state WHERE key = 'schema_version'").get() as { value: string } | undefined
     expect(row).toBeDefined()
-    expect(Number(row!.value)).toBe(16)
+    expect(Number(row!.value)).toBe(17)
+    db.close()
+  })
+})
+
+describe('repository presence tracking', () => {
+  it('marks present=1 for repos in current cycle', async () => {
+    await initDb()
+
+    // Persist a snapshot with one local git repo
+    const snapshot = makeSnapshot({
+      id: 'snap-1',
+      capturedAt: '2026-07-01T12:00:00.000Z',
+      localGit: [{
+        repoKey: 'local:/home/repo-a',
+        source: 'local' as const,
+        path: '/home/repo-a',
+        repoName: 'repo-a',
+        remoteUrl: null,
+        githubOwner: null,
+        githubRepo: null,
+        defaultBranch: 'main',
+        isGitRepo: true,
+        recentCommits: 10,
+        commitsByDay: {},
+        authors: [],
+        latestCommitAt: null,
+        error: null,
+      }],
+    })
+    persistSnapshot(snapshot)
+
+    // Mark presence for the current cycle
+    markRepositoriesPresence(['local:/home/repo-a'], '2026-07-01T12:00:00.000Z')
+
+    const db = new Database(join(tmpDir, 'metrics.db'))
+    const localGitRows = queryTable(db, 'source_local_git')
+    expect(localGitRows).toHaveLength(1)
+    expect(localGitRows[0]!.present).toBe(1)
+    expect(localGitRows[0]!.last_seen_at).toBe('2026-07-01T12:00:00.000Z')
+
+    db.close()
+  })
+
+  it('marks present=0 for repos not in current cycle', async () => {
+    await initDb()
+
+    // Persist first snapshot with two repos
+    const snap1 = makeSnapshot({
+      id: 'snap-1',
+      capturedAt: '2026-07-01T12:00:00.000Z',
+      localGit: [
+        {
+          repoKey: 'local:/home/repo-a', source: 'local' as const, path: '/home/repo-a',
+          repoName: 'repo-a', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 10, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+        {
+          repoKey: 'local:/home/repo-b', source: 'local' as const, path: '/home/repo-b',
+          repoName: 'repo-b', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 5, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+      ],
+    })
+    persistSnapshot(snap1)
+    markRepositoriesPresence(['local:/home/repo-a', 'local:/home/repo-b'], '2026-07-01T12:00:00.000Z')
+
+    // Second snapshot: only repo-a is present (repo-b was deleted)
+    const snap2 = makeSnapshot({
+      id: 'snap-2',
+      capturedAt: '2026-07-02T12:00:00.000Z',
+      localGit: [
+        {
+          repoKey: 'local:/home/repo-a', source: 'local' as const, path: '/home/repo-a',
+          repoName: 'repo-a', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 15, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+      ],
+    })
+    persistSnapshot(snap2)
+    markRepositoriesPresence(['local:/home/repo-a'], '2026-07-02T12:00:00.000Z')
+
+    const db = new Database(join(tmpDir, 'metrics.db'))
+    const rows = db.prepare('SELECT repo_key, present, last_seen_at FROM source_local_git ORDER BY repo_key').all() as Array<{ repo_key: string; present: number; last_seen_at: string | null }>
+
+    expect(rows).toHaveLength(2)
+
+    const repoA = rows.find(r => r.repo_key === 'local:/home/repo-a')!
+    expect(repoA.present).toBe(1)
+    expect(repoA.last_seen_at).toBe('2026-07-02T12:00:00.000Z')
+
+    const repoB = rows.find(r => r.repo_key === 'local:/home/repo-b')!
+    expect(repoB.present).toBe(0)
+    expect(repoB.last_seen_at).toBe('2026-07-02T12:00:00.000Z')
+    db.close()
+  })
+
+  it('flips present back to 1 when repo is reintroduced', async () => {
+    await initDb()
+
+    // Cycle 1: two repos
+    const snap1 = makeSnapshot({
+      id: 'snap-1',
+      capturedAt: '2026-07-01T12:00:00.000Z',
+      localGit: [
+        {
+          repoKey: 'local:/home/repo-a', source: 'local' as const, path: '/home/repo-a',
+          repoName: 'repo-a', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 10, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+        {
+          repoKey: 'local:/home/repo-b', source: 'local' as const, path: '/home/repo-b',
+          repoName: 'repo-b', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 5, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+      ],
+    })
+    persistSnapshot(snap1)
+    markRepositoriesPresence(['local:/home/repo-a', 'local:/home/repo-b'], '2026-07-01T12:00:00.000Z')
+
+    // Cycle 2: repo-b removed
+    const snap2 = makeSnapshot({
+      id: 'snap-2',
+      capturedAt: '2026-07-02T12:00:00.000Z',
+      localGit: [
+        {
+          repoKey: 'local:/home/repo-a', source: 'local' as const, path: '/home/repo-a',
+          repoName: 'repo-a', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 15, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+      ],
+    })
+    persistSnapshot(snap2)
+    markRepositoriesPresence(['local:/home/repo-a'], '2026-07-02T12:00:00.000Z')
+
+    // Cycle 3: repo-b reintroduced
+    const snap3 = makeSnapshot({
+      id: 'snap-3',
+      capturedAt: '2026-07-03T12:00:00.000Z',
+      localGit: [
+        {
+          repoKey: 'local:/home/repo-a', source: 'local' as const, path: '/home/repo-a',
+          repoName: 'repo-a', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 20, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+        {
+          repoKey: 'local:/home/repo-b', source: 'local' as const, path: '/home/repo-b',
+          repoName: 'repo-b', remoteUrl: null, githubOwner: null, githubRepo: null,
+          defaultBranch: 'main', isGitRepo: true, recentCommits: 8, commitsByDay: {},
+          authors: [], latestCommitAt: null, error: null,
+        },
+      ],
+    })
+    persistSnapshot(snap3)
+    markRepositoriesPresence(['local:/home/repo-a', 'local:/home/repo-b'], '2026-07-03T12:00:00.000Z')
+
+    const db = new Database(join(tmpDir, 'metrics.db'))
+    const rows = db.prepare('SELECT repo_key, present, last_seen_at FROM source_local_git ORDER BY repo_key').all() as Array<{ repo_key: string; present: number; last_seen_at: string | null }>
+
+    expect(rows).toHaveLength(2)
+    const repoA = rows.find(r => r.repo_key === 'local:/home/repo-a')!
+    expect(repoA.present).toBe(1)
+    expect(repoA.last_seen_at).toBe('2026-07-03T12:00:00.000Z')
+
+    const repoB = rows.find(r => r.repo_key === 'local:/home/repo-b')!
+    expect(repoB.present).toBe(1)  // flipped back from 0 to 1
+    expect(repoB.last_seen_at).toBe('2026-07-03T12:00:00.000Z')
     db.close()
   })
 })

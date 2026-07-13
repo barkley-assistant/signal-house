@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { initDb, persistSnapshot } from '../../db/client'
+import { initDb, persistSnapshot, markRepositoriesPresence } from '../../db/client'
 import type { DashboardAggregates, SessionUsageAggregate, TokenUsageAggregate } from '../../../types/aggregates'
 import type {
   ErrorMetric,
@@ -391,6 +391,8 @@ export function createOrchestrator(config: OrchestratorConfig) {
       try {
         await initDb()
         persistSnapshot(snapshot)
+        const currentRepoKeys = snapshot.localGit.map(r => r.repoKey)
+        markRepositoriesPresence(currentRepoKeys, snapshot.capturedAt)
       } catch (err) {
         allErrors.push(`Failed to persist snapshot: ${err instanceof Error ? err.message : String(err)}`)
       }

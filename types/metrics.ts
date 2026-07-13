@@ -57,6 +57,7 @@ export interface RepositoryIdentity {
   githubRepo: string | null
   source: 'local' | 'github' | 'both'
   isPrivate?: boolean
+  present?: boolean
 }
 
 export interface RepositoryMetric extends RepositoryIdentity {
@@ -105,6 +106,8 @@ export interface LocalGitRepoMetric {
   authors: string[]
   latestCommitAt: string | null
   error: string | null
+  present?: boolean
+  lastSeenAt?: string | null
 }
 
 export type MetricRecord = IssueMetric | PullRequestMetric | WorkflowRunMetric | RepositoryMetric | SessionMetric | LocalGitRepoMetric | ErrorMetric

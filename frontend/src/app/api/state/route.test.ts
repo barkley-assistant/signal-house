@@ -130,6 +130,7 @@ function makeLatestState(): LatestState {
     diagnostics: {
       configuredProjectRoots: [],
       discoveredRepos: [],
+      historicalRepos: [],
       skippedPaths: [],
       parsedGitHubRemotes: [],
       collectionTargets: [],

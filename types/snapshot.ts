@@ -249,6 +249,17 @@ export interface SourceDiagnostics {
     source: 'local' | 'github' | 'both'
     isPrivate?: boolean
   }>
+  historicalRepos: Array<{
+    repoKey: string
+    name: string
+    path: string | null
+    remoteUrl: string | null
+    githubOwner: string | null
+    githubRepo: string | null
+    source: 'local' | 'github' | 'both'
+    isPrivate?: boolean
+    lastSeenAt: string | null
+  }>
   skippedPaths: Array<{ path: string; message: string }>
   parsedGitHubRemotes: Array<{
     repoKey: string

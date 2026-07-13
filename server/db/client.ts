@@ -185,6 +185,14 @@ function migrate(db: Db): void {
           db.exec(SQL.migrateDailyTokenUsageV16)
         }
       }
+
+      // Add present + last_seen_at columns to repository tables (issue #340).
+      if (current < 17) {
+        const repoColumns = db.prepare(`PRAGMA table_info(source_repositories)`).all() as Array<{ name: string }>
+        if (!repoColumns.some(c => c.name === 'present')) {
+          db.exec(SQL.migrateRepositoryPresenceV17)
+        }
+      }
     } else {
       // Destructive migration for old schemas (< v10). We need to drop and
       // recreate tables whose shape has changed over earlier versions.
@@ -747,6 +755,43 @@ export function persistSnapshot(snapshot: MetricSnapshot): void {
   transaction()
 }
 
+/**
+ * Mark repositories as present (current cycle) or absent (removed).
+ *
+ * Call this AFTER persistSnapshot to stamp presence tracking columns
+ * on both source_repositories and source_local_git tables.
+ *
+ * - repos in `repoKeys` get present=1 with last_seen_at set to capturedAt
+ * - repos NOT in `repoKeys` (and currently present=1) get present=0
+ * - if repoKeys is empty, all repos with present=1 get flipped to 0
+ */
+export function markRepositoriesPresence(repoKeys: string[], capturedAt: string): void {
+  const db = getDb()
+  const transaction = db.transaction(() => {
+    // Set present=1 for repos discovered in this cycle
+    const setPresent = db.prepare(`UPDATE source_repositories SET present = 1, last_seen_at = ? WHERE repo_key = ?`)
+    const setPresentLocal = db.prepare(`UPDATE source_local_git SET present = 1, last_seen_at = ? WHERE repo_key = ?`)
+    for (const key of repoKeys) {
+      setPresent.run(capturedAt, key)
+      setPresentLocal.run(capturedAt, key)
+    }
+
+    // Mark repos NOT in this cycle as absent (present=0)
+    if (repoKeys.length > 0) {
+      const placeholders = repoKeys.map(() => '?').join(',')
+      const markMissing = db.prepare(`UPDATE source_repositories SET present = 0, last_seen_at = ? WHERE present = 1 AND repo_key NOT IN (${placeholders})`)
+      const markMissingLocal = db.prepare(`UPDATE source_local_git SET present = 0, last_seen_at = ? WHERE present = 1 AND repo_key NOT IN (${placeholders})`)
+      markMissing.run(capturedAt, ...repoKeys)
+      markMissingLocal.run(capturedAt, ...repoKeys)
+    } else {
+      // No repos found this cycle — mark all as removed
+      db.prepare(`UPDATE source_repositories SET present = 0, last_seen_at = ? WHERE present = 1`).run(capturedAt)
+      db.prepare(`UPDATE source_local_git SET present = 0, last_seen_at = ? WHERE present = 1`).run(capturedAt)
+    }
+  })
+  transaction()
+}
+
 // ── Normalized source data read helpers ────────────────────────────
 
 function rowToIssueMetric(row: Record<string, unknown>): IssueMetric {
@@ -826,6 +871,7 @@ function rowToRepositoryIdentity(row: Record<string, unknown>): RepositoryIdenti
     githubOwner: row.github_owner ? String(row.github_owner) : null,
     githubRepo: row.github_repo ? String(row.github_repo) : null,
     source: String(row.source) as RepositoryIdentity['source'],
+    present: row.present !== undefined ? Number(row.present) === 1 : undefined,
   }
 }
 
@@ -845,6 +891,8 @@ function rowToLocalGitRepoMetric(row: Record<string, unknown>): LocalGitRepoMetr
     authors: JSON.parse(String(row.authors)),
     latestCommitAt: row.latest_commit_at ? String(row.latest_commit_at) : null,
     error: row.error ? String(row.error) : null,
+    present: row.present !== undefined ? Number(row.present) === 1 : undefined,
+    lastSeenAt: row.last_seen_at ? String(row.last_seen_at) : null,
   }
 }
 

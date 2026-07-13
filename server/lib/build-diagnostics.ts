@@ -18,7 +18,7 @@ export function buildDiagnostics(
       .filter(repo => repo.githubOwner && repo.githubRepo)
       .map(repo => [`${repo.githubOwner}/${repo.githubRepo}`, privacyMap[repo.repoKey] === true]),
   )
-  const discoveredRepos = (snapshot?.localGit ?? [])
+  const allLocalGit = (snapshot?.localGit ?? [])
     .map(repo => {
       const githubKey = repo.githubOwner && repo.githubRepo
         ? `${repo.githubOwner}/${repo.githubRepo}`
@@ -32,9 +32,28 @@ export function buildDiagnostics(
         githubRepo: repo.githubRepo,
         source: repo.source,
         isPrivate: githubKey ? (privateByGithubKey.get(githubKey) ?? false) : false,
+        present: repo.present,
+        lastSeenAt: repo.lastSeenAt ?? null,
       }
     })
     .filter(repo => showPrivateRepoItems || !repo.isPrivate)
+
+  const discoveredRepos = allLocalGit
+    .filter(repo => repo.present !== false)
+
+  const historicalRepos = allLocalGit
+    .filter(repo => repo.present === false)
+    .map(repo => ({
+      repoKey: repo.repoKey,
+      name: repo.name,
+      path: repo.path,
+      remoteUrl: repo.remoteUrl,
+      githubOwner: repo.githubOwner,
+      githubRepo: repo.githubRepo,
+      source: repo.source,
+      isPrivate: repo.isPrivate,
+      lastSeenAt: repo.lastSeenAt,
+    }))
   const parsedGitHubRemotes = discoveredRepos
     .filter(repo => repo.remoteUrl || repo.githubOwner || repo.githubRepo)
     .map(repo => ({
@@ -47,6 +66,7 @@ export function buildDiagnostics(
   return {
     configuredProjectRoots,
     discoveredRepos,
+    historicalRepos,
     skippedPaths: state.runHistory.flatMap(record => (record.warnings ?? []).map(warning => ({
       path: 'refresh',
       message: warning,
