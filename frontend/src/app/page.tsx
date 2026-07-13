@@ -1088,7 +1088,7 @@ export default function Home() {
         />
       </section>
 
-      <section aria-label="Hermes token usage" className="mt-6">
+      <section aria-label="Agent token usage" className="mt-6">
         <HermesTokenUsageCard
           rows={data?.usage.hermesTokenUsageDays ?? []}
           startDay={data?.window.startDay ?? ""}

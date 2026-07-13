@@ -45,16 +45,15 @@ describe("HermesTokenUsageCard", () => {
       <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
     );
 
-    expect(html).toContain("Hermes Token Usage");
+    expect(html).toContain("Agent Token Usage");
     expect(html).toContain("Hermes Agent");
-    expect(html).toContain("claude-sonnet-4");
   });
 
   it("renders empty state when no rows", () => {
     const html = renderToStaticMarkup(
       <HermesTokenUsageCard rows={[]} startDay="" endDay="" />,
     );
-    expect(html).toContain("No Hermes token usage data");
+    expect(html).toContain("No agent token usage data");
   });
 
   it("renders loading state", () => {
@@ -73,32 +72,7 @@ describe("HermesTokenUsageCard", () => {
     expect(html).toContain('role="alert"');
   });
 
-  it("renders expand/collapse button text", () => {
-    const rows: DailyTokenUsageRow[] = [
-      makeRow("2026-07-01", {
-        totalSessions: 3,
-        modelUsage: [
-          {
-            modelName: "model-a",
-            messages: 5,
-            inputTokens: 100,
-            outputTokens: 50,
-            tokensReasoning: null,
-            cacheReadTokens: null,
-            cacheWriteTokens: null,
-            cost: 0.1,
-          },
-        ],
-      }),
-    ];
-    const html = renderToStaticMarkup(
-      <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
-    );
-    // Should contain expand text in collapsed state
-    expect(html).toContain("Expand");
-  });
-
-  it("renders summary row with token info", () => {
+  it("renders summary row with StatsBar", () => {
     const rows: DailyTokenUsageRow[] = [
       makeRow("2026-07-01", {
         totalSessions: 4,
@@ -131,37 +105,30 @@ describe("HermesTokenUsageCard", () => {
       <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
     );
 
-    // Summary row shows totals across all modelUsages
-    expect(html).toContain("Input:");
-    expect(html).toContain("Output:");
-    expect(html).toContain("Cost:");
-    expect(html).toContain("Sessions:");
-    expect(html).toContain("Top model:");
+    // StatsBar renders as <dl data-slot="stats-bar"> with <dt> labels
+    expect(html).toContain('data-slot="stats-bar"');
+    expect(html).toContain("<dt");
+    expect(html).toContain("Input");
+    expect(html).toContain("Output");
+    expect(html).toContain("Cost");
+    expect(html).toContain("Sessions");
   });
 
-  it("identifies the dominant model by message count", () => {
+  it("uses full-number formatting for stats", () => {
     const rows: DailyTokenUsageRow[] = [
       makeRow("2026-07-01", {
+        totalSessions: 1,
+        totalCost: 0.5,
         modelUsage: [
           {
-            modelName: "model-a",
-            messages: 100,
-            inputTokens: 10,
-            outputTokens: 5,
+            modelName: "claude-sonnet-4",
+            messages: 10,
+            inputTokens: 1500,
+            outputTokens: 2500,
             tokensReasoning: null,
             cacheReadTokens: null,
             cacheWriteTokens: null,
-            cost: 0.01,
-          },
-          {
-            modelName: "model-b",
-            messages: 20,
-            inputTokens: 50,
-            outputTokens: 25,
-            tokensReasoning: null,
-            cacheReadTokens: null,
-            cacheWriteTokens: null,
-            cost: 0.05,
+            cost: 0.5,
           },
         ],
       }),
@@ -170,8 +137,9 @@ describe("HermesTokenUsageCard", () => {
       <HermesTokenUsageCard rows={rows} startDay={DEFAULT_START} endDay={DEFAULT_END} />,
     );
 
-    // model-a has 100 messages across all entries → dominant
-    expect(html).toContain("model-a");
+    expect(html).toContain("1,500");
+    expect(html).toContain("2,500");
+    expect(html).not.toContain("1.5K");
   });
 
   it("renders date spine with 0-fill for gap days", () => {
@@ -192,11 +160,11 @@ describe("HermesTokenUsageCard", () => {
     );
 
     // Component renders without crashing (totals include only the 2 non-gap days)
-    expect(html).toContain("Hermes Token Usage");
-    expect(html).toContain("Expand details"); // expand button exists
-    // Gap days show 0 in totals — input matches only the 2 data rows
-    expect(html).toContain("Input:");
-    expect(html).toContain("Output:");
+    expect(html).toContain("Agent Token Usage");
+    // No expand details button
+    expect(html).not.toContain("Expand details");
+    // StatsBar still renders
+    expect(html).toContain('data-slot="stats-bar"');
   });
 
   it("renders flat sparkline when no data in valid window", () => {
@@ -205,12 +173,11 @@ describe("HermesTokenUsageCard", () => {
     );
 
     // Should NOT show the empty state text (it has a window to display)
-    expect(html).not.toContain("No Hermes token usage data");
+    expect(html).not.toContain("No agent token usage data");
     // Sparkline container is still rendered (empty div for echarts)
     expect(html).toContain("echarts-for-react");
-    // Summary shows zero totals
-    expect(html).toContain("Input:");
-    expect(html).toContain("0");
+    // StatsBar renders with zero values
+    expect(html).toContain('data-slot="stats-bar"');
   });
 
   it("handles invalid window dates gracefully", () => {
@@ -219,7 +186,7 @@ describe("HermesTokenUsageCard", () => {
     );
 
     // Should not crash — renders empty state or handles gracefully
-    expect(html).toContain("Hermes Token Usage");
-    expect(html).toContain("No Hermes token usage data");
+    expect(html).toContain("Agent Token Usage");
+    expect(html).toContain("No agent token usage data");
   });
 });
