@@ -195,6 +195,15 @@ afterEach(() => {
 })
 
 describe('hermes db collector', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date(day(2026, 7, 9, 12, 0) * 1000))
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   it('connects to a valid hermes db in read-only mode', () => {
     const db = connectHermesDb({ dbPath: dbPath ?? undefined })
     expect(db).not.toBeNull()
@@ -202,9 +211,6 @@ describe('hermes db collector', () => {
   })
 
   it('aggregates sessions by UTC day including subagent sessions', () => {
-    // Mock Date.now to control the 28-day lookback window
-    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
-
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     expect(rows.length).toBeGreaterThanOrEqual(2)
 
@@ -226,13 +232,9 @@ describe('hermes db collector', () => {
     const day9 = rows.find(r => r.day === '2026-07-09')
     expect(day9).toBeDefined()
     expect(day9!.sessions).toBe(1) // ses-005
-
-    jest.restoreAllMocks()
   })
 
   it('resolves cost using actual_cost_usd over estimated_cost_usd', () => {
-    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
-
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day7 = rows.find(r => r.day === '2026-07-07')
 
@@ -240,45 +242,33 @@ describe('hermes db collector', () => {
     // ses-001 has actualCost: 0.05, ses-002 has estimatedCost: 0.01 (actualCost: null)
     // Total cost = 0.05 + 0.01 = 0.06
     expect(day7!.cost).toBeCloseTo(0.06, 10)
-
-    jest.restoreAllMocks()
   })
 
   it('uses estimated_cost_usd when actual_cost_usd is null', () => {
     // ses-002 has actualCost=null, estimatedCost=0.01
-    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
-
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day7 = rows.find(r => r.day === '2026-07-07')
 
     // We already verified cost above; this test confirms cost > 0 from estimated
     expect(day7!.cost).toBeGreaterThan(0)
-    jest.restoreAllMocks()
   })
 
   it('handles null costs gracefully (cost = 0)', () => {
     // ses-004 has both actualCost=null and estimatedCost=null
-    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
-
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day8 = rows.find(r => r.day === '2026-07-08')
 
     expect(day8).toBeDefined()
     // ses-003 cost = 0.10, ses-004 cost = 0 => total 0.10
     expect(day8!.cost).toBeCloseTo(0.10, 10)
-
-    jest.restoreAllMocks()
   })
 
   it('includes subagent sessions (no parent_session_id filter)', () => {
-    jest.spyOn(Date, 'now').mockReturnValue(day(2026, 7, 9, 12, 0) * 1000)
-
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day7 = rows.find(r => r.day === '2026-07-07')
 
     // ses-002 (subagent) should be included — counted in sessions per day
     expect(day7!.sessions).toBe(2) // includes both primary + subagent
-    jest.restoreAllMocks()
   })
 
   it('aggregates model breakdown across sessions', () => {
