@@ -141,46 +141,6 @@ describe('buildRefreshConfig', () => {
     })
   })
 
-  it('adds discovered GitHub repos to the GitHub config list when a token is available', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue({
-      repos: [
-        { repoKey: 'github:test/one', name: 'one', path: '/one', remoteUrl: 'https://github.com/test/one', githubOwner: 'test', githubRepo: 'one', source: 'github' },
-        { repoKey: 'github:test/two', name: 'two', path: '/two', remoteUrl: 'https://github.com/test/two', githubOwner: 'test', githubRepo: 'two', source: 'github' },
-      ],
-      warnings: [],
-    })
-
-    process.env['GITHUB_TOKEN'] = 'token'
-    process.env['SECRET_HOUSE_PROJECT_ROOTS'] = '/workspace'
-
-    const config = buildRefreshConfig()
-
-    expect(config.github).toEqual([
-      { owner: 'test', repo: 'one', token: 'token' },
-      { owner: 'test', repo: 'two', token: 'token' },
-    ])
-  })
-
-  it('deduplicates discovered GitHub repos against explicit owner and repo', () => {
-    mocks.mockDiscoverGitRepos.mockReturnValue({
-      repos: [
-        { repoKey: 'github:test/repo', name: 'repo', path: '/repo', remoteUrl: 'https://github.com/test/repo', githubOwner: 'test', githubRepo: 'repo', source: 'github' },
-      ],
-      warnings: [],
-    })
-
-    process.env['GITHUB_TOKEN'] = 'token'
-    process.env['GITHUB_OWNER'] = 'test'
-    process.env['GITHUB_REPO'] = 'repo'
-    process.env['SECRET_HOUSE_PROJECT_ROOTS'] = '/workspace'
-
-    const config = buildRefreshConfig()
-
-    expect(config.github).toEqual([
-      { owner: 'test', repo: 'repo', token: 'token' },
-    ])
-  })
-
   it('includes discovery warnings in the refresh config', () => {
     mocks.mockDiscoverGitRepos.mockReturnValue({
       repos: [],

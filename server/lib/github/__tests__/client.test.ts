@@ -319,10 +319,40 @@ describe('createApiClient', () => {
     expect(runs[0]!.workflowName).toBe('Workflow 42')
   })
 
-  it('handles API errors gracefully', async () => {
+  it('handles API errors gracefully with friendly messages', async () => {
     mockFetch(500, { message: 'Internal Server Error' })
     const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
-    await expect(client.fetchIssues()).rejects.toThrow('GitHub API 500')
+    await expect(client.fetchIssues()).rejects.toThrow('GitHub API server error for test/repo')
+  })
+
+  it('maps 401 to authentication error', async () => {
+    mockFetch(401, { message: 'Bad credentials' })
+    const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
+    await expect(client.fetchIssues()).rejects.toThrow('GitHub API authentication failed: invalid or expired token')
+  })
+
+  it('maps 403 to access denied error', async () => {
+    mockFetch(403, { message: 'Forbidden' })
+    const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
+    await expect(client.fetchIssues()).rejects.toThrow('GitHub API access denied for test/repo: rate limited or forbidden')
+  })
+
+  it('maps 404 to not found error', async () => {
+    mockFetch(404, { message: 'Not Found' })
+    const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
+    await expect(client.fetchIssues()).rejects.toThrow('Repository not found or not accessible: test/repo')
+  })
+
+  it('maps 422 to validation error', async () => {
+    mockFetch(422, { message: 'Validation Failed' })
+    const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
+    await expect(client.fetchIssues()).rejects.toThrow('GitHub API request validation failed for test/repo')
+  })
+
+  it('maps unknown status codes to generic error', async () => {
+    mockFetch(503, { message: 'Service Unavailable' })
+    const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
+    await expect(client.fetchIssues()).rejects.toThrow('GitHub API error (503) for test/repo')
   })
 
   it('paginates with Link header', async () => {

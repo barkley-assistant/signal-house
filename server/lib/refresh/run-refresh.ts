@@ -110,17 +110,6 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
       if (!repoConfigs.some((existing) => existing.repoKey === repoConfig.repoKey || existing.path === repoConfig.path)) {
         repoConfigs.push(repoConfig)
       }
-
-      if (githubToken && repo.githubOwner && repo.githubRepo) {
-        const exists = githubConfigs.some((existing) => existing.owner === repo.githubOwner && existing.repo === repo.githubRepo)
-        if (!exists) {
-          githubConfigs.push({
-            owner: repo.githubOwner,
-            repo: repo.githubRepo,
-            token: githubToken,
-          })
-        }
-      }
     }
   }
 

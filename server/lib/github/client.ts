@@ -10,6 +10,17 @@ import type {
 
 const DEFAULT_PER_PAGE = 100
 
+function githubErrorToMessage(status: number, repo: string): string {
+  switch (status) {
+    case 401: return `GitHub API authentication failed: invalid or expired token`
+    case 403: return `GitHub API access denied for ${repo}: rate limited or forbidden`
+    case 404: return `Repository not found or not accessible: ${repo}`
+    case 422: return `GitHub API request validation failed for ${repo}`
+    case 500: return `GitHub API server error for ${repo}`
+    default:  return `GitHub API error (${status}) for ${repo}`
+  }
+}
+
 export function createApiClient(opts: PAClientOptions) {
   const baseUrl = opts.baseUrl.replace(/\/+$/, '')
   const headers: Record<string, string> = {
@@ -47,7 +58,8 @@ export function createApiClient(opts: PAClientOptions) {
 
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      throw new Error(`GitHub API ${res.status}: ${body.slice(0, 200)}`)
+      console.error(`[github-client] GitHub API ${res.status} for ${baseUrl}${path}: ${body.slice(0, 500)}`)
+      throw new Error(githubErrorToMessage(res.status, repoFullName))
     }
 
     const data = await res.json() as T
