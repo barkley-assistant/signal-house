@@ -285,14 +285,17 @@ describe('createSessionCollector', () => {
       lastActivityAt: null,
       messages: 0,
       activeDays: null,
-      totalCost: 0,
+      // "unknown vs false" contract (issue #343): an empty DB has no
+      // measurement, so `totalCost` is `null` (not `0`).
+      totalCost: null,
       averageCostPerDay: null,
       averageTokensPerSession: null,
       medianTokensPerSession: null,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
+      // token totals: not measured either → null
+      inputTokens: null,
+      outputTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
       uniqueTools: [],
       toolUsage: [],
       modelUsage: [],

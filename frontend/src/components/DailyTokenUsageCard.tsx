@@ -50,12 +50,12 @@ function buildDailyTokenUsageOption(
   filled: FilledDay[],
 ): EChartsOption {
   const labels = filled.map((d) => formatDayLabel(d.date));
-  const tokens = filled.map((d) => (d.isGap ? 0 : d.row!.totalTokens));
+  const tokens = filled.map((d) => (d.isGap ? null : d.row!.totalTokens));
   const cost = filled.map((d) =>
-    d.isGap ? 0 : d.row!.totalCost,
+    d.isGap ? null : d.row!.totalCost,
   );
   const sessions = filled.map((d) =>
-    d.isGap ? 0 : d.row!.totalSessions,
+    d.isGap ? null : d.row!.totalSessions,
   );
   return {
     grid: { top: 16, right: 52, bottom: 24, left: 40, containLabel: false },

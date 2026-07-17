@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import os from 'node:os'
 import path from 'node:path'
 import { normalizeModelName as sharedNormalizeModelName } from '../../../utils/string-normalize'
+import { sumOrNull } from '../../../utils/null-math'
 
 export interface OpencodeDbConfig {
   dbPath?: string
@@ -12,12 +13,12 @@ export interface DbSessionRow {
   slug: string
   agent: string
   model: string | null
-  cost: number
-  tokensInput: number
-  tokensOutput: number
-  tokensReasoning: number
-  tokensCacheRead: number
-  tokensCacheWrite: number
+  cost: number | null
+  tokensInput: number | null
+  tokensOutput: number | null
+  tokensReasoning: number | null
+  tokensCacheRead: number | null
+  tokensCacheWrite: number | null
   timeCreated: number
   timeUpdated: number
   projectId: string
@@ -30,12 +31,12 @@ export interface DailyAggregation {
   startedSessions: number
   completedSessions: number
   erroredSessions: number
-  cost: number
-  tokensInput: number
-  tokensOutput: number
-  tokensReasoning: number
-  tokensCacheRead: number
-  tokensCacheWrite: number
+  cost: number | null
+  tokensInput: number | null
+  tokensOutput: number | null
+  tokensReasoning: number | null
+  tokensCacheRead: number | null
+  tokensCacheWrite: number | null
 }
 
 export interface ModelBreakdownEntry {
@@ -43,12 +44,12 @@ export interface ModelBreakdownEntry {
   provider?: string | null
   sessions: number
   messages: number
-  inputTokens: number
-  outputTokens: number
-  reasoningTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-  cost: number
+  inputTokens: number | null
+  outputTokens: number | null
+  reasoningTokens: number | null
+  cacheReadTokens: number | null
+  cacheWriteTokens: number | null
+  cost: number | null
 }
 
 export interface AgentBreakdownEntry {
@@ -102,6 +103,19 @@ function defaultDbPath(): string {
 function toNumber(value: unknown, fallback = 0): number {
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+/**
+ * Convert a raw DB value to a nullable number. Returns `null` when the
+ * input is `null`/`undefined`, when the parsed value is `NaN`, or when
+ * the value is `Infinity`/`-Infinity`. Otherwise returns the finite
+ * numeric value. Used to preserve "unknown" semantics through the
+ * collector layer (issue #343).
+ */
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null) return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function normalizeModelName(value: unknown): string | null {
@@ -266,12 +280,12 @@ export function querySessions(since: number, until?: number, config?: OpencodeDb
     slug: row.slug,
     agent: row.agent ?? '',
     model: normalizeModelName(row.model),
-    cost: toNumber(row.cost),
-    tokensInput: toNumber(row.tokens_input),
-    tokensOutput: toNumber(row.tokens_output),
-    tokensReasoning: toNumber(row.tokens_reasoning),
-    tokensCacheRead: toNumber(row.tokens_cache_read),
-    tokensCacheWrite: toNumber(row.tokens_cache_write),
+    cost: toNumberOrNull(row.cost),
+    tokensInput: toNumberOrNull(row.tokens_input),
+    tokensOutput: toNumberOrNull(row.tokens_output),
+    tokensReasoning: toNumberOrNull(row.tokens_reasoning),
+    tokensCacheRead: toNumberOrNull(row.tokens_cache_read),
+    tokensCacheWrite: toNumberOrNull(row.tokens_cache_write),
     timeCreated: toNumber(row.time_created),
     timeUpdated: toNumber(row.time_updated),
     projectId: row.project_id ?? '',
@@ -294,24 +308,26 @@ export function querySessionsByDay(days: number, config?: OpencodeDbConfig): Dai
       startedSessions: 0,
       completedSessions: 0,
       erroredSessions: 0,
-      cost: 0,
-      tokensInput: 0,
-      tokensOutput: 0,
-      tokensReasoning: 0,
-      tokensCacheRead: 0,
-      tokensCacheWrite: 0,
+      cost: null,
+      tokensInput: null,
+      tokensOutput: null,
+      tokensReasoning: null,
+      tokensCacheRead: null,
+      tokensCacheWrite: null,
     }
 
     current.sessions += 1
     current.startedSessions += 1
     if (isCompleted(row)) current.completedSessions += 1
     if (isErrored(row)) current.erroredSessions += 1
-    current.cost += toNumber(row.cost)
-    current.tokensInput += toNumber(row.tokens_input)
-    current.tokensOutput += toNumber(row.tokens_output)
-    current.tokensReasoning += toNumber(row.tokens_reasoning)
-    current.tokensCacheRead += toNumber(row.tokens_cache_read)
-    current.tokensCacheWrite += toNumber(row.tokens_cache_write)
+    // Null-aware aggregation: a field stays null only if every session in
+    // the day had a null column; otherwise non-null values are summed.
+    current.cost = sumOrNull([current.cost, toNumberOrNull(row.cost)])
+    current.tokensInput = sumOrNull([current.tokensInput, toNumberOrNull(row.tokens_input)])
+    current.tokensOutput = sumOrNull([current.tokensOutput, toNumberOrNull(row.tokens_output)])
+    current.tokensReasoning = sumOrNull([current.tokensReasoning, toNumberOrNull(row.tokens_reasoning)])
+    current.tokensCacheRead = sumOrNull([current.tokensCacheRead, toNumberOrNull(row.tokens_cache_read)])
+    current.tokensCacheWrite = sumOrNull([current.tokensCacheWrite, toNumberOrNull(row.tokens_cache_write)])
 
     grouped.set(day, current)
   }
@@ -332,12 +348,12 @@ export function queryModelBreakdown(since: number, until?: number, config?: Open
       provider,
       sessions: 0,
       messages: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      cost: 0,
+      inputTokens: null,
+      outputTokens: null,
+      reasoningTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cost: null,
     }
 
     // Keep first non-null provider
@@ -347,12 +363,12 @@ export function queryModelBreakdown(since: number, until?: number, config?: Open
 
     current.sessions += 1
     current.messages += messageCounts.get(row.id) ?? 0
-    current.inputTokens += toNumber(row.tokens_input)
-    current.outputTokens += toNumber(row.tokens_output)
-    current.reasoningTokens += toNumber(row.tokens_reasoning)
-    current.cacheReadTokens += toNumber(row.tokens_cache_read)
-    current.cacheWriteTokens += toNumber(row.tokens_cache_write)
-    current.cost += toNumber(row.cost)
+    current.inputTokens = sumOrNull([current.inputTokens, toNumberOrNull(row.tokens_input)])
+    current.outputTokens = sumOrNull([current.outputTokens, toNumberOrNull(row.tokens_output)])
+    current.reasoningTokens = sumOrNull([current.reasoningTokens, toNumberOrNull(row.tokens_reasoning)])
+    current.cacheReadTokens = sumOrNull([current.cacheReadTokens, toNumberOrNull(row.tokens_cache_read)])
+    current.cacheWriteTokens = sumOrNull([current.cacheWriteTokens, toNumberOrNull(row.tokens_cache_write)])
+    current.cost = sumOrNull([current.cost, toNumberOrNull(row.cost)])
 
     grouped.set(modelName, current)
   }

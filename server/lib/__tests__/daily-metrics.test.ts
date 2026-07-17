@@ -653,4 +653,40 @@ describe('computeDailyMetrics', () => {
     expect(jun4.totalSessions).toBe(1)
     expect(jun4.totalCommits).toBe(4)
   })
+
+  // ----- "unknown vs false" contract (issue #343) -----
+
+  it('keeps medianCycleTimeSeconds as null when the window has no merged PRs (does not coerce to 0)', () => {
+    // A snapshot with a couple of unmerged PRs in the lookback window
+    // means the cycle-time aggregate has no data to summarise. The
+    // existing implementation already produces `null` (it returns early
+    // at < 3 merged PRs and the field type is already `number | null`);
+    // this test locks that contract so a future coercion to 0 would be
+    // caught immediately.
+    const snapshot = makeSnapshot({
+      pullRequests: [
+        makePullRequest({
+          id: 'pr-open',
+          state: 'open',
+          createdAt: '2026-06-01T00:00:00Z',
+          mergedAt: null,
+        }),
+        makePullRequest({
+          id: 'pr-closed-not-merged',
+          state: 'closed',
+          createdAt: '2026-06-02T00:00:00Z',
+          mergedAt: null,
+        }),
+      ],
+    })
+
+    const rows = computeDailyMetrics(snapshot)
+    const row = allRow(rows, '2026-06-05')
+    expect(row).toBeDefined()
+    expect(row!.medianCycleTimeSeconds).toBeNull()
+    expect(row!.avgCycleTimeSeconds).toBeNull()
+    expect(row!.p95CycleTimeSeconds).toBeNull()
+    // Sample size confirms there's no cycle-time measurement available.
+    expect(row!.cycleTimeSampleSize).toBe(0)
+  })
 })

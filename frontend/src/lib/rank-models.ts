@@ -15,17 +15,8 @@ export interface RankedModelEntry extends ModelUsageEntry {
   proportion: number;
 }
 
-function sumOrNull(values: (number | null)[]): number | null {
-  let has = false;
-  let sum = 0;
-  for (const v of values) {
-    if (v != null) {
-      has = true;
-      sum += v;
-    }
-  }
-  return has ? sum : null;
-}
+import { sumOrNull } from "../../../utils/null-math";
+export { sumOrNull };
 
 export function totalTokens(entry: ModelUsageEntry): number {
   return (entry.inputTokens ?? 0)

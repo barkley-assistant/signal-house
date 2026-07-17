@@ -253,14 +253,58 @@ describe('hermes db collector', () => {
     expect(day7!.cost).toBeGreaterThan(0)
   })
 
-  it('handles null costs gracefully (cost = 0)', () => {
+  it('handles null costs gracefully (cost resolves to null when neither column has data)', () => {
     // ses-004 has both actualCost=null and estimatedCost=null
     const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
     const day8 = rows.find(r => r.day === '2026-07-08')
 
     expect(day8).toBeDefined()
-    // ses-003 cost = 0.10, ses-004 cost = 0 => total 0.10
+    // ses-003 cost = 0.10, ses-004 cost = null → daily sum is 0.10 (only non-null contributes)
     expect(day8!.cost).toBeCloseTo(0.10, 10)
+  })
+
+  it('produces a null daily cost when every session in the day has both cost columns null', () => {
+    // Open a fresh DB with a single cost-null session to isolate the case.
+    const isolatedDir = mkdtempSync(path.join(os.tmpdir(), 'hermes-db-collector-isolated-'))
+    const isolatedPath = path.join(isolatedDir, 'state.db')
+    const db = new Database(isolatedPath)
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        source TEXT,
+        model TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER,
+        reasoning_tokens INTEGER,
+        estimated_cost_usd REAL,
+        actual_cost_usd REAL,
+        message_count INTEGER,
+        tool_call_count INTEGER,
+        api_call_count INTEGER,
+        started_at REAL,
+        ended_at REAL,
+        parent_session_id TEXT
+      );
+    `)
+    db.prepare(`
+      INSERT INTO sessions (
+        id, source, model, started_at, ended_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run('ses-no-cost', 'cli', 'gpt-5', day(2026, 7, 9, 12, 0), day(2026, 7, 9, 12, 5))
+    db.close()
+
+    const rows = querySessionsByDay(7, { dbPath: isolatedPath })
+    const dayRow = rows.find(r => r.day === '2026-07-09')
+    expect(dayRow).toBeDefined()
+    expect(dayRow!.sessions).toBe(1)
+    // Only cost was the meaningful nullable field; the rest default
+    // to null because the row had no token data either.
+    expect(dayRow!.cost).toBeNull()
+    expect(dayRow!.tokensInput).toBeNull()
+
+    rmSync(isolatedDir, { recursive: true, force: true })
   })
 
   it('includes subagent sessions (no parent_session_id filter)', () => {

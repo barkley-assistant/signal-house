@@ -355,8 +355,12 @@ function computeCIFooter(days: DashboardWindowDay[]): string {
     (s, d) => s + (d.isGap ? 0 : d.metrics?.ciFailCount ?? 0),
     0,
   );
-  const passRate = totalRuns > 0 ? Math.round((passCount / totalRuns) * 100) : 0;
-  return `${passRate}% pass rate \u00B7 ${failCount} failures this window`;
+  // "Unknown vs measured" contract: when no CI has run in the window, do
+  // not render the misleading "0% pass rate" string. Surface the
+  // absence-of-data condition directly. (issue #343)
+  if (totalRuns === 0) return "No runs this window";
+  const passRate = Math.round((passCount / totalRuns) * 100);
+  return `${passRate}% pass rate · ${failCount} failures this window`;
 }
 
 export default function Home() {

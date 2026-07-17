@@ -41,11 +41,16 @@ function buildSparklineOption(
 ): EChartsOption {
   const sorted = [...filled].sort((a, b) => a.date.localeCompare(b.date));
   const labels = sorted.map((d) => formatDayLabel(d.date));
+  // Null-aware gap rendering: emit `null` for days without data so the
+  // ECharts gap renderer (connectNulls: false) draws a true break rather
+  // than a misleading zero. For non-gap days the per-model reduce skips
+  // null token fields via `(m.inputTokens ?? 0)` only on days that have
+  // data — distinct from a measured-zero token row.
   const inputTokens = sorted.map((d) =>
-    d.isGap ? 0 : d.row!.modelUsage.reduce((sum, m) => sum + (m.inputTokens ?? 0), 0),
+    d.isGap ? null : d.row!.modelUsage.reduce((sum, m) => sum + (m.inputTokens ?? 0), 0),
   );
   const outputTokens = sorted.map((d) =>
-    d.isGap ? 0 : d.row!.modelUsage.reduce((sum, m) => sum + (m.outputTokens ?? 0), 0),
+    d.isGap ? null : d.row!.modelUsage.reduce((sum, m) => sum + (m.outputTokens ?? 0), 0),
   );
 
   return {

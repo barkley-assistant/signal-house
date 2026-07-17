@@ -1,6 +1,7 @@
 import { connectHermesDb, querySessionsByDay, queryModelBreakdown } from './db-collector'
 import type { TokenUsageRow } from '../../../types/opencode'
 import { normalizeModelName } from '../../../utils/string-normalize'
+import { sumOrNull } from '../../../utils/null-math'
 
 export interface TokenUsageCollectorResult extends TokenUsageRow {
   errors: string[]
@@ -23,8 +24,18 @@ export function collectHermesTokenUsageSnapshot(): TokenUsageCollectorResult {
 
   const dailyAggs = querySessionsByDay(28)
   const totalSessions = dailyAggs.reduce((sum, d) => sum + d.sessions, 0)
-  const totalTokens = dailyAggs.reduce((sum, d) => sum + d.tokensInput + d.tokensOutput + d.tokensReasoning + d.tokensCacheRead + d.tokensCacheWrite, 0)
-  const totalCost = dailyAggs.reduce((sum, d) => sum + d.cost, 0)
+  // Null-aware reduction (issue #343): a day contributes its token total
+  // only when at least one of its five token fields is non-null.
+  const totalTokens = sumOrNull(
+    dailyAggs.map((d) => sumOrNull([
+      d.tokensInput,
+      d.tokensOutput,
+      d.tokensReasoning,
+      d.tokensCacheRead,
+      d.tokensCacheWrite,
+    ])),
+  ) ?? 0
+  const totalCost = sumOrNull(dailyAggs.map((d) => d.cost))
 
   const models = queryModelBreakdown(since)
   const modelUsage = models.map(m => {

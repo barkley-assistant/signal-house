@@ -499,4 +499,57 @@ describe('buildDashboardWindow — extended coverage', () => {
     })
     expect(window.cards.ci.averageDurationMs).toBeCloseTo(1066.67, 0)
   })
+
+  // ----- "unknown vs false" contract (issue #343) -----
+
+  it('preserves a null totalCost on the sessionUsage aggregate (does not coerce to 0)', () => {
+    process.env['GITHUB_TOKEN'] = 'tok'
+    process.env['GITHUB_OWNER'] = 'o'
+    process.env['SECRET_HOUSE_GITHUB_REPO'] = 'r'
+    process.env['GIT_REPOS'] = '/tmp/a'
+
+    // Provide a sessionUsage aggregate with `totalCost: null` (the case
+    // we expect from a null-aware collector when no cost data exists).
+    const sessionUsage = {
+      periodStart: '2026-05-18T00:00:00Z',
+      periodEnd: '2026-06-14T12:00:00Z',
+      totalSessions: 5,
+      startedSessions: 5,
+      completedSessions: 4,
+      erroredSessions: 1,
+      stuckSessions: 0,
+      lastActivityAt: '2026-06-14T11:30:00Z',
+      messages: 12,
+      activeDays: 3,
+      // Deliberately null — the "unknown vs measured" contract demands
+      // we surface this as null, not silently coerce to 0.
+      totalCost: null,
+      averageCostPerDay: null,
+      averageTokensPerSession: 200,
+      medianTokensPerSession: 180,
+      inputTokens: 600,
+      outputTokens: 400,
+      cacheReadTokens: 50,
+      cacheWriteTokens: 20,
+      uniqueTools: [],
+      toolUsage: [],
+      topActions: [],
+      errorCount: 1,
+      status: 'available',
+      message: null,
+    } as unknown as Parameters<typeof buildDashboardWindow>[3]
+
+    const window = buildDashboardWindow(
+      [makeDailyMetricsRow('2026-06-14', { totalSessions: 5 })],
+      new Date('2026-06-14T12:00:00Z'),
+      false,
+      sessionUsage,
+    )
+
+    // Acceptance criterion: null in → null out, never 0.
+    expect(window.sessionUsage?.totalCost).toBeNull()
+    // Tokens are unaffected by the null cost (they live on a different path).
+    expect(window.sessionUsage?.inputTokens).toBe(600)
+    expect(window.sessionUsage?.outputTokens).toBe(400)
+  })
 })

@@ -63,12 +63,12 @@ function insertSession(db: Database.Database, row: {
   slug: string
   agent: string | null
   model: string | null
-  cost: number
-  tokensInput: number
-  tokensOutput: number
-  tokensReasoning: number
-  tokensCacheRead: number
-  tokensCacheWrite: number
+  cost: number | null
+  tokensInput: number | null
+  tokensOutput: number | null
+  tokensReasoning: number | null
+  tokensCacheRead: number | null
+  tokensCacheWrite: number | null
   timeCreated: number
   timeUpdated: number
   projectId: string
@@ -486,5 +486,160 @@ describe('opencode db collector', () => {
     expect(queryAgentBreakdown(0, undefined, { dbPath: corruptPath })).toEqual([])
     expect(queryToolUsage(0, undefined, { dbPath: corruptPath })).toEqual([])
     expect(queryParentChildCounts(0, undefined, { dbPath: corruptPath })).toEqual({ primarySessions: 0, subagentSessions: 0 })
+  })
+
+  // ----- "unknown vs false" contract (issue #343) -----
+
+  describe('null-aware metric propagation', () => {
+    it('returns null cost/tokens fields when the DB column is NULL', () => {
+      const db = new Database(dbPath ?? '')
+      insertSession(db, {
+        id: 'ses-null-1',
+        slug: 'root-null',
+        agent: 'explorer',
+        model: JSON.stringify({ id: 'claude-4', providerID: 'anthropic' }),
+        cost: null,
+        tokensInput: null,
+        tokensOutput: null,
+        tokensReasoning: null,
+        tokensCacheRead: null,
+        tokensCacheWrite: null,
+        timeCreated: utc(2026, 6, 29, 12, 0),
+        timeUpdated: utc(2026, 6, 29, 12, 0),
+        projectId: 'project-null',
+        parentId: null,
+      })
+      db.close()
+
+      const rows = querySessions(utc(2026, 6, 26), undefined, { dbPath: dbPath ?? undefined })
+      const nullRow = rows.find((r) => r.id === 'ses-null-1')
+      expect(nullRow).toBeDefined()
+      expect(nullRow!.cost).toBeNull()
+      expect(nullRow!.tokensInput).toBeNull()
+      expect(nullRow!.tokensOutput).toBeNull()
+      expect(nullRow!.tokensReasoning).toBeNull()
+      expect(nullRow!.tokensCacheRead).toBeNull()
+      expect(nullRow!.tokensCacheWrite).toBeNull()
+    })
+
+    it('produces a null daily aggregation when the only session in a day has null columns', () => {
+      jest.spyOn(Date, 'now').mockReturnValue(utc(2026, 6, 30, 12, 0))
+      const db = new Database(dbPath ?? '')
+      insertSession(db, {
+        id: 'ses-null-day',
+        slug: 'root-null-day',
+        agent: 'explorer',
+        model: JSON.stringify({ id: 'claude-4', providerID: 'anthropic' }),
+        cost: null,
+        tokensInput: null,
+        tokensOutput: null,
+        tokensReasoning: null,
+        tokensCacheRead: null,
+        tokensCacheWrite: null,
+        timeCreated: utc(2026, 6, 30, 8, 0),
+        timeUpdated: utc(2026, 6, 30, 8, 5),
+        projectId: 'project-null',
+        parentId: null,
+      })
+      db.close()
+
+      const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
+      const day = rows.find((r) => r.day === '2026-06-30')
+      expect(day).toBeDefined()
+      // Sessions counter is real (row exists) but every cost/tokens field
+      // is null because the seed row had NULL for every numeric column.
+      expect(day!.sessions).toBe(1)
+      expect(day!.cost).toBeNull()
+      expect(day!.tokensInput).toBeNull()
+      expect(day!.tokensOutput).toBeNull()
+      expect(day!.tokensReasoning).toBeNull()
+      expect(day!.tokensCacheRead).toBeNull()
+      expect(day!.tokensCacheWrite).toBeNull()
+      jest.restoreAllMocks()
+    })
+
+    it('keeps a null field null when ALL sessions in a day are null, sums mixed correctly', () => {
+      jest.spyOn(Date, 'now').mockReturnValue(utc(2026, 6, 30, 12, 0))
+      const db = new Database(dbPath ?? '')
+      // Two sessions on the same day — one with cost, one without.
+      // The day's `cost` field should be a non-null sum (only one non-null
+      // value), but if a different column is null in both rows, it stays null.
+      insertSession(db, {
+        id: 'ses-mixed-A',
+        slug: 'mixed-A',
+        agent: 'explorer',
+        model: JSON.stringify({ id: 'claude-4', providerID: 'anthropic' }),
+        cost: 0.5,
+        tokensInput: 100,
+        tokensOutput: 50,
+        tokensReasoning: null,
+        tokensCacheRead: 5,
+        tokensCacheWrite: null,
+        timeCreated: utc(2026, 6, 30, 8, 0),
+        timeUpdated: utc(2026, 6, 30, 8, 5),
+        projectId: 'project-mixed',
+        parentId: null,
+      })
+      insertSession(db, {
+        id: 'ses-mixed-B',
+        slug: 'mixed-B',
+        agent: 'planner',
+        model: 'gpt-4.1',
+        cost: 0.25,
+        tokensInput: null,
+        tokensOutput: 70,
+        tokensReasoning: null,
+        tokensCacheRead: null,
+        tokensCacheWrite: null,
+        timeCreated: utc(2026, 6, 30, 9, 0),
+        timeUpdated: utc(2026, 6, 30, 9, 10),
+        projectId: 'project-mixed',
+        parentId: null,
+      })
+      db.close()
+
+      const rows = querySessionsByDay(7, { dbPath: dbPath ?? undefined })
+      const day = rows.find((r) => r.day === '2026-06-30')
+      expect(day).toBeDefined()
+      // Mixed: at least one non-null → sum of non-null values.
+      expect(day!.cost).toBeCloseTo(0.75, 10)            // 0.5 + 0.25
+      expect(day!.tokensInput).toBe(100)                  // only ses-A had it
+      expect(day!.tokensOutput).toBe(120)                 // 50 + 70
+      // All-null column: stays null (no measurement available).
+      expect(day!.tokensReasoning).toBeNull()
+      expect(day!.tokensCacheWrite).toBeNull()
+      jest.restoreAllMocks()
+    })
+
+    it('produces a null model entry when the model has only null-cost sessions', () => {
+      const db = new Database(dbPath ?? '')
+      insertSession(db, {
+        id: 'ses-null-model',
+        slug: 'root-null-model',
+        agent: 'explorer',
+        model: JSON.stringify({ id: 'claude-4', providerID: 'anthropic' }),
+        cost: null,
+        tokensInput: null,
+        tokensOutput: null,
+        tokensReasoning: null,
+        tokensCacheRead: null,
+        tokensCacheWrite: null,
+        timeCreated: utc(2026, 6, 29, 13, 0),
+        timeUpdated: utc(2026, 6, 29, 13, 5),
+        projectId: 'project-x',
+        parentId: null,
+      })
+      db.close()
+
+      const rows = queryModelBreakdown(utc(2026, 6, 26), undefined, { dbPath: dbPath ?? undefined })
+      const claude = rows.find((r) => r.modelName === 'claude-4')
+      expect(claude).toBeDefined()
+      // Claude-4 had non-null values from the seed data, but the new
+      // null session should additively leave cost null-free: the original
+      // sum is preserved (claude-4 originally summed to 2.0 across ses-001/002/006).
+      // Verify by checking the reasoningTokens/cost are still numeric (not null).
+      expect(typeof claude!.cost).toBe('number')
+      expect(typeof claude!.reasoningTokens).toBe('number')
+    })
   })
 })

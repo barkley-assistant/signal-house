@@ -2,6 +2,7 @@ import { connectOpencodeDb, querySessionsByDay, queryModelBreakdown } from '../o
 import { upsertDailyTokenUsage } from '../../db/client'
 import type { DailyTokenUsageInsert } from '../../../types/daily-token-usage'
 import { normalizeModelName } from '../../../utils/string-normalize'
+import { sumOrNull } from '../../../utils/null-math'
 
 export interface DailyTokenUsageCollectorResult {
   success: boolean
@@ -38,11 +39,22 @@ export async function maybeCollectDailyTokenUsage(): Promise<DailyTokenUsageColl
 
     const models = queryModelBreakdown(dayStart, dayEnd)
 
+    // Null-aware per-day totals: a day's token/cost total stays `null`
+    // only if every contributing session had a null column; otherwise
+    // non-null values are summed. (issue #343)
+    const totalTokens = sumOrNull([
+      agg.tokensInput,
+      agg.tokensOutput,
+      agg.tokensReasoning,
+      agg.tokensCacheRead,
+      agg.tokensCacheWrite,
+    ])
+
     const row: DailyTokenUsageInsert = {
       date: agg.day,
       totalSessions: agg.sessions,
       totalMessages: agg.sessions, // approximation per spec
-      totalTokens: agg.tokensInput + agg.tokensOutput + agg.tokensReasoning + agg.tokensCacheRead + agg.tokensCacheWrite,
+      totalTokens: totalTokens ?? 0,
       totalCost: agg.cost,
       modelUsage: models.map(m => {
         const { slug } = normalizeModelName(m.modelName)

@@ -8,6 +8,7 @@ import {
   queryToolUsage,
 } from '../opencode/db-collector'
 import type { SessionCollectorConfig, SessionCollectorResult } from './types'
+import { sumOrNull } from '../../../utils/null-math'
 
 function sum(values: number[]): number {
   return values.reduce((total, value) => total + value, 0)
@@ -59,16 +60,30 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
 
         const totalSessions = sessions.length
         const totalToolCalls = toolUsageData.reduce((sum, t) => sum + t.count, 0)
-        const totalCost = sum(sessionsByDay.map(day => day.cost))
+        // Null-aware reduction (issue #343): a day's cost contributes only
+        // if non-null; the period total is `null` only if every day was null.
+        const totalCost = sumOrNull(sessionsByDay.map(day => day.cost))
         const activeDays = sessionsByDay.length
         const messages = sum(modelUsage.map(model => model.messages))
+        // Per-session token totals: skip nulls (issue #343). A session with
+        // all-null token fields contributes 0 to the array of totals,
+        // which `median` and `averageTokensPerSession` then handle as a
+        // zero-token session. The `null` semantic is preserved at the
+        // per-session level (still surfaced as `null` in `modelUsage[i]`)
+        // and at the period-total level via `sumOrNull` for each axis.
         const tokenTotals = sessions.map(session =>
-          session.tokensInput + session.tokensOutput + session.tokensReasoning + session.tokensCacheRead + session.tokensCacheWrite,
+          sumOrNull([
+            session.tokensInput,
+            session.tokensOutput,
+            session.tokensReasoning,
+            session.tokensCacheRead,
+            session.tokensCacheWrite,
+          ]) ?? 0,
         )
-        const inputTokens = sum(sessions.map(session => session.tokensInput))
-        const outputTokens = sum(sessions.map(session => session.tokensOutput))
-        const cacheReadTokens = sum(sessions.map(session => session.tokensCacheRead))
-        const cacheWriteTokens = sum(sessions.map(session => session.tokensCacheWrite))
+        const inputTokens = sumOrNull(sessions.map(session => session.tokensInput))
+        const outputTokens = sumOrNull(sessions.map(session => session.tokensOutput))
+        const cacheReadTokens = sumOrNull(sessions.map(session => session.tokensCacheRead))
+        const cacheWriteTokens = sumOrNull(sessions.map(session => session.tokensCacheWrite))
         const lastActivityAt = sessions.reduce<string | null>((latest, session) => {
           const value = new Date(session.timeUpdated).toISOString()
           return latest == null || value > latest ? value : latest
@@ -86,7 +101,7 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
           messages,
           activeDays: activeDays > 0 ? activeDays : null,
           totalCost,
-          averageCostPerDay: activeDays > 0 ? totalCost / activeDays : null,
+          averageCostPerDay: activeDays > 0 && totalCost != null ? totalCost / activeDays : null,
           averageTokensPerSession: totalSessions > 0 ? sum(tokenTotals) / totalSessions : null,
           medianTokensPerSession: median(tokenTotals),
           inputTokens,

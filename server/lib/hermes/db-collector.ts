@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { getHermesConfig } from '../runtime-config'
 import { normalizeModelName as sharedNormalizeModelName } from '../../../utils/string-normalize'
+import { sumOrNull } from '../../../utils/null-math'
 
 export interface HermesDbConfig {
   dbPath?: string
@@ -14,12 +15,12 @@ export interface DailyAggregation {
   startedSessions: number
   completedSessions: number
   erroredSessions: number
-  cost: number
-  tokensInput: number
-  tokensOutput: number
-  tokensReasoning: number
-  tokensCacheRead: number
-  tokensCacheWrite: number
+  cost: number | null
+  tokensInput: number | null
+  tokensOutput: number | null
+  tokensReasoning: number | null
+  tokensCacheRead: number | null
+  tokensCacheWrite: number | null
 }
 
 export interface ModelBreakdownEntry {
@@ -27,12 +28,12 @@ export interface ModelBreakdownEntry {
   provider?: string | null
   sessions: number
   messages: number
-  inputTokens: number
-  outputTokens: number
-  reasoningTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-  cost: number
+  inputTokens: number | null
+  outputTokens: number | null
+  reasoningTokens: number | null
+  cacheReadTokens: number | null
+  cacheWriteTokens: number | null
+  cost: number | null
 }
 
 type SessionSchemaRow = {
@@ -65,10 +66,22 @@ function toNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-function resolveCost(row: SessionSchemaRow): number {
-  if (row.actual_cost_usd != null) return toNumber(row.actual_cost_usd)
-  if (row.estimated_cost_usd != null) return toNumber(row.estimated_cost_usd)
-  return 0
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null) return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/**
+ * Resolve the cost column for a Hermes session row. Prefers the
+ * actual cost over the estimated one; returns `null` when both are
+ * missing/unmeasurable, preserving the "unknown vs measured"
+ * contract (issue #343). Distinct from a measured `0` cost.
+ */
+function resolveCost(row: SessionSchemaRow): number | null {
+  if (row.actual_cost_usd != null) return toNumberOrNull(row.actual_cost_usd)
+  if (row.estimated_cost_usd != null) return toNumberOrNull(row.estimated_cost_usd)
+  return null
 }
 
 function normalizeModelName(value: unknown): string | null {
@@ -196,24 +209,24 @@ export function querySessionsByDay(days: number, config?: HermesDbConfig): Daily
       startedSessions: 0,
       completedSessions: 0,
       erroredSessions: 0,
-      cost: 0,
-      tokensInput: 0,
-      tokensOutput: 0,
-      tokensReasoning: 0,
-      tokensCacheRead: 0,
-      tokensCacheWrite: 0,
+      cost: null,
+      tokensInput: null,
+      tokensOutput: null,
+      tokensReasoning: null,
+      tokensCacheRead: null,
+      tokensCacheWrite: null,
     }
 
     current.sessions += 1
     current.startedSessions += 1
     if (isCompleted(row)) current.completedSessions += 1
     if (isErrored(row)) current.erroredSessions += 1
-    current.cost += resolveCost(row)
-    current.tokensInput += toNumber(row.input_tokens)
-    current.tokensOutput += toNumber(row.output_tokens)
-    current.tokensReasoning += toNumber(row.reasoning_tokens)
-    current.tokensCacheRead += toNumber(row.cache_read_tokens)
-    current.tokensCacheWrite += toNumber(row.cache_write_tokens)
+    current.cost = sumOrNull([current.cost, resolveCost(row)])
+    current.tokensInput = sumOrNull([current.tokensInput, toNumberOrNull(row.input_tokens)])
+    current.tokensOutput = sumOrNull([current.tokensOutput, toNumberOrNull(row.output_tokens)])
+    current.tokensReasoning = sumOrNull([current.tokensReasoning, toNumberOrNull(row.reasoning_tokens)])
+    current.tokensCacheRead = sumOrNull([current.tokensCacheRead, toNumberOrNull(row.cache_read_tokens)])
+    current.tokensCacheWrite = sumOrNull([current.tokensCacheWrite, toNumberOrNull(row.cache_write_tokens)])
 
     grouped.set(day, current)
   }
@@ -254,12 +267,12 @@ export function queryModelBreakdown(since: number, until?: number, config?: Herm
         provider,
         sessions: 0,
         messages: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        reasoningTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        cost: 0,
+        inputTokens: null,
+        outputTokens: null,
+        reasoningTokens: null,
+        cacheReadTokens: null,
+        cacheWriteTokens: null,
+        cost: null,
       }
 
       // Keep first non-null provider
@@ -269,12 +282,12 @@ export function queryModelBreakdown(since: number, until?: number, config?: Herm
 
       current.sessions += 1
       current.messages += toNumber(row.message_count)
-      current.inputTokens += toNumber(row.input_tokens)
-      current.outputTokens += toNumber(row.output_tokens)
-      current.reasoningTokens += toNumber(row.reasoning_tokens)
-      current.cacheReadTokens += toNumber(row.cache_read_tokens)
-      current.cacheWriteTokens += toNumber(row.cache_write_tokens)
-      current.cost += resolveCost(row)
+      current.inputTokens = sumOrNull([current.inputTokens, toNumberOrNull(row.input_tokens)])
+      current.outputTokens = sumOrNull([current.outputTokens, toNumberOrNull(row.output_tokens)])
+      current.reasoningTokens = sumOrNull([current.reasoningTokens, toNumberOrNull(row.reasoning_tokens)])
+      current.cacheReadTokens = sumOrNull([current.cacheReadTokens, toNumberOrNull(row.cache_read_tokens)])
+      current.cacheWriteTokens = sumOrNull([current.cacheWriteTokens, toNumberOrNull(row.cache_write_tokens)])
+      current.cost = sumOrNull([current.cost, resolveCost(row)])
 
       grouped.set(modelName, current)
     }
