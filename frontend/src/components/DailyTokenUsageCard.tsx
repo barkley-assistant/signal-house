@@ -46,16 +46,18 @@ interface FilledDay {
   isGap: boolean;
 }
 
-function buildDailyTokenUsageOption(
+export function buildDailyTokenUsageOption(
   filled: FilledDay[],
 ): EChartsOption {
   const labels = filled.map((d) => formatDayLabel(d.date));
-  const tokens = filled.map((d) => (d.isGap ? null : d.row!.totalTokens));
+  // Gap day (no upstream row) is a distinct state from a measured-null value
+  // within present data — it renders at the zero baseline, not as a hole.
+  const tokens = filled.map((d) => (d.isGap ? 0 : d.row!.totalTokens));
   const cost = filled.map((d) =>
-    d.isGap ? null : d.row!.totalCost,
+    d.isGap ? 0 : d.row!.totalCost,
   );
   const sessions = filled.map((d) =>
-    d.isGap ? null : d.row!.totalSessions,
+    d.isGap ? 0 : d.row!.totalSessions,
   );
   return {
     grid: { top: 16, right: 52, bottom: 24, left: 40, containLabel: false },

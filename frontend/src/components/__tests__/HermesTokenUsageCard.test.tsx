@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { renderToStaticMarkup } from "react-dom/server";
-import { HermesTokenUsageCard } from "../HermesTokenUsageCard";
+import { buildSparklineOption, HermesTokenUsageCard } from "../HermesTokenUsageCard";
 import type { DailyTokenUsageRow } from "@/types";
 
 function makeRow(date: string, overrides: Partial<DailyTokenUsageRow> = {}): DailyTokenUsageRow {
@@ -188,5 +188,62 @@ describe("HermesTokenUsageCard", () => {
     // Should not crash — renders empty state or handles gracefully
     expect(html).toContain("Agent Token Usage");
     expect(html).toContain("No agent token usage data");
+  });
+});
+
+describe("buildSparklineOption — gap-day series mapping", () => {
+  it("renders 0 (not null) for input/output tokens on gap days", () => {
+    const makeFilled = (date: string, row: DailyTokenUsageRow | null) => ({
+      date, row, isGap: row === null,
+    });
+
+    const rows: DailyTokenUsageRow[] = [
+      makeRow("2026-07-06", {
+        totalSessions: 1,
+        modelUsage: [{
+          modelName: "claude-sonnet-4",
+          messages: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+          tokensReasoning: null,
+          cacheReadTokens: null,
+          cacheWriteTokens: null,
+          cost: 0.5,
+        }],
+      }),
+      // 2026-07-07 is a gap
+      makeRow("2026-07-08", {
+        totalSessions: 2,
+        modelUsage: [{
+          modelName: "gpt-4o",
+          messages: 5,
+          inputTokens: 2000,
+          outputTokens: 1000,
+          tokensReasoning: null,
+          cacheReadTokens: null,
+          cacheWriteTokens: null,
+          cost: 0.2,
+        }],
+      }),
+    ];
+
+    const filled = [
+      makeFilled("2026-07-06", rows[0]),
+      makeFilled("2026-07-07", null), // gap
+      makeFilled("2026-07-08", rows[1]),
+    ];
+
+    const option = buildSparklineOption(filled);
+    const series = option.series as Array<{ data: (number | null)[] }>;
+
+    // Gap day at index 1 must be 0, not null
+    expect(series[0].data[1]).toBe(0);
+    expect(series[1].data[1]).toBe(0);
+
+    // Non-gap days keep real values
+    expect(series[0].data[0]).toBe(1000);
+    expect(series[0].data[2]).toBe(2000);
+    expect(series[1].data[0]).toBe(500);
+    expect(series[1].data[2]).toBe(1000);
   });
 });
