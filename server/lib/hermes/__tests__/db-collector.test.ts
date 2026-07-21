@@ -325,6 +325,8 @@ describe('hermes db collector', () => {
     expect(claude!.sessions).toBe(2)
     expect(claude!.inputTokens).toBe(170)
     expect(claude!.outputTokens).toBe(110)
+    // providerID 'anthropic' lives in the same JSON as id — must surface, not be dropped
+    expect(claude!.provider).toBe('anthropic')
 
     const gpt = rows.find(r => r.modelName === 'gpt-5')
     expect(gpt).toBeDefined()
@@ -345,6 +347,8 @@ describe('hermes db collector', () => {
     const old = rows.find(r => r.modelName === 'old-model')
     expect(old).toBeDefined()
     expect(old!.sessions).toBe(1)
+    // providerID 'openai' rides alongside model_id in the same JSON — must surface
+    expect(old!.provider).toBe('openai')
   })
 
   it('falls back to empty results for missing db', () => {

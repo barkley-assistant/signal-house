@@ -152,6 +152,46 @@ function normalizeModelName(value: unknown): string | null {
   return null
 }
 
+/**
+ * Extract `providerID` from the same JSON-shaped model value that
+ * `normalizeModelName` reads. The upstream opencode schema stores
+ * `providerID` as a sibling of `id`/`modelID`/etc. inside `session.model`,
+ * and the two-step `normalizeModelName → sharedNormalizeModelName`
+ * pipeline only derives provider from a `provider/model` slash prefix
+ * on the string — it never reads the JSON `providerID` field. Returning
+ * it here lets `queryModelBreakdown` surface the real provider for every
+ * row without changing the slug normalization contract.
+ *
+ * Returns `null` for plain-string model values (no JSON to parse),
+ * non-object primitives, or JSON without a string `providerID`.
+ */
+function extractProviderId(value: unknown): string | null {
+  if (value == null) return null
+
+  let record: Record<string, unknown> | null = null
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) return null
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (parsed != null && typeof parsed === 'object') {
+        record = parsed as Record<string, unknown>
+      }
+    } catch {
+      return null
+    }
+  } else if (typeof value === 'object') {
+    record = value as Record<string, unknown>
+  }
+
+  if (!record) return null
+
+  const candidate = record.providerID
+  if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  return null
+}
+
 function isErrored(_row: SessionSchemaRow): boolean {
   // No status/error columns in the current opencode.db schema,
   // so we cannot detect errored sessions from the DB.
@@ -342,7 +382,13 @@ export function queryModelBreakdown(since: number, until?: number, config?: Open
 
   for (const row of rows) {
     const rawName = normalizeModelName(row.model) ?? '(unknown)'
-    const { slug: modelName, provider } = sharedNormalizeModelName(rawName)
+    const { slug: modelName, provider: slashProvider } = sharedNormalizeModelName(rawName)
+    // providerID lives in the same JSON as id/modelID — surface it here so
+    // the per-model breakdown actually shows which provider each row came
+    // from. The JSON-extracted value wins over the slash-form fallback so
+    // a row whose model JSON carries providerID: 'opencode-go' reports
+    // 'opencode-go' even when the slug contains no slash.
+    const provider = extractProviderId(row.model) ?? slashProvider
     const current = grouped.get(modelName) ?? {
       modelName,
       provider,

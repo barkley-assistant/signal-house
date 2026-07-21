@@ -329,7 +329,7 @@ describe('opencode db collector', () => {
     expect(rows).toEqual([
       {
         modelName: 'claude-4',
-        provider: null,
+        provider: 'anthropic',
         sessions: 3,
         messages: 5,
         inputTokens: 180,
@@ -353,7 +353,7 @@ describe('opencode db collector', () => {
       },
       {
         modelName: 'old-model',
-        provider: null,
+        provider: 'openai',
         sessions: 1,
         messages: 2,
         inputTokens: 50,
@@ -640,6 +640,132 @@ describe('opencode db collector', () => {
       // Verify by checking the reasoningTokens/cost are still numeric (not null).
       expect(typeof claude!.cost).toBe('number')
       expect(typeof claude!.reasoningTokens).toBe('number')
+    })
+  })
+
+  // Regression tests for the `provider: null` bug. Before the fix, the
+  // collector extracted `id` from the JSON-shaped model column and then
+  // ran a slash-split on the bare string — the sibling `providerID` field
+  // was dropped. Every model row therefore reported `provider: null`,
+  // even though the upstream opencode schema carries the provider in the
+  // same JSON. These tests pin the behaviour for every shape that
+  // `session.model` can take: JSON string, pre-parsed JSON object,
+  // plain string, null.
+  describe('provider extraction from session.model', () => {
+    it('surfaces providerID from JSON-shaped model string', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'opencode-prov-1-'))
+      const p = path.join(dir, 'opencode.db')
+      const db = new Database(p)
+      createSchema(db)
+      insertSession(db, {
+        id: 'ses-A',
+        slug: 's',
+        agent: 'a',
+        model: JSON.stringify({ id: 'glm-5.2', providerID: 'openference' }),
+        cost: 0, tokensInput: 0, tokensOutput: 0, tokensReasoning: 0,
+        tokensCacheRead: 0, tokensCacheWrite: 0,
+        timeCreated: utc(2026, 6, 26, 0, 0), timeUpdated: utc(2026, 6, 26, 0, 1),
+        projectId: 'p', parentId: null,
+      })
+      db.close()
+
+      const rows = queryModelBreakdown(utc(2026, 6, 26), undefined, { dbPath: p })
+      expect(rows[0]?.modelName).toBe('glm-5.2')
+      expect(rows[0]?.provider).toBe('openference')
+    })
+
+    it('falls back to slash-form provider when JSON has no providerID', () => {
+      // opencode-go fixtures use the legacy `<provider>/<model>` slash
+      // form. The collector must keep deriving provider from the slash
+      // when the JSON has no providerID, so the opencode-go provider
+      // tests stay green.
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'opencode-prov-3-'))
+      const p = path.join(dir, 'opencode.db')
+      const db = new Database(p)
+      createSchema(db)
+      insertSession(db, {
+        id: 'ses-A',
+        slug: 's',
+        agent: 'a',
+        model: 'opencode-go/deepseek-v4-flash',
+        cost: 0, tokensInput: 0, tokensOutput: 0, tokensReasoning: 0,
+        tokensCacheRead: 0, tokensCacheWrite: 0,
+        timeCreated: utc(2026, 6, 26, 0, 0), timeUpdated: utc(2026, 6, 26, 0, 1),
+        projectId: 'p', parentId: null,
+      })
+      db.close()
+
+      const rows = queryModelBreakdown(utc(2026, 6, 26), undefined, { dbPath: p })
+      expect(rows[0]?.modelName).toBe('opencode-go-deepseek-v4-flash')
+      expect(rows[0]?.provider).toBe('opencode-go')
+    })
+
+    it('returns null provider for plain-string model with no slash and no JSON', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'opencode-prov-4-'))
+      const p = path.join(dir, 'opencode.db')
+      const db = new Database(p)
+      createSchema(db)
+      insertSession(db, {
+        id: 'ses-A',
+        slug: 's',
+        agent: 'a',
+        model: 'gpt-4.1',
+        cost: 0, tokensInput: 0, tokensOutput: 0, tokensReasoning: 0,
+        tokensCacheRead: 0, tokensCacheWrite: 0,
+        timeCreated: utc(2026, 6, 26, 0, 0), timeUpdated: utc(2026, 6, 26, 0, 1),
+        projectId: 'p', parentId: null,
+      })
+      db.close()
+
+      const rows = queryModelBreakdown(utc(2026, 6, 26), undefined, { dbPath: p })
+      expect(rows[0]?.modelName).toBe('gpt-4.1')
+      expect(rows[0]?.provider).toBeNull()
+    })
+
+    it('returns null provider when session.model is null', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'opencode-prov-5-'))
+      const p = path.join(dir, 'opencode.db')
+      const db = new Database(p)
+      createSchema(db)
+      insertSession(db, {
+        id: 'ses-A',
+        slug: 's',
+        agent: 'a',
+        model: null,
+        cost: 0, tokensInput: 0, tokensOutput: 0, tokensReasoning: 0,
+        tokensCacheRead: 0, tokensCacheWrite: 0,
+        timeCreated: utc(2026, 6, 26, 0, 0), timeUpdated: utc(2026, 6, 26, 0, 1),
+        projectId: 'p', parentId: null,
+      })
+      db.close()
+
+      const rows = queryModelBreakdown(utc(2026, 6, 26), undefined, { dbPath: p })
+      expect(rows[0]?.modelName).toBe('unknown')
+      expect(rows[0]?.provider).toBeNull()
+    })
+
+    it('JSON providerID wins over any embedded slash in id (defensive)', () => {
+      // Defensive: if a model id contains a slash but the JSON also
+      // carries providerID, the JSON wins. Real schema can't produce
+      // this today but the contract is worth pinning.
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'opencode-prov-6-'))
+      const p = path.join(dir, 'opencode.db')
+      const db = new Database(p)
+      createSchema(db)
+      insertSession(db, {
+        id: 'ses-A',
+        slug: 's',
+        agent: 'a',
+        model: JSON.stringify({ id: 'some-org/some-model', providerID: 'real-provider' }),
+        cost: 0, tokensInput: 0, tokensOutput: 0, tokensReasoning: 0,
+        tokensCacheRead: 0, tokensCacheWrite: 0,
+        timeCreated: utc(2026, 6, 26, 0, 0), timeUpdated: utc(2026, 6, 26, 0, 1),
+        projectId: 'p', parentId: null,
+      })
+      db.close()
+
+      const rows = queryModelBreakdown(utc(2026, 6, 26), undefined, { dbPath: p })
+      expect(rows[0]?.provider).toBe('real-provider')
     })
   })
 })
