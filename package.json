@@ -12,9 +12,10 @@
     "start": "bun run dist/server.js",
     "typecheck": "bunx tsc --noEmit",
     "lint": "bunx eslint .",
-    "test": "bun test",
+    "test": "bun test tests/",
+    "test:e2e": "bunx playwright test",
     "test:watch": "bun test --watch",
-    "check": "bun run typecheck && bun run lint && bun test && bun run build"
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

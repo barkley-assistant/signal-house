@@ -1,16 +1,18 @@
-/* Logo — retained brand mark with the signature slow pulse rings. */
+/* Logo — retained brand mark with the signature slow pulse rings.
+   NOTE: no overflow:hidden here — the pulse rings must escape the logo
+   bounds (radar-ping effect). The img clips itself via border-radius. */
 .logo {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  overflow: hidden;
   flex-shrink: 0;
 }
 .logo__img {
   border-radius: 50%;
   object-fit: contain;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.28));
 }
 .logo__ring {
   position: absolute;
