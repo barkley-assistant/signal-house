@@ -155,9 +155,10 @@ describe("git collector", () => {
 
 describe("github client (mock API)", () => {
   test("pagination follows Link headers and maps privacy + provider fields", async () => {
+    let srv: ReturnType<typeof Bun.serve> | null = null;
     const server = Bun.serve({
       port: 0,
-      async fetch(req) {
+      fetch(req) {
         const url = new URL(req.url);
         if (url.pathname === "/repos/acme/thing") {
           return Response.json({ id: 1, name: "thing", full_name: "acme/thing", private: true, default_branch: "main", html_url: "https://github.com/acme/thing", archived: false });
@@ -170,7 +171,7 @@ describe("github client (mock API)", () => {
             [
               { id: 1, number: 1, title: "issue 1", state: "open", created_at: "2026-07-01T00:00:00Z", updated_at: "2026-07-30T00:00:00Z", closed_at: null, html_url: "u", labels: [], user: { login: "a" } },
             ],
-            { headers: { link: `<http://localhost:${server.port}/repos/acme/thing/issues?page=2>; rel="next"` } },
+            { headers: { link: `<http://localhost:${srv!.port}/repos/acme/thing/issues?page=2>; rel="next"` } },
           );
         }
         if (url.pathname === "/repos/acme/thing/pulls") return Response.json([]);
@@ -178,6 +179,7 @@ describe("github client (mock API)", () => {
         return Response.json({}, { status: 404 });
       },
     });
+    srv = server;
 
     const client = new GitHubClient({ token: "ghp_test", baseUrl: `http://localhost:${server.port}` });
     const detail = await client.fetchRepo("acme", "thing", "2026-07-01T00:00:00Z");

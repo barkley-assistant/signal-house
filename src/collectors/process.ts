@@ -57,7 +57,10 @@ export async function runCommand(options: CommandOptions): Promise<CommandResult
   }, options.timeoutMs);
 
   try {
-    const [stdout, stderr] = await Promise.all([readBounded(proc.stdout, maxOutput), readBounded(proc.stderr, maxOutput)]);
+    const [stdout, stderr] = await Promise.all([
+    readBounded(proc.stdout as ReadableStream<Uint8Array> | null, maxOutput),
+    readBounded(proc.stderr as ReadableStream<Uint8Array> | null, maxOutput),
+  ]);
     const exit = await proc.exited;
     return {
       ok: !timedOut && exit === 0,
@@ -84,7 +87,6 @@ async function readBounded(stream: ReadableStream<Uint8Array> | null, maxBytes: 
       truncated = true;
       const remaining = maxBytes - total;
       if (remaining > 0) chunks.push(value.subarray(0, remaining));
-      total = maxBytes;
       break;
     }
     chunks.push(value);

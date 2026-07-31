@@ -17,6 +17,10 @@
     "check": "bun run typecheck && bun run lint && bun test && bun run build"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1"
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@typescript-eslint/eslint-plugin": "8",
+    "@typescript-eslint/parser": "8",
+    "typescript": "5.9"
   }
 }
