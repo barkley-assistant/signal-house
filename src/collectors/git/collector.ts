@@ -296,7 +296,7 @@ export function parseRemote(url: string | null): { owner: string | null; repo: s
   if (!url) return { owner: null, repo: null };
   const trimmed = url.trim();
   // git@github.com:owner/repo.git
-  let m = trimmed.match(/^(?:git@|ssh:\/\/git@)[^:]+:([^/]+)\/([^/]+?)(?:\.git)?$/);
+  let m = trimmed.match(/^(?:git@|ssh:\/\/git@)github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (m) return { owner: m[1], repo: stripGitSuffix(m[2]) };
   // https://github.com/owner/repo.git
   m = trimmed.match(/^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/)?$/);

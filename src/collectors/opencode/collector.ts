@@ -156,7 +156,8 @@ SELECT json_extract(model, '$.id') AS model,
        SUM(cost) AS cost
 FROM session
 WHERE time_created >= ? AND time_created < ?
-GROUP BY model ORDER BY cost DESC NULLS LAST`;
+GROUP BY json_extract(model, '$.id'), json_extract(model, '$.providerID')
+ORDER BY cost DESC NULLS LAST`;
 
 function queryUsageByDay(db: Database, sinceMs: number): UsageDay[] {
   const rows = db.query(DAY_SQL).all(sinceMs, Date.now()) as unknown as OpencodeDayRow[];

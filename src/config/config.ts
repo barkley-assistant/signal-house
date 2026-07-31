@@ -47,6 +47,11 @@ export function legacyAliasNames(): string[] {
   return Object.keys(LEGACY_ALIASES);
 }
 
+/** Reverse map: preferred name → legacy alias (for resolution). */
+const LEGACY_BY_PREFERRED: Record<string, string> = Object.fromEntries(
+  Object.entries(LEGACY_ALIASES).map(([legacy, preferred]) => [preferred, legacy]),
+);
+
 interface Parsers {
   bool(name: string, def: boolean): boolean;
   int(name: string, def: number, min: number, max: number): number;
@@ -73,7 +78,8 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
   function effective(name: string): string | undefined {
     const direct = env.get(name);
     if (direct !== undefined) return direct;
-    return env.get(LEGACY_ALIASES[name] ?? "");
+    const legacy = LEGACY_BY_PREFERRED[name];
+    return legacy ? env.get(legacy) : undefined;
   }
 
   const p: Parsers = {

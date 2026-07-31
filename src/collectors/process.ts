@@ -30,18 +30,25 @@ const DEFAULT_MAX_OUTPUT = 256 * 1024;
 
 export async function runCommand(options: CommandOptions): Promise<CommandResult> {
   const maxOutput = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT;
-  const proc = spawn({
-    cmd: [options.args[0], ...options.args.slice(1)],
-    cwd: options.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...(process.env as Record<string, string>),
-      // Never let git block on a credential prompt in a background daemon.
-      GIT_TERMINAL_PROMPT: "0",
-      ...(options.env ?? {}),
-    },
-  });
+  let proc: ReturnType<typeof spawn>;
+  try {
+    proc = spawn({
+      cmd: [options.args[0], ...options.args.slice(1)],
+      cwd: options.cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...(process.env as Record<string, string>),
+        // Never let git block on a credential prompt in a background daemon.
+        GIT_TERMINAL_PROMPT: "0",
+        ...(options.env ?? {}),
+      },
+    });
+  } catch (err) {
+    // Spawn itself can throw (missing binary, bad cwd, permission) — surface
+    // as a failed result rather than crashing the caller.
+    return { ok: false, code: null, stdout: "", stderr: (err as Error).message, timedOut: false };
+  }
 
   let timedOut = false;
   const timer = setTimeout(() => {

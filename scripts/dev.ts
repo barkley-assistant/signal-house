@@ -67,7 +67,11 @@ console.log(`  Logs:   ${logPath}`);
 console.log(`  PID:    ${pid}\n`);
 
 const child = spawn({
-  cmd: ["bun", "--hot", "src/server.ts"],
+  // --watch (hard restart) not --hot: the server binds Bun.serve() at module
+  // top level, and --hot re-evaluates the module without stopping the old
+  // server — double-binding ports. No WebSockets to preserve, so a full
+  // restart on change is correct and simple.
+  cmd: ["bun", "--watch", "src/server.ts"],
   cwd: repoRoot,
   stdout: "pipe",
   stderr: "pipe",
