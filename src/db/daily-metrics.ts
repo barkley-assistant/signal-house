@@ -1,0 +1,124 @@
+/**
+ * daily_metrics repository — the unified daily rollup.
+ *
+ * Semantics (contracts #4/#5/#9): a missing row = "no upstream activity that
+ * day"; a `value NULL` cell = "unknown for a day that otherwise has data".
+ * Same-day refreshes replace the current UTC day per source; earlier days are
+ * insert-or-ignore so already-persisted days stay intact until retention.
+ */
+
+import type { Database } from "bun:sqlite";
+
+export interface DailyMetricRow {
+  date: string;
+  source: string;
+  metric: string;
+  value: number | null;
+  tags: string;
+  observed_at: number;
+}
+
+export interface DailyMetricPoint {
+  date: string;
+  source: string;
+  metric: string;
+  value: number | null;
+  tags: Record<string, string | null>;
+  observedAt: number;
+}
+
+export interface DailyWrite {
+  date: string;
+  metric: string;
+  value: number | null;
+  tags: Record<string, string | null>;
+}
+
+/** Replace every metric row for one (date, source) — used for the current UTC day. */
+export function replaceDayForSource(db: Database, date: string, source: string, rows: DailyWrite[]): number {
+  db.query("DELETE FROM daily_metrics WHERE date = ? AND source = ?").run(date, source);
+  const insert = db.query(
+    "INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const observedAt = Date.now();
+  let n = 0;
+  for (const r of rows) {
+    insert.run(date, source, r.metric, r.value, JSON.stringify(r.tags), observedAt);
+    n++;
+  }
+  return n;
+}
+
+/**
+ * Backfill earlier days without touching existing rows.
+ * INSERT OR IGNORE skips rows whose (date, source, metric, tags) already exist —
+ * that is the "earlier days remain intact" guarantee.
+ */
+export function backfillDaysForSource(db: Database, date: string, source: string, rows: DailyWrite[]): number {
+  if (rows.length === 0) return 0;
+  const insert = db.query(
+    "INSERT OR IGNORE INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const observedAt = Date.now();
+  let n = 0;
+  for (const r of rows) {
+    insert.run(date, source, r.metric, r.value, JSON.stringify(r.tags), observedAt);
+    n++;
+  }
+  return n;
+}
+
+export interface DailyQuery {
+  from: string;
+  to: string;
+  source?: string;
+  metric?: string;
+}
+
+export function queryDailyMetrics(db: Database, q: DailyQuery): DailyMetricPoint[] {
+  const clauses: string[] = ["date >= ?", "date <= ?"];
+  const params: Array<string | number> = [q.from, q.to];
+  if (q.source) {
+    clauses.push("source = ?");
+    params.push(q.source);
+  }
+  if (q.metric) {
+    clauses.push("metric = ?");
+    params.push(q.metric);
+  }
+  const rows = db
+    .query(
+      `SELECT date, source, metric, value, tags, observed_at
+       FROM daily_metrics WHERE ${clauses.join(" AND ")} ORDER BY date ASC`,
+    )
+    .all(...params) as unknown as DailyMetricRow[];
+
+  return rows.map((r) => ({
+    date: r.date,
+    source: r.source,
+    metric: r.metric,
+    value: r.value,
+    tags: parseTags(r.tags),
+    observedAt: r.observed_at,
+  }));
+}
+
+/** All distinct (date, source) pairs that have ANY rows in range. */
+export function presentDaySources(db: Database, from: string, to: string): Array<{ date: string; source: string }> {
+  return db
+    .query("SELECT DISTINCT date, source FROM daily_metrics WHERE date >= ? AND date <= ? ORDER BY date")
+    .all(from, to) as Array<{ date: string; source: string }>;
+}
+
+export function pruneDailyMetrics(db: Database, cutoffDay: string): number {
+  const result = db.query("DELETE FROM daily_metrics WHERE date < ?").run(cutoffDay);
+  return result.changes;
+}
+
+export function parseTags(tags: string): Record<string, string | null> {
+  try {
+    return JSON.parse(tags) as Record<string, string | null>;
+  } catch {
+    return {};
+  }
+}
