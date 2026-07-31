@@ -204,4 +204,13 @@ export interface RefreshState {
   lastFailureMessage: string | null;
   lastManualRefreshAt: string | null;
   lockOwner: "manual" | "poller" | null;
+  partialData: boolean;
+}
+
+/** One daily_metrics write: (date, metric, value, tags). Value NULL = unknown. */
+export interface DailyWrite {
+  date: string;
+  metric: string;
+  value: number | null;
+  tags: Record<string, string | null>;
 }

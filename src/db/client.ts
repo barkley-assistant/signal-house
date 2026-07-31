@@ -4,9 +4,9 @@
  */
 
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { ensureSchema, guardFreshDatabase } from "./init";
+import { ensureSchema, guardFreshDatabase, looksLikeV1Database, V1DatabaseRefusedError } from "./init";
 
 export class DatabaseOwner {
   private constructor(
@@ -17,8 +17,16 @@ export class DatabaseOwner {
   /** Open (creating dirs as needed), configure pragmas, and initialize schema. */
   static open(path: string): DatabaseOwner {
     mkdirSync(dirname(path), { recursive: true });
+    // Sniff an existing file READ-ONLY before opening for write: if it is a V1
+    // database we refuse WITHOUT creating or modifying anything (no artifacts).
+    if (existsSync(path)) {
+      const sniff = new Database(path, { readonly: true, create: false });
+      const v1 = looksLikeV1Database(sniff);
+      sniff.close();
+      if (v1) throw new V1DatabaseRefusedError(path);
+    }
     const db = new Database(path);
-    guardFreshDatabase(db, path); // never adopt a V1 database
+    guardFreshDatabase(db, path);
     db.exec("PRAGMA journal_mode = WAL;");
     db.exec("PRAGMA foreign_keys = ON;");
     db.exec("PRAGMA busy_timeout = 5000;");

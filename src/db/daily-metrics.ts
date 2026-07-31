@@ -8,6 +8,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import type { DailyWrite } from "../shared/types";
 
 export interface DailyMetricRow {
   date: string;
@@ -27,12 +28,7 @@ export interface DailyMetricPoint {
   observedAt: number;
 }
 
-export interface DailyWrite {
-  date: string;
-  metric: string;
-  value: number | null;
-  tags: Record<string, string | null>;
-}
+export type { DailyWrite };
 
 /** Replace every metric row for one (date, source) — used for the current UTC day. */
 export function replaceDayForSource(db: Database, date: string, source: string, rows: DailyWrite[]): number {
@@ -101,6 +97,25 @@ export function queryDailyMetrics(db: Database, q: DailyQuery): DailyMetricPoint
     tags: parseTags(r.tags),
     observedAt: r.observed_at,
   }));
+}
+
+/** Aggregated per-day cost + token series for the Agent Spend trend chart. */
+export function queryDailyTrend(db: Database, from: string, to: string): Array<{ date: string; cost: number | null; tokens: number | null }> {
+  const rows = db
+    .query(
+      `SELECT date,
+              SUM(CASE WHEN metric = 'cost.total' THEN value END) AS cost,
+              SUM(CASE WHEN metric = 'tokens.input' THEN value END) +
+              SUM(CASE WHEN metric = 'tokens.output' THEN value END) +
+              SUM(CASE WHEN metric = 'tokens.cache_read' THEN value END) +
+              SUM(CASE WHEN metric = 'tokens.cache_write' THEN value END) +
+              SUM(CASE WHEN metric = 'tokens.reasoning' THEN value END) AS tokens
+       FROM daily_metrics
+       WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+       GROUP BY date ORDER BY date`,
+    )
+    .all(from, to) as Array<{ date: string; cost: number | null; tokens: number | null }>;
+  return rows;
 }
 
 /** All distinct (date, source) pairs that have ANY rows in range. */

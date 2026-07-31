@@ -1,0 +1,110 @@
+/* Logo — retained brand mark with the signature slow pulse rings. */
+.logo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.logo__img {
+  border-radius: 50%;
+  object-fit: contain;
+}
+.logo__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid;
+  background-color: rgba(56, 189, 248, 0.035);
+  pointer-events: none;
+}
+
+/* Refresh status row + banners. */
+.refresh-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.refresh-actions {
+  display: flex;
+  gap: 8px;
+}
+.banner {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+}
+.banner--error { background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.35); color: var(--error); }
+.banner--warning { background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.35); color: var(--warning); }
+.banner--stale { background: rgba(167, 139, 250, 0.08); border: 1px solid rgba(167, 139, 250, 0.35); color: var(--stale); }
+.warnings {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.state-ok { color: var(--success); }
+.state-bad { color: var(--error); }
+
+/* Work grid — Agent Spend + Attention Queue. */
+.work-grid {
+  margin-top: 16px;
+  grid-template-columns: 1.4fr 1fr;
+}
+@media (max-width: 900px) {
+  .work-grid { grid-template-columns: 1fr; }
+}
+
+/* Agent Spend sub-tiles. */
+.spend-subtiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 700px) {
+  .spend-subtiles { grid-template-columns: 1fr; }
+}
+.spend-tile {
+  padding: 12px;
+}
+.big-number.small {
+  font-size: 20px;
+}
+.kpi-tile__label.heading {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Model table. */
+.model-table {
+  overflow-x: auto;
+}
+
+/* Diagnostics. */
+.diag-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.diag-section {
+  margin-top: 20px;
+}
+
+/* Footer. */
+.app-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-border);
+  color: var(--text-muted);
+  font-size: 13px;
+}

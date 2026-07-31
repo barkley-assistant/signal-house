@@ -1,0 +1,218 @@
+/**
+ * /api/state builder — reads latest_state + refresh_meta, derives aggregates,
+ * applies the privacy filter, and produces the full dashboard payload.
+ *
+ * Freshness contract: fresh / stale / partial / missing are explicit;
+ * unavailable metrics stay null; privacy fails closed (server-side only).
+ */
+
+import type { Database } from "bun:sqlite";
+import type { RuntimeConfig } from "../config/types";
+import type { PersistedState } from "../config/types";
+import type { Collector } from "../collectors";
+import { getAllLatestState } from "../db/latest-state";
+import { getRefreshMeta } from "../db/refresh-meta";
+import { computeAggregates, type UsageAggregate } from "../orchestrator/aggregates";
+import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/privacy";
+import { utcDaysAgo, utcDay } from "../shared/dates";
+import type { RefreshState } from "../shared/types";
+
+export interface AttentionItem {
+  id: string;
+  type: "issue" | "pr";
+  repoKey: string;
+  repo: string;
+  title: string;
+  url: string;
+  state: "open" | "closed";
+  updatedAt: string;
+  ageDays: number;
+  stale: boolean;
+  ciStatus: string | null;
+  labels: string[];
+}
+
+export interface StatePayload {
+  window: { start: string; end: string; days: number };
+  summary: {
+    throughput: { issuesOpened: number; issuesClosed: number; prsCreated: number; prsMerged: number; totalCommits: number } | null;
+    cycleTime: { avgSeconds: number | null; medianSeconds: number | null; p95Seconds: number | null; sampleSize: number } | null;
+    ci: { totalRuns: number; passCount: number; failCount: number; passRate: number | null } | null;
+    staleWork: { staleIssues: number; stalePrs: number; thresholdDays: number } | null;
+    costAndTokens: { cost: number | null; tokens: number | null; costPerHour: number | null; tokensPerHour: number | null } | null;
+  };
+  usage: UsageAggregate | null;
+  attention: AttentionItem[];
+  status: {
+    refresh: RefreshState;
+    freshness: {
+      state: "fresh" | "stale" | "missing";
+      lastUpdatedAt: number | null;
+      staleThresholdMinutes: number;
+    };
+    partialData: boolean;
+    sources: Array<{
+      id: string;
+      title: string;
+      tier: string;
+      ok: boolean;
+      unavailable: boolean;
+      capturedAt: number | null;
+      warnings: string[];
+      errors: Array<{ message: string; code: string; retryable: boolean }>;
+    }>;
+    coverageWarnings: string[];
+  };
+}
+
+const ATTENTION_LIMIT = 20;
+
+export function buildState(db: Database, config: RuntimeConfig, collectors: Collector[], now: number = Date.now()): StatePayload {
+  const states = getAllLatestState(db)
+    .map((row) => JSON.parse(row.data) as PersistedState)
+    .filter((s) => s.ok && s.data !== null);
+
+  const bySource = new Map(states.map((s) => [s.source, s]));
+  const aggregates = computeAggregates(states, config);
+
+  const allRepos = states.flatMap((s) => s.data!.repositories);
+  const privacyMap = resolvePrivacyMap(allRepos);
+  const uncovered = uncoveredRepos(allRepos, privacyMap);
+
+  const showPrivate = config.privacy.showPrivateRepoItems;
+  const visible = (repoKey: string) => isRepoVisible(repoKey, privacyMap, showPrivate);
+
+  // Attention queue — open issues/PRs from visible repos, newest-first.
+  const attention: AttentionItem[] = [];
+  const staleMs = now - config.staleness.staleThresholdDays * 86_400_000;
+  const shaToCi = new Map<string, string>();
+  for (const s of states) {
+    for (const run of s.data!.workflowRuns) {
+      if (run.conclusion && !shaToCi.has(run.headSha)) shaToCi.set(run.headSha, run.conclusion);
+    }
+  }
+  for (const s of states) {
+    const d = s.data!;
+    for (const issue of d.issues) {
+      if (issue.state !== "open" || !visible(issue.repoKey)) continue;
+      attention.push({
+        id: `issue:${issue.id}`,
+        type: "issue",
+        repoKey: issue.repoKey,
+        repo: issue.repo,
+        title: issue.title,
+        url: issue.url,
+        state: issue.state,
+        updatedAt: issue.updatedAt,
+        ageDays: Math.max(0, Math.floor((now - Date.parse(issue.createdAt)) / 86_400_000)),
+        stale: Date.parse(issue.updatedAt) < staleMs,
+        ciStatus: null,
+        labels: issue.labels,
+      });
+    }
+    for (const pr of d.pullRequests) {
+      if (pr.state !== "open" || !visible(pr.repoKey)) continue;
+      attention.push({
+        id: `pr:${pr.id}`,
+        type: "pr",
+        repoKey: pr.repoKey,
+        repo: pr.repo,
+        title: pr.title,
+        url: pr.url,
+        state: pr.state,
+        updatedAt: pr.updatedAt,
+        ageDays: Math.max(0, Math.floor((now - Date.parse(pr.createdAt)) / 86_400_000)),
+        stale: Date.parse(pr.updatedAt) < staleMs,
+        ciStatus: pr.headSha ? shaToCi.get(pr.headSha) ?? null : null,
+        labels: pr.labels,
+      });
+    }
+  }
+  attention.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const refreshState = readRefreshState(db, config);
+  const latestCapturedAt = states.reduce((max, s) => Math.max(max, s.capturedAt), 0);
+  const staleThresholdMinutes = config.staleness.staleThresholdMinutes;
+  const freshness =
+    latestCapturedAt === 0
+      ? { state: "missing" as const, lastUpdatedAt: null, staleThresholdMinutes }
+      : {
+          state: (now - latestCapturedAt > staleThresholdMinutes * 60_000 ? "stale" : "fresh") as "fresh" | "stale",
+          lastUpdatedAt: latestCapturedAt,
+          staleThresholdMinutes,
+        };
+
+  // Coverage warnings — operator-visible honesty about what's missing.
+  const coverageWarnings: string[] = [];
+  if (refreshState.status === "failed") coverageWarnings.push("Last refresh failed — showing last good data");
+  if (refreshState.status === "partial") coverageWarnings.push("Last refresh was partial — some sources failed");
+  if (uncovered > 0) coverageWarnings.push(`${uncovered} repository/privacy entries could not be verified (treated as private)`);
+  for (const s of states) {
+    if (s.unavailable) coverageWarnings.push(`${s.source} unavailable: ${s.warnings.join("; ")}`);
+    for (const e of s.errors) coverageWarnings.push(`${s.source}: ${e.message}`);
+  }
+
+  const usage = aggregates.usage;
+  const hours = aggregates.window.days * 24;
+
+  return {
+    window: aggregates.window,
+    summary: {
+      throughput: aggregates.throughput,
+      cycleTime: aggregates.cycleTime,
+      ci: aggregates.ci,
+      staleWork: aggregates.staleWork,
+      costAndTokens: usage
+        ? {
+            cost: usage.totalCost,
+            tokens: usage.totalTokens,
+            costPerHour: usage.totalCost !== null && hours > 0 ? usage.totalCost / hours : null,
+            tokensPerHour: usage.totalTokens !== null && hours > 0 ? usage.totalTokens / hours : null,
+          }
+        : null,
+    },
+    usage,
+    attention: attention.slice(0, ATTENTION_LIMIT),
+    status: {
+      refresh: refreshState,
+      freshness,
+      partialData: refreshState.partialData ?? false,
+      sources: collectors.map((c) => {
+        const s = bySource.get(c.id);
+        return {
+          id: c.id,
+          title: c.title,
+          tier: c.tier,
+          ok: s?.ok ?? false,
+          unavailable: s?.unavailable ?? true,
+          capturedAt: s?.capturedAt ?? null,
+          warnings: s?.warnings ?? [],
+          errors: s?.errors ?? [],
+        };
+      }),
+      coverageWarnings,
+    },
+  };
+}
+
+function readRefreshState(db: Database, config: RuntimeConfig): RefreshState {
+  const meta = getRefreshMeta<Record<string, unknown>>(db, "refresh_state");
+  const status = (meta?.status as RefreshState["status"]) ?? (getRefreshMeta<string>(db, "last_failure_at") ? "failed" : "idle");
+  const lock = getRefreshMeta<{ token: string; owner: "manual" | "poller"; acquiredAt: number }>(db, "refresh_lock");
+  const staleLock = lock ? Date.now() - lock.acquiredAt > config.refresh.lockStaleMs : false;
+
+  return {
+    status,
+    inProgress: !!(lock && !staleLock),
+    lastRunStartedAt: getRefreshMeta<string | null>(db, "last_run_started_at") ?? null,
+    lastRunFinishedAt: getRefreshMeta<string | null>(db, "last_run_finished_at") ?? null,
+    lastSuccessAt: getRefreshMeta<string | null>(db, "last_success_at") ?? null,
+    lastFailureAt: getRefreshMeta<string | null>(db, "last_failure_at") ?? null,
+    lastFailureMessage: getRefreshMeta<string | null>(db, "last_failure_message") ?? null,
+    lastManualRefreshAt: getRefreshMeta<string | null>(db, "last_manual_refresh_at") ?? null,
+    lockOwner: lock && !staleLock ? lock.owner : null,
+    partialData: Boolean(meta?.partialData),
+  };
+}
+
+export { utcDaysAgo, utcDay };

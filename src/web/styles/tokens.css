@@ -1,0 +1,28 @@
+/* Design tokens from docs/design-system.md, as CSS custom properties. */
+/* Borrowed fonts come from weightless-fonts. */
+
+:root {
+  --page-bg: #07080a;
+  --card-bg: #111318;
+  --card-hover: #1a1d24;
+  --card-border: #1e2128;
+  --divider: #262a33;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-disabled: #475569;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #38bdf8;
+  --stale: #a78bfa;
+  --neutral: #64748b;
+  --primary: #38bdf8;
+  --subtle: rgba(56, 189, 248, 0.08);
+  --font-heading: "Satoshi", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --content-max: 1280px;
+}

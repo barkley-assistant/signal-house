@@ -31,8 +31,9 @@ export class V1DatabaseRefusedError extends Error {
 export function looksLikeV1Database(db: Database): boolean {
   const row = db
     .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-    .get(V1_MARKER_TABLE) as { name: string } | undefined;
-  return row !== undefined;
+    .get(V1_MARKER_TABLE) as { name: string } | null | undefined;
+  // bun:sqlite returns null (not undefined) for missing rows — treat both as absent.
+  return row !== null && row !== undefined;
 }
 
 /** Create the V2 schema if needed; set user_version. Idempotent. */
