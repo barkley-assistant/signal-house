@@ -67,10 +67,12 @@ function DailyUsageChart() {
   useEffect(() => {
     if (!ref.current) return;
     chartRef.current = echarts.init(ref.current, "dark");
-    const onResize = () => chartRef.current?.resize();
-    window.addEventListener("resize", onResize);
+    // ResizeObserver beats window-resize: tracks the container even when the
+    // grid reflows (mobile column collapse, diagnostics opening, etc).
+    const ro = new ResizeObserver(() => chartRef.current?.resize());
+    ro.observe(ref.current);
     return () => {
-      window.removeEventListener("resize", onResize);
+      ro.disconnect();
       chartRef.current?.dispose(); // must dispose to avoid instance leaks
       chartRef.current = null;
     };

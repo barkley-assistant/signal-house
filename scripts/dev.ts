@@ -4,14 +4,16 @@
  * - Binds the Bun server to 0.0.0.0 on port 3000 (or the next free port).
  * - Writes .signal-house-dev/{pid,port,log,access} (all gitignored).
  * - Prints the localhost URL and the detected LAN URL.
- * - Uses `bun --hot` so server code reloads without dropping connections.
+ * - Runs a server watcher (`bun --watch src/server.ts`; hard restart because
+ *   Bun.serve() binds at module top level — no WebSockets to preserve) and a
+ *   web-bundle rebuild triggered by recursive fs.watch on src/web.
  *
  * Run: bun run dev
  */
 
 import { spawn } from "bun";
 import { networkInterfaces } from "node:os";
-import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, appendFileSync, watch } from "node:fs";
 import { resolve, join } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..");
@@ -66,11 +68,19 @@ console.log(`  LAN:    ${lanUrl}`);
 console.log(`  Logs:   ${logPath}`);
 console.log(`  PID:    ${pid}\n`);
 
+async function tee(stream: ReadableStream<Uint8Array> | null, file: string): Promise<void> {
+  if (!stream) return;
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = Buffer.from(value).toString("utf8");
+    process.stdout.write(text);
+    appendFileSync(file, text);
+  }
+}
+
 const child = spawn({
-  // --watch (hard restart) not --hot: the server binds Bun.serve() at module
-  // top level, and --hot re-evaluates the module without stopping the old
-  // server — double-binding ports. No WebSockets to preserve, so a full
-  // restart on change is correct and simple.
   cmd: ["bun", "--watch", "src/server.ts"],
   cwd: repoRoot,
   stdout: "pipe",
@@ -83,28 +93,34 @@ const child = spawn({
   },
 });
 
-const tee = async (stream: ReadableStream<Uint8Array> | null, file: string): Promise<void> => {
-  if (!stream) return;
-  const reader = stream.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const text = Buffer.from(value).toString("utf8");
-    process.stdout.write(text);
-    appendFileSync(file, text);
-  }
-};
 void tee(child.stdout, logPath);
 void tee(child.stderr, logPath);
 
-async function accessWatcher(): Promise<void> {
-  appendFileSync(accessPath, "");
-  // Periodic marker so the operator can see the server is alive.
-  setInterval(() => {
-    appendFileSync(accessPath, `${new Date().toISOString()} live (pid ${pid})\n`);
-  }, 60_000);
-}
-void accessWatcher();
+// Web-bundle rebuild on src/web edits (CSS/TSX). A debounced spawn of
+// scripts/build-web.ts keeps rebuilds cheap during multi-file saves.
+const webDir = join(repoRoot, "src", "web");
+let buildTimer: ReturnType<typeof setTimeout> | null = null;
+const rebuildWeb = (): void => {
+  if (buildTimer) clearTimeout(buildTimer);
+  buildTimer = setTimeout(() => {
+    const builder = spawn({
+      cmd: ["bun", "scripts/build-web.ts"],
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...(process.env as Record<string, string>) },
+    });
+    void tee(builder.stdout, logPath);
+    void tee(builder.stderr, logPath);
+  }, 300);
+};
+watch(webDir, { recursive: true }, () => rebuildWeb());
+rebuildWeb();
+
+// Periodic marker so the operator can see the wrapper is alive.
+setInterval(() => {
+  appendFileSync(accessPath, `${new Date().toISOString()} live (pid ${pid})\n`);
+}, 60_000);
 
 process.on("SIGINT", () => {
   child.kill();
