@@ -88,12 +88,12 @@ button.primary {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin: 32px 0 24px;
 }
 .app-header__brand {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 28px;
 }
 .app-header__text h1 {
   font-size: 30px;
