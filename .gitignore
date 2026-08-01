@@ -13,3 +13,4 @@ dist/
 .atl/
 # Dev server artifacts (gitignored per rewrite instruction)
 .signal-house-dev/
+test-results/

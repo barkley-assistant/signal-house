@@ -82,31 +82,16 @@ Card surfaces use a slightly lighter tone with a thin border rather than shadows
 
 ## 2. Typography
 
-Fonts are loaded via `next/font` in `app/layout.tsx` (handled by #154):
-
-```ts
-import { Instrument_Sans, JetBrains_Mono } from 'next/font/google'
-import localFont from 'next/font/local'
-
-const instrumentSans = Instrument_Sans({
-  subsets: ['latin'],
-  variable: '--font-body',
-})
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
-})
-const satoshi = localFont({
-  src: './fonts/Satoshi-Variable.woff2',
-  variable: '--font-heading',
-})
-```
+Fonts: **Instrument Sans** (body) and **JetBrains Mono** (numbers,
+code), loaded as self-hosted `@font-face` assets bundled by the Bun
+web build (`src/web/styles/tokens.css`). There is no `next/font` —
+V2 is a Bun-native SPA; fonts are static assets like any other.
 
 ### CSS variable references
 
 | Role          | Variable            | Font            |
 | ------------- | ------------------- | --------------- |
-| Headings      | `--font-heading`    | Satoshi         |
+| Headings      | `--font-heading`    | Instrument Sans (600–700) |
 | Body          | `--font-body`       | Instrument Sans |
 | Data/numbers  | `--font-mono`       | JetBrains Mono  |
 
@@ -259,7 +244,9 @@ shadcn/ui uses CSS variables for theming. These override the defaults after `npx
 ## 8. Performance Guidelines
 
 - Health summary cards and status strip are above the fold — eager render.
-- Attention queue and model usage sections are below the fold — use `next/dynamic` with `ssr: false` for non-critical sections.
+- Attention queue and model usage sections are below the fold — the
+  diagnostics panel is lazy-loaded (fetched only when opened), and
+  the rest is a single-page React app with no SSR.
 - The source diagnostics panel must be lazy — never fetch or render it until the user expands it.
 - Trend charts should use ECharts' `notMerge` option on updates to prevent memory leaks from accumulated chart instances.
 - No section should cause layout shift (CLS > 0) — all state placeholders (skeletons) must reserve exact real-content dimensions.

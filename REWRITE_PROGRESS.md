@@ -1,6 +1,6 @@
 # Signal House v2 — Bun-native rewrite
 
-> **Status:** implementing (clean-room rewrite on `rewrite/bun-native`)
+> **Status:** complete (clean-room rewrite on `rewrite/bun-native` — see `docs/rewrite/final-report.md`)
 > **Source docs:** `/home/agent/scratch/signal-house-v2/` + legacy repo docs (see requirements traceability)
 > **Branch:** `rewrite/bun-native`
 
