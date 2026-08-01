@@ -59,6 +59,11 @@ SQLite (V2 schema, user_version=1)
 - **Refresh semantics:** a failed source keeps its last-good
   `latest_state`; the dashboard shows partial-data banners instead of
   fabricating numbers.
+- **Discovery-driven GitHub:** the git collector runs first and feeds
+  every discovered GitHub remote into the GitHub collector, so issues/
+  PRs/CI are fetched for all repos under the configured project roots
+  (plus any explicitly configured repo). Remote URLs are sanitized of
+  credentials before persistence.
 
 ## Privacy
 
