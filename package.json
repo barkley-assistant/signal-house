@@ -23,5 +23,12 @@
     "@typescript-eslint/eslint-plugin": "8",
     "@typescript-eslint/parser": "8",
     "typescript": "5.9"
+  },
+  "dependencies": {
+    "echarts": "6.1.0",
+    "framer-motion": "12.43.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zustand": "5.0.14"
   }
 }
