@@ -126,7 +126,8 @@ describe("HealthStrip", () => {
 describe("AttentionQueue", () => {
   test("renders clear state when empty", () => {
     render(<AttentionQueue attention={[]} />);
-    expect(screen.getByText(/queue is clear/i)).toBeTruthy();
+    expect(screen.getByText(/all clear/i)).toBeTruthy();
+    expect(screen.getByText(/no open issues or prs need attention/i)).toBeTruthy();
   });
 
   test("shows items and marks stale ones", () => {

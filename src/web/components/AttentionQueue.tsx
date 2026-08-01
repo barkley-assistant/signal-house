@@ -11,7 +11,10 @@ export function AttentionQueue({ attention }: { attention: StatePayload["attenti
     return (
       <section className="card" aria-label="Attention queue">
         <h2>Attention Queue</h2>
-        <p className="state-label">No open issues or PRs — queue is clear</p>
+        <p className="state-label">
+          <span className="dot dot--success" style={{ marginRight: 8 }} />
+          All clear — no open issues or PRs need attention right now
+        </p>
       </section>
     );
   }

@@ -36,10 +36,8 @@ export function App() {
 
       {state && <RefreshStatus status={state.status} />}
 
-      <div className="grid grid--2 work-grid">
-        <AgentSpend />
-        <AttentionQueue attention={state?.attention ?? []} />
-      </div>
+      <AgentSpend />
+      <AttentionQueue attention={state?.attention ?? []} />
 
       {state && <SourceDiagnostics />}
 

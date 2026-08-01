@@ -53,15 +53,8 @@
 .state-ok { color: var(--success); }
 .state-bad { color: var(--error); }
 
-/* Work grid — Agent Spend + Attention Queue. minmax(0,…) so table/canvas
-   min-content cannot widen a column past the viewport on small screens. */
-.work-grid {
-  margin-top: 16px;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-}
-@media (max-width: 900px) {
-  .work-grid { grid-template-columns: minmax(0, 1fr); }
-}
+/* Attention queue + agent spend are stacked full-width sections
+   (operator preference: queue under the spend card). */
 
 /* Agent Spend sub-tiles. */
 .spend-subtiles {
