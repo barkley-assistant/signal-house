@@ -5,6 +5,7 @@
 
 import { useEffect } from "react";
 import { useDash, startPolling } from "../state/store";
+import pkg from "../../../package.json";
 import { HealthStrip } from "../components/HealthStrip";
 import { AttentionQueue } from "../components/AttentionQueue";
 import { AgentSpend } from "../components/AgentSpend";
@@ -47,7 +48,7 @@ export function App() {
       </main>
 
       <footer className="app-footer">
-        <span>Signal House v2 · Bun-native rewrite</span>
+        <span>Signal House v{pkg.version}</span>
         {state && (
           <span className="kpi-caption">
             Window: {state.window.start} → {state.window.end} · {state.window.days} days

@@ -95,6 +95,11 @@ button.primary {
   align-items: center;
   gap: 28px;
 }
+.app-header__text {
+  /* nudge down so the title optically centers on the logo mark (its visual
+     weight sits slightly below the geometric center) */
+  margin-top: 6px;
+}
 .app-header__text h1 {
   font-size: 30px;
   font-weight: 700;

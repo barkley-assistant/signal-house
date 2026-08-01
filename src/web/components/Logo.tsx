@@ -11,9 +11,10 @@ import logoUrl from "../assets/signal-house-logo.png";
 export function Logo({ size = 64 }: { size?: number }) {
   const reduce = useReducedMotion();
 
-  // Pulse rings — slow radar ping (V1 LogoAnimation, 6.3s).
+  // Pulse rings — slow radar ping. Slower cycle (8s) with a quick fade:
+  // peak at ~1s, gone by ~2.2s, then a long quiet stretch (operator pref).
   const pulse = reduce ? { scale: 1.08, opacity: 0.32 } : { scale: [1, 2.08], opacity: [0, 0.52, 0] };
-  const pulseT = reduce ? undefined : { duration: 6.3, repeat: Infinity, times: [0, 0.18, 1], ease: "easeOut" as const };
+  const pulseT = reduce ? undefined : { duration: 8, repeat: Infinity, times: [0, 0.12, 0.28], ease: "easeOut" as const };
 
   // Light flash — radial glow that blooms then fades (V1 LogoGlow `a`).
   // x/y keep the element centered (framer overrides CSS transforms).
@@ -33,7 +34,7 @@ export function Logo({ size = 64 }: { size?: number }) {
   return (
     <div className="logo" style={{ width: size, height: size }} aria-hidden="true">
       <img src={logoUrl} alt="" width={size} height={size} className="logo__img" />
-      {[0, 2.1, 4.2].map((delay, i) => (
+      {[0, 2.7, 5.4].map((delay, i) => (
         <motion.span
           key={delay}
           aria-hidden="true"
