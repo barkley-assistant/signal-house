@@ -58,7 +58,11 @@ function SpendCombined({ usage }: { usage: UsageLike }) {
   );
 }
 
-/** Stacked/area daily cost trend read from /api/daily/spend. */
+/** Daily cost + token trend from /api/daily/spend, styled natively to the
+ *  dashboard: card background, token palette, faint split lines matching the
+ *  table borders. Dual y-axes — cost (left, blue) and tokens (right, yellow).
+ *  X-axis shows day+date; the tooltip carries the full date and both metrics.
+ */
 function DailyUsageChart() {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -83,12 +87,79 @@ function DailyUsageChart() {
     void loadTrend().then((points) => {
       if (disposed || !chartRef.current) return;
       const dates = points.map((p) => p.date);
+      const fmtDay = (d: string) => {
+        const [y, m, day] = d.split("-").map(Number);
+        const dt = new Date(Date.UTC(y, m - 1, day));
+        return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+      };
       const series: echarts.EChartsOption = {
-        animation: false,
-        grid: { left: 48, right: 12, top: 16, bottom: 24 },
-        tooltip: { trigger: "axis" },
-        xAxis: { type: "category", data: dates, axisLabel: { color: "#64748b", fontSize: 10 } },
-        yAxis: { type: "value", axisLabel: { color: "#64748b", fontSize: 10 }, splitLine: { lineStyle: { color: "#1e2128" } } },
+        animation: true,
+        animationDuration: 700,
+        animationEasing: "cubicOut",
+        backgroundColor: "transparent",
+        grid: { left: 44, right: 52, top: 24, bottom: 28, containLabel: true },
+        tooltip: {
+          trigger: "axis",
+          confine: true,
+          backgroundColor: "rgba(17, 19, 24, 0.96)",
+          borderColor: "#232732",
+          borderWidth: 1,
+          padding: [10, 12],
+          textStyle: { color: "#94a3b8", fontSize: 12 },
+          axisPointer: { lineStyle: { color: "#2c3038" } },
+          formatter: (params: unknown) => {
+            const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
+            if (!arr.length) return "";
+            const [y, m, day] = arr[0].axisValue.split("-").map(Number);
+            const full = new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", {
+              weekday: "long", day: "numeric", month: "long", year: "numeric",
+            });
+            const rows = arr
+              .filter((p) => p.value !== null)
+              .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.startsWith("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
+            return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
+          },
+        },
+        xAxis: {
+          type: "category",
+          data: dates,
+          axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDay },
+          axisLine: { lineStyle: { color: "#232732" } },
+          axisTick: { show: false },
+        },
+        yAxis: [
+          {
+            type: "value",
+            axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `$${v}` },
+            splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+          },
+          {
+            type: "value",
+            axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => formatCompact(v) },
+            splitLine: { show: false },
+          },
+        ],
+        legend: {
+          data: ["Cost ($)", "Tokens"],
+          top: 0,
+          right: 0,
+          icon: "circle",
+          itemWidth: 8,
+          itemHeight: 8,
+          textStyle: { color: "#94a3b8", fontSize: 11 },
+        },
+        // Media queries: on narrow screens, shrink the label gutters so the
+        // dual-axis plot keeps as much width as possible (ECharts responsive
+        // pattern — see handbook "Responsive Mobile-End").
+        media: [
+          {
+            query: { maxWidth: 480 },
+            option: {
+              grid: { left: 36, right: 36, top: 24, bottom: 28, containLabel: true },
+              legend: { textStyle: { fontSize: 10 } },
+            },
+          },
+        ],
         series: [
           {
             name: "Cost ($)",
@@ -98,6 +169,16 @@ function DailyUsageChart() {
             showSymbol: false,
             lineStyle: { color: "#38bdf8", width: 2 },
             areaStyle: { color: "rgba(56, 189, 248, 0.12)" },
+          },
+          {
+            name: "Tokens",
+            type: "line",
+            yAxisIndex: 1,
+            data: points.map((p) => p.tokens),
+            smooth: 0.3,
+            showSymbol: false,
+            lineStyle: { color: "#facc15", width: 2 },
+            areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
           },
         ],
       };
@@ -111,18 +192,52 @@ function DailyUsageChart() {
 
   return (
     <div style={{ marginTop: 16 }}>
-      <div className="kpi-tile__label" style={{ marginBottom: 8 }}>Daily cost</div>
+      <div className="kpi-tile__label" style={{ marginBottom: 8 }}>Daily cost &amp; tokens</div>
       {loading && <div className="skeleton" style={{ height: 220 }} />}
-      <div ref={ref} style={{ width: "100%", height: 220 }} aria-label="Daily cost trend chart" />
+      <div ref={ref} style={{ width: "100%", height: 220 }} aria-label="Daily cost and token trend chart" />
     </div>
   );
 }
 
-/** By-model table spanning all sources; unknown cost renders "—". */
+type SortKey = "model" | "sessions" | "tokens" | "cost" | null;
+
+/** By-model table spanning all sources; unknown cost renders "—".
+ *  Click a column header to sort: sessions/tokens/cost sort descending,
+ *  model sorts alphabetically. Clicking the active column again cycles
+ *  (desc → asc → back to default session order). */
 function ModelTable() {
   const { state } = useDash();
   const usage = state?.usage ?? null;
   const models = usage?.byModel ?? [];
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [asc, setAsc] = useState(false);
+
+  const sorted = [...models];
+  if (sortKey) {
+    sorted.sort((a, b) => {
+      if (sortKey === "model") {
+        return asc ? b.model.localeCompare(a.model) : a.model.localeCompare(b.model);
+      }
+      const av = a[sortKey] ?? -1;
+      const bv = b[sortKey] ?? -1;
+      return asc ? av - bv : bv - av;
+    });
+  }
+
+  const cycle = (key: Exclude<SortKey, null>) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setAsc(false);
+    } else if (!asc) {
+      setAsc(true);
+    } else {
+      setSortKey(null); // back to default session order
+      setAsc(false);
+    }
+  };
+
+  const arrow = (key: Exclude<SortKey, null>) =>
+    sortKey === key ? <span className="sort-arrow">{asc ? "↑" : "↓"}</span> : null;
 
   return (
     <div className="model-table" style={{ marginTop: 16 }}>
@@ -133,14 +248,14 @@ function ModelTable() {
         <table className="data">
           <thead>
             <tr>
-              <th>Model</th>
-              <th className="num">Sessions</th>
-              <th className="num">Tokens</th>
-              <th className="num">Cost</th>
+              <th><button type="button" className="sort-btn" onClick={() => cycle("model")}>Model{arrow("model")}</button></th>
+              <th className="num"><button type="button" className="sort-btn" onClick={() => cycle("sessions")}>Sessions{arrow("sessions")}</button></th>
+              <th className="num"><button type="button" className="sort-btn" onClick={() => cycle("tokens")}>Tokens{arrow("tokens")}</button></th>
+              <th className="num"><button type="button" className="sort-btn" onClick={() => cycle("cost")}>Cost{arrow("cost")}</button></th>
             </tr>
           </thead>
           <tbody>
-            {models.map((m) => (
+            {sorted.map((m) => (
               <tr key={m.model}>
                 <td>
                   {m.model}

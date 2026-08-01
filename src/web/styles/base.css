@@ -223,6 +223,26 @@ table.data th {
   padding: 6px 8px;
   border-bottom: 1px solid var(--divider);
 }
+/* Sortable column headers — button fills the th, inherits table styling. */
+.sort-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s ease;
+}
+.sort-btn:hover {
+  color: var(--glow-300, #38bdf8);
+}
+.sort-arrow {
+  color: var(--glow-300, #38bdf8);
+  font-size: 10px;
+}
 table.data td {
   padding: 6px 8px;
   border-bottom: 1px solid var(--card-border);

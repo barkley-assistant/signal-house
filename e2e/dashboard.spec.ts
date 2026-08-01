@@ -15,7 +15,7 @@ test.describe("dashboard (desktop)", () => {
     // Health strip tiles animate into view
     await expect(page.getByText("THROUGHPUT")).toBeVisible();
     await expect(page.getByText("CYCLE TIME")).toBeVisible();
-    await expect(page.getByText("COST & TOKENS")).toBeVisible();
+    await expect(page.getByText("COST & TOKENS").first()).toBeVisible();
     // Data arrives from the real API (dev server collects hermes + opencode)
     await expect(page.getByText("AGENT SPEND")).toBeVisible();
   });
