@@ -3,7 +3,7 @@ import { openMemoryDatabase } from "../../src/db/client";
 import { runRefresh, type RefreshContext } from "../../src/orchestrator/refresh";
 import { RefreshLock } from "../../src/orchestrator/lock";
 import { getLatestState } from "../../src/db/latest-state";
-import { getRefreshMeta } from "../../src/db/refresh-meta";
+import { getRefreshMeta, setRefreshMeta } from "../../src/db/refresh-meta";
 import { queryDailyMetrics } from "../../src/db/daily-metrics";
 import type { Collector, CollectorResult, SourceData } from "../../src/shared/types";
 import { emptySourceData } from "../../src/shared/types";
@@ -78,6 +78,30 @@ describe("refresh runner", () => {
     expect(state).not.toBeNull();
     const rows = queryDailyMetrics(owner.db, { from: "2026-07-31", to: "2026-07-31" });
     expect(rows.length).toBeGreaterThan(0);
+    expect(getRefreshMeta(owner.db, "last_success_at")).not.toBeNull();
+    owner.close();
+  });
+
+  test("a successful refresh clears prior failure metadata", async () => {
+    const owner = openMemoryDatabase();
+    // Prime a failure record (as if a previous refresh had failed)
+    setRefreshMeta(owner.db, "last_failure_at", "2026-07-31T10:00:00Z", 1);
+    setRefreshMeta(owner.db, "last_failure_message", "boom", 1);
+
+    const good = stubCollector("hermes", {
+      data: {
+        usage: {
+          source: "hermes",
+          periodDays: 30,
+          byDay: [{ date: "2026-07-31", sessions: 1, messages: 1, tokensInput: 1, tokensOutput: 1, tokensCacheRead: 0, tokensCacheWrite: 0, tokensReasoning: 0, cost: 0.1 }],
+          byModel: [],
+        },
+      },
+    });
+    const out = await runRefresh(ctx(owner, [good]), "manual");
+    expect(out.status).toBe("success");
+    expect(getRefreshMeta(owner.db, "last_failure_at")).toBeNull();
+    expect(getRefreshMeta(owner.db, "last_failure_message")).toBeNull();
     expect(getRefreshMeta(owner.db, "last_success_at")).not.toBeNull();
     owner.close();
   });

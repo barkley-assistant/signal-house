@@ -28,7 +28,12 @@ export function RefreshStatus({ status }: { status: StatePayload["status"] }) {
               : `Last updated ${formatRelative(status.freshness.lastUpdatedAt)} · ${formatAbsolute(status.freshness.lastUpdatedAt)}`}
           </div>
           {refresh.lastSuccessAt && <div className="kpi-caption">Last successful refresh {formatRelative(Date.parse(refresh.lastSuccessAt))}</div>}
-          {refresh.lastFailureAt && <div className="kpi-caption" style={{ color: "var(--error)" }}>Last failed refresh {formatRelative(Date.parse(refresh.lastFailureAt))}{refresh.lastFailureMessage ? ` — ${refresh.lastFailureMessage}` : ""}</div>}
+          {(refresh.status === "failed" || refresh.status === "partial") && refresh.lastFailureAt && (
+            <div className="kpi-caption" style={{ color: "var(--error)" }}>
+              Last failed refresh {formatRelative(Date.parse(refresh.lastFailureAt))}
+              {refresh.lastFailureMessage ? ` — ${refresh.lastFailureMessage}` : ""}
+            </div>
+          )}
           {refreshMessage && <div className="kpi-caption" style={{ color: "var(--info)" }}>{refreshMessage}</div>}
         </div>
         <div className="refresh-actions">

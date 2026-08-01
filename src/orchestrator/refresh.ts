@@ -131,8 +131,13 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
 
       setRefreshMeta(ctx.owner.db, "last_run_started_at", startedAt, nowMs);
       setRefreshMeta(ctx.owner.db, "last_run_finished_at", new Date().toISOString(), Date.now());
-      if (failed.length === 0) setRefreshMeta(ctx.owner.db, "last_success_at", startedAt, nowMs);
-      if (failed.length > 0) {
+      if (failed.length === 0) {
+        setRefreshMeta(ctx.owner.db, "last_success_at", startedAt, nowMs);
+        // A fully successful refresh supersedes any prior failure — clear it
+        // so the dashboard never surfaces stale failure archaeology.
+        setRefreshMeta(ctx.owner.db, "last_failure_at", null, nowMs);
+        setRefreshMeta(ctx.owner.db, "last_failure_message", null, nowMs);
+      } else {
         setRefreshMeta(ctx.owner.db, "last_failure_at", new Date().toISOString(), Date.now());
         setRefreshMeta(ctx.owner.db, "last_failure_message", failed.map((f) => f.errors.map((e) => e.message).join("; ")).join(" | "), Date.now());
       }
