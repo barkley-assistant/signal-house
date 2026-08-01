@@ -48,12 +48,20 @@ export function App() {
       </main>
 
       <footer className="app-footer">
-        <span>
-          <a href="https://github.com/barkley-assistant/signal-house" target="_blank" rel="noreferrer">
-            Signal House v{pkg.version}
+        <div className="app-footer__left">
+          <a className="app-footer__brand" href="https://github.com/barkley-assistant/signal-house" target="_blank" rel="noreferrer">
+            Signal House <span className="app-footer__version">v{pkg.version}</span>
           </a>
-        </span>
-        {state && <span className="kpi-caption">{state.window.days} days usage</span>}
+          <span className="app-footer__sep">·</span>
+          <a href="https://github.com/barkley-assistant/signal-house/blob/rewrite/bun-native/LICENSE" target="_blank" rel="noreferrer">
+            MIT
+          </a>
+        </div>
+        <div className="app-footer__bun">
+          Made with <span className="app-footer__heart">♥</span> in{" "}
+          <a href="https://bun.sh" target="_blank" rel="noreferrer">Bun</a>
+        </div>
+        {state && <span className="app-footer__right">{state.window.days} days usage</span>}
       </footer>
     </div>
   );
