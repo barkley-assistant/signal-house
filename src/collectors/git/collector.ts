@@ -204,13 +204,14 @@ export class GitCollector implements Collector<SourceData> {
 
     const { owner, repo } = parseRemote(remoteUrl);
     const repoName = repo ?? basename(path);
+    const safeRemote = sanitizeRemoteUrl(remoteUrl);
 
     return {
       record: {
-        repoKey: remoteUrl && owner && repo ? `github:${owner}/${repo}` : `local:${path}`,
+        repoKey: safeRemote && owner && repo ? `github:${owner}/${repo}` : `local:${path}`,
         path,
         repoName,
-        remoteUrl,
+        remoteUrl: safeRemote,
         githubOwner: owner,
         githubRepo: repo,
         defaultBranch: defaultBranch || null,
@@ -298,10 +299,31 @@ export function parseRemote(url: string | null): { owner: string | null; repo: s
   // git@github.com:owner/repo.git
   let m = trimmed.match(/^(?:git@|ssh:\/\/git@)github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (m) return { owner: m[1], repo: stripGitSuffix(m[2]) };
-  // https://github.com/owner/repo.git
-  m = trimmed.match(/^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/)?$/);
+  // https://github.com/owner/repo.git — with optional credentials (token)
+  // in the userinfo slot: https://x-access-token:TOKEN@github.com/owner/repo.git
+  m = trimmed.match(/^https?:\/\/(?:[^/@\s]+@)?(?:www\.)?github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/)?$/);
   if (m) return { owner: m[1], repo: stripGitSuffix(m[2]) };
   return { owner: null, repo: null };
+}
+
+/**
+ * Strip credentials from a remote URL before it is persisted anywhere.
+ * Token-bearing remotes (https://x-access-token:TOKEN@github.com/...) must
+ * never be stored verbatim — that is a credential leak in the database.
+ */
+export function sanitizeRemoteUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.username || u.password) {
+      u.username = "";
+      u.password = "";
+    }
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    // Not a URL (ssh scp-style etc.) — nothing to strip.
+    return url;
+  }
 }
 
 function stripGitSuffix(s: string): string {

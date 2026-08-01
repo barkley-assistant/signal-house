@@ -10,8 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HermesCollector } from "../../src/collectors/hermes/collector";
 import { OpencodeCollector } from "../../src/collectors/opencode/collector";
-import { GitCollector } from "../../src/collectors/git/collector";
-import { parseRemote } from "../../src/collectors/git/collector";
+import { GitCollector, parseRemote, sanitizeRemoteUrl } from "../../src/collectors/git/collector";
+import { mergeTargets, extractGithubTargets } from "../../src/collectors/github/collector";
+import { emptySourceData } from "../../src/shared/types";
 import { GitHubClient, GitHubError } from "../../src/collectors/github/client";
 
 let dir: string;
@@ -146,10 +147,78 @@ describe("git collector", () => {
     expect(result.unavailable).toBe(true);
   });
 
+  test("mergeTargets unions explicit + discovered, dedupes by owner/repo", () => {
+    const merged = mergeTargets(
+      [{ owner: "barkley-assistant", repo: "signal-house" }],
+      [
+        { owner: "barkley-assistant", repo: "signal-house" }, // dup of explicit
+        { owner: "barkley-assistant", repo: "caduceus" },
+        { owner: "Barkway-app", repo: "app" },
+        { owner: "", repo: "" }, // garbage dropped
+      ],
+    );
+    expect(merged).toEqual([
+      { owner: "barkley-assistant", repo: "signal-house" },
+      { owner: "barkley-assistant", repo: "caduceus" },
+      { owner: "Barkway-app", repo: "app" },
+    ]);
+  });
+
+  test("extractGithubTargets pulls owner/repo from discovered localGit records", () => {
+    const data = emptySourceData();
+    data.localGit.push({
+      repoKey: "github:acme/thing",
+      path: "/x/thing",
+      repoName: "thing",
+      remoteUrl: "git@github.com:acme/thing.git",
+      githubOwner: "acme",
+      githubRepo: "thing",
+      defaultBranch: "main",
+      isGitRepo: true,
+      recentCommits: 3,
+      authors: [],
+      latestCommitAt: null,
+      error: null,
+      present: true,
+      lastSeenAt: null,
+    });
+    data.localGit.push({
+      repoKey: "local:/x/norepo",
+      path: "/x/norepo",
+      repoName: "norepo",
+      remoteUrl: null,
+      githubOwner: null,
+      githubRepo: null,
+      defaultBranch: null,
+      isGitRepo: false,
+      recentCommits: 0,
+      authors: [],
+      latestCommitAt: null,
+      error: "not a git repo",
+      present: false,
+      lastSeenAt: null,
+    });
+    expect(extractGithubTargets(data)).toEqual([{ owner: "acme", repo: "thing" }]);
+  });
+
   test("parseRemote handles https and ssh forms", () => {
     expect(parseRemote("git@github.com:acme/thing.git")).toEqual({ owner: "acme", repo: "thing" });
     expect(parseRemote("https://github.com/acme/thing.git")).toEqual({ owner: "acme", repo: "thing" });
     expect(parseRemote("git@gitlab.com:acme/other.git")).toEqual({ owner: null, repo: null });
+  });
+
+  test("parseRemote handles token-prefixed https remotes", () => {
+    expect(parseRemote("https://x-access-token:gho_abc123@github.com/acme/thing.git")).toEqual({ owner: "acme", repo: "thing" });
+  });
+
+  test("sanitizeRemoteUrl strips credentials before persistence", () => {
+    const dirty = "https://x-access-token:gho_supersecret@github.com/acme/thing.git";
+    const clean = sanitizeRemoteUrl(dirty);
+    expect(clean).toBe("https://github.com/acme/thing.git");
+    expect(clean).not.toContain("gho_supersecret");
+    // ssh scp-style urls pass through untouched
+    expect(sanitizeRemoteUrl("git@github.com:acme/thing.git")).toBe("git@github.com:acme/thing.git");
+    expect(sanitizeRemoteUrl(null)).toBeNull();
   });
 });
 

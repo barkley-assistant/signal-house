@@ -27,7 +27,15 @@ export class GitHubCollector implements Collector<SourceData> {
   readonly tier = "core" as const;
   readonly title = "GitHub";
 
+  /** Repos discovered by the git collector (from local remotes), fed by the
+   *  refresh runner before each collect. Merged with the explicit config. */
+  private candidates: Array<{ owner: string; repo: string }> = [];
+
   constructor(private readonly config: GitHubCollectorConfig) {}
+
+  setCandidates(repos: Array<{ owner: string; repo: string }>): void {
+    this.candidates = repos;
+  }
 
   async collect(signal: AbortSignal): Promise<CollectorResult<SourceData>> {
     const start = Date.now();
@@ -51,7 +59,18 @@ export class GitHubCollector implements Collector<SourceData> {
     const since = utcDaysAgo(this.config.lookbackDays);
 
     try {
-      const targets = resolveRepos(cfg.owner, cfg.repo);
+      const targets = mergeTargets(resolveRepos(cfg.owner, cfg.repo), this.candidates);
+      if (targets.length === 0) {
+        return {
+          source: "github",
+          ok: true,
+          data: emptySourceData(),
+          durationMs: Date.now() - start,
+          warnings: ["No GitHub repos configured or discovered — source unavailable"],
+          errors: [],
+          unavailable: true,
+        };
+      }
       const results = await client.fetchRepos(targets, since);
 
       const data = emptySourceData();
@@ -59,6 +78,12 @@ export class GitHubCollector implements Collector<SourceData> {
 
       for (const r of results) {
         if (r instanceof GitHubError) {
+          if (r.kind === "not_found") {
+            // A discovered repo may have been renamed/removed on GitHub —
+            // worth a warning, never a whole-source failure.
+            warnings.push(r.message);
+            continue;
+          }
           errors.push({ message: r.message, code: r.kind, retryable: r.retryable });
           continue;
         }
@@ -137,6 +162,32 @@ function resolveRepos(owner: string, repo: string): Array<{ owner: string; repo:
   // for a scoped fetch to keep pagination bounded.
   if (owner) return [{ owner, repo: repo || owner }];
   return [{ owner: owner || "", repo }];
+}
+
+/** Explicit config repos ∪ discovered candidates, deduplicated by owner/repo. */
+export function mergeTargets(
+  explicit: Array<{ owner: string; repo: string }>,
+  discovered: Array<{ owner: string; repo: string }>,
+): Array<{ owner: string; repo: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ owner: string; repo: string }> = [];
+  for (const t of [...explicit, ...discovered]) {
+    if (!t.owner || !t.repo) continue;
+    const key = `${t.owner}/${t.repo}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/** GitHub repos discovered by the git collector from local remotes. */
+export function extractGithubTargets(data: SourceData): Array<{ owner: string; repo: string }> {
+  const out: Array<{ owner: string; repo: string }> = [];
+  for (const r of data.localGit) {
+    if (r.githubOwner && r.githubRepo) out.push({ owner: r.githubOwner, repo: r.githubRepo });
+  }
+  return out;
 }
 
 function toRepositoryIdentity(r: { fullName: string; name: string; private: boolean; defaultBranch: string | null; htmlUrl: string; archived: boolean }, repoKey: string): RepositoryIdentity {

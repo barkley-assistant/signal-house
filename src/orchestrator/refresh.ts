@@ -25,6 +25,7 @@ import { runRetention } from "../db/retention";
 import { deriveDailyRows } from "../metrics/daily";
 import { resolvePrivacyMap, uncoveredRepos } from "../privacy/privacy";
 import { RefreshLock, type LockOwner } from "./lock";
+import { extractGithubTargets } from "../collectors/github/collector";
 import { utcDay } from "../shared/dates";
 import { log } from "../shared/logger";
 
@@ -63,7 +64,7 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
 
   const startedMs = Date.now();
   try {
-    const results = await runCollectorPool(ctx.collectors, ctx.config.orchestrator.concurrency);
+    const results = await runCollectors(ctx);
 
     const succeeded = results.filter((r) => r.ok && r.data !== null);
     const failed = results.filter((r) => !r.ok);
@@ -181,6 +182,55 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
   }
 }
 
+/**
+ * Run all collectors. The git collector runs FIRST so the GitHub collector
+ * can fetch issues/PRs/CI for every repo git discovered locally; everything
+ * else (github, hermes, opencode, sessions) runs in a bounded pool.
+ */
+async function runCollectors(ctx: RefreshContext): Promise<CollectorResult<SourceData>[]> {
+  const collectors = [...ctx.collectors];
+  const results: CollectorResult<SourceData>[] = [];
+
+  // Phase 0: git discovery alone.
+  const gitIdx = collectors.findIndex((c) => c.id === "git");
+  if (gitIdx >= 0) {
+    const [gitCollector] = collectors.splice(gitIdx, 1);
+    const gitResult = await collectOne(gitCollector);
+    results.push(gitResult);
+    // Feed discovered github remotes into the github collector.
+    if (gitResult.ok && gitResult.data) {
+      const gh = collectors.find((c) => c.id === "github");
+      if (gh && "setCandidates" in gh) {
+        (gh as { setCandidates(r: Array<{ owner: string; repo: string }>): void }).setCandidates(extractGithubTargets(gitResult.data));
+      }
+    }
+  }
+
+  // Phase 1: everything else (including github, now with candidates).
+  results.push(...(await runCollectorPool(collectors, ctx.config.orchestrator.concurrency)));
+  return results;
+}
+
+/** Collect one collector with the standard abort + error wrapping. */
+async function collectOne(collector: Collector): Promise<CollectorResult<SourceData>> {
+  const ctrl = new AbortController();
+  try {
+    return await collector.collect(ctrl.signal);
+  } catch (err) {
+    return {
+      source: collector.id as CollectorId,
+      ok: false,
+      data: null,
+      durationMs: 0,
+      warnings: [],
+      errors: [{ message: (err as Error).message, code: "collector_crash", retryable: true }],
+      unavailable: false,
+    };
+  } finally {
+    ctrl.abort();
+  }
+}
+
 /** Run collectors with a bounded concurrency pool. */
 async function runCollectorPool(collectors: Collector[], concurrency: number): Promise<CollectorResult<SourceData>[]> {
   const results: CollectorResult<SourceData>[] = [];
@@ -189,23 +239,7 @@ async function runCollectorPool(collectors: Collector[], concurrency: number): P
     for (;;) {
       const i = idx++;
       if (i >= collectors.length) return;
-      const collector = collectors[i];
-      const ctrl = new AbortController();
-      try {
-        results.push(await collector.collect(ctrl.signal));
-      } catch (err) {
-        results.push({
-          source: collector.id as CollectorId,
-          ok: false,
-          data: null,
-          durationMs: 0,
-          warnings: [],
-          errors: [{ message: (err as Error).message, code: "collector_crash", retryable: true }],
-          unavailable: false,
-        });
-      } finally {
-        ctrl.abort();
-      }
+      results.push(await collectOne(collectors[i]));
     }
   };
   const workers = Array.from({ length: Math.max(1, Math.min(concurrency, collectors.length)) }, worker);
