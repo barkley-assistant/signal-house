@@ -48,12 +48,12 @@ export function App() {
       </main>
 
       <footer className="app-footer">
-        <span>Signal House v{pkg.version}</span>
-        {state && (
-          <span className="kpi-caption">
-            Window: {state.window.start} → {state.window.end} · {state.window.days} days
-          </span>
-        )}
+        <span>
+          <a href="https://github.com/barkley-assistant/signal-house" target="_blank" rel="noreferrer">
+            Signal House v{pkg.version}
+          </a>
+        </span>
+        {state && <span className="kpi-caption">{state.window.days} days usage</span>}
       </footer>
     </div>
   );
