@@ -43,7 +43,7 @@ export function HealthStrip({ state }: { state: StatePayload | null }) {
       <motion.div className="kpi-tile" variants={item}>
         <div className="kpi-tile__label"><span className="dot dot--success" />Throughput</div>
         <div className="big-number">{throughput ? formatNumber(throughput.prsMerged) : "—"}</div>
-        <div className="kpi-caption">{throughput ? `${formatNumber(throughput.totalCommits)} commits · ${formatNumber(throughput.prsCreated)} PRs · ${formatNumber(throughput.issuesClosed)} issues closed` : "No GitHub data"}</div>
+        <div className="kpi-caption">{throughput ? `${formatNumber(throughput.totalCommits)} commits · ${formatNumber(throughput.prsCreated)} PRs` : "No GitHub data"}</div>
       </motion.div>
 
       <motion.div className="kpi-tile" variants={item}>

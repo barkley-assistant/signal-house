@@ -96,9 +96,9 @@ button.primary {
   gap: 28px;
 }
 .app-header__text {
-  /* nudge down so the title optically centers on the logo mark (its visual
-     weight sits slightly below the geometric center) */
-  margin-top: 6px;
+  /* push the title down so it optically centers on the logo mark — the
+     mark's visual weight (rings + glow) sits below its geometric center */
+  margin-top: 20px;
 }
 .app-header__text h1 {
   font-size: 30px;
