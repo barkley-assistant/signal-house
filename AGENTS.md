@@ -32,8 +32,8 @@
 
 ## Tests
 
-- Jest, config in `jest.config.cjs`. Tests live in `__tests__/`
-  next to the source.
+- Bun's test runner (`bun:test`), not Jest. Tests live in `tests/`
+  (unit + contract), Playwright e2e specs live in `e2e/`.
 - Red test first, then implementation.
 - If a test encodes a wrong default, invert the test, then fix the
   production code. Don't write new code around a bad test.
