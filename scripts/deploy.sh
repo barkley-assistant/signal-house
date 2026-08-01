@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Deploy Signal House V2 from the rewrite/bun-native branch to the live
+# Deploy Signal House V2 from the main branch to the live
 # systemd service (port 8999).
 #
-#   live dir:  ~/.local/share/signal-house-v2   (checked out on the branch)
+#   live dir:  ~/.local/share/signal-house-v2   (checked out on main)
 #   env file:  ~/.config/signal-house/.env       (shared with the service)
 #   service:   signal-house.service              (user systemd unit)
 #
