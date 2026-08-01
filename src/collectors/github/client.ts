@@ -106,8 +106,12 @@ export class GitHubClient {
     this.timeoutMs = opts.timeoutMs ?? 30_000;
   }
 
-  /** GET with pagination; returns all items across pages. */
-  private async getPaged<T>(path: string, params: Record<string, string | number>): Promise<T[]> {
+  /**
+   * GET with pagination; returns all items across pages.
+   * Some endpoints wrap the list in an object ({total_count, <listKey>: []});
+   * pass listKey to unwrap. Flat arrays are accepted too.
+   */
+  private async getPaged<T>(path: string, params: Record<string, string | number>, listKey?: string): Promise<T[]> {
     const url = new URL(`${opts_base(this.opts)}${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
@@ -117,15 +121,16 @@ export class GitHubClient {
     while (nextUrl && page < 10) {
       const res = await this.fetchJson(nextUrl.toString());
       const body = (await res.json()) as unknown;
-      if (!Array.isArray(body)) {
+      const list: unknown = Array.isArray(body) ? body : listKey ? (body as Record<string, unknown>)[listKey] : undefined;
+      if (!Array.isArray(list)) {
         throw new GitHubError(
           "http",
-          `GitHub ${res.status} returned non-array for ${redactUrl(nextUrl.toString())}: expected array, got ${typeof body}`,
+          `GitHub ${res.status} returned non-array for ${redactUrl(nextUrl.toString())}: expected array${listKey ? ` or {${listKey}: []}` : ""}, got ${typeof body}`,
           page > 0, // page-1 non-array is a hard error; page-2+ retryable
           res.status,
         );
       }
-      items.push(...(body as T[]));
+      items.push(...(list as T[]));
       page++;
       nextUrl = parseNextLink(res.headers.get("link"));
     }
@@ -180,7 +185,7 @@ export class GitHubClient {
         per_page: 100,
       }),
       this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/pulls`, { state: "all", per_page: 100 }),
-      this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/actions/runs`, { per_page: 100 }),
+      this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/actions/runs`, { per_page: 100 }, "workflow_runs"),
     ]);
 
     const repoSummary = mapRepo(detailRes);

@@ -188,6 +188,32 @@ describe("github client (mock API)", () => {
     server.stop(true);
   });
 
+  test("wrapped list responses ({total_count, <key>: []}) are unwrapped", async () => {
+    let srv: ReturnType<typeof Bun.serve> | null = null;
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url);
+        if (url.pathname === "/repos/acme/thing") {
+          return Response.json({ id: 1, name: "thing", full_name: "acme/thing", private: false, default_branch: "main", html_url: "https://github.com/acme/thing", archived: false });
+        }
+        if (url.pathname === "/repos/acme/thing/issues") return Response.json([]);
+        if (url.pathname === "/repos/acme/thing/pulls") return Response.json([]);
+        if (url.pathname === "/repos/acme/thing/actions/runs") {
+          return Response.json({ total_count: 1, workflow_runs: [{ id: 1, run_number: 1, status: "completed", conclusion: "success", name: "CI", head_branch: "main", created_at: "2026-07-30T00:00:00Z", updated_at: "2026-07-30T00:00:00Z", html_url: "u" }] });
+        }
+        return Response.json({}, { status: 404 });
+      },
+    });
+    srv = server;
+
+    const client = new GitHubClient({ token: "t", baseUrl: `http://localhost:${server.port}` });
+    const detail = await client.fetchRepo("acme", "thing", "2026-07-01T00:00:00Z");
+    expect(detail.workflowRuns.length).toBe(1);
+    expect(detail.workflowRuns[0].conclusion).toBe("success");
+    server.stop(true);
+  });
+
   test("401 surfaces as auth error, never the token", async () => {
     const server = Bun.serve({ port: 0, fetch: () => new Response("bad creds", { status: 401 }) });
     const client = new GitHubClient({ token: "ghp_super_secret", baseUrl: `http://localhost:${server.port}` });
