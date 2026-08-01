@@ -1,9 +1,10 @@
 /**
  * Refresh status — two surfaces:
- *  1. A compact status chip in the app header (dot + short label + refresh
- *     button) for at-a-glance currency.
+ *  1. A compact text status in the app header (dot + short label) for
+ *     at-a-glance currency. Pure text, not interactive.
  *  2. The full detail block at the bottom of the diagnostics panel: last
- *     updated, last success/failure, reset-lock, and state banners.
+ *     updated, last success/failure, refresh + reset-lock actions, and
+ *     state banners.
  *
  * Explicit states: fresh / stale / partial / missing / refresh failed /
  * in progress.
@@ -23,29 +24,18 @@ function refreshVitals(refresh: StatePayload["status"]["refresh"], freshnessStat
   return { dot: "dot--success", label: "Up to date" };
 }
 
-/** Compact header chip — the at-a-glance currency indicator. */
+/** Compact header status — pure text, at-a-glance currency indicator. */
 export function HeaderRefreshChip({ status }: { status: StatePayload["status"] }) {
-  const { refreshing, refreshMessage, setDiagnosticsOpen } = useDash();
+  const { refreshing, refreshMessage } = useDash();
   const refresh = status.refresh;
   const { dot, label } = refreshVitals(refresh, status.freshness.state, refreshing || refresh.inProgress);
 
   return (
     <div className="header-refresh" aria-label="Refresh status">
-      <button
-        className="header-refresh__chip"
-        onClick={() => setDiagnosticsOpen(true)}
-        title="Open Source Diagnostics for details"
-      >
+      <span className="header-refresh__chip">
         <span className={`dot ${dot}`} />
         {label}
-      </button>
-      <button
-        className="primary header-refresh__btn"
-        onClick={() => void triggerRefresh()}
-        disabled={refreshing || refresh.inProgress}
-      >
-        {refreshing || refresh.inProgress ? "Refreshing…" : "Refresh now"}
-      </button>
+      </span>
       {refreshMessage && <span className="header-refresh__msg">{refreshMessage}</span>}
     </div>
   );

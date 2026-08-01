@@ -32,10 +32,15 @@ test.describe("dashboard (desktop)", () => {
 
   test("manual refresh works from the button", async ({ page }) => {
     await page.goto("/");
+    // The refresh action lives in the diagnostics panel — open it first.
+    const open = page.getByRole("button", { name: /open diagnostics/i });
+    await expect(open).toBeVisible();
+    await open.click();
     const button = page.getByRole("button", { name: /refresh now/i });
     await expect(button).toBeVisible();
     await button.click();
-    await expect(page.getByText(/refresh complete/i)).toBeVisible({ timeout: 15_000 });
+    // "Refresh complete" appears in the header message and the diagnostics detail.
+    await expect(page.getByText(/refresh complete/i).first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("diagnostics panel is lazy and opens on demand", async ({ page }) => {

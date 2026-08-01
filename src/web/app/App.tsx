@@ -61,7 +61,7 @@ export function App() {
           Made with <span className="app-footer__heart">♥</span> in{" "}
           <a href="https://bun.sh" target="_blank" rel="noreferrer">Bun</a>
         </div>
-        {state && <span className="app-footer__right">{state.window.days} days usage{state.status.refresh.lastSuccessAt ? ` · Last successful refresh ${formatRelative(Date.parse(state.status.refresh.lastSuccessAt))}` : ""}</span>}
+        {state && <span className="app-footer__right">{state.status.refresh.lastSuccessAt ? `Last successful refresh ${formatRelative(Date.parse(state.status.refresh.lastSuccessAt))}` : ""}</span>}
       </footer>
     </div>
   );

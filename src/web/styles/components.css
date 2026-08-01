@@ -42,7 +42,7 @@
   pointer-events: none;
 }
 
-/* Refresh status — header chip. */
+/* Refresh status — header text. */
 .header-refresh {
   display: flex;
   align-items: center;
@@ -52,29 +52,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: none;
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-card);
-  padding: 4px 10px;
   color: var(--text-secondary);
   font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-.header-refresh__chip:hover {
-  border-color: var(--text-muted);
-  color: var(--text-primary);
-}
-.header-refresh__btn {
-  font-size: 12px;
-  padding: 4px 10px;
 }
 .header-refresh__msg {
   font-size: 12px;
   color: var(--text-muted);
 }
 
-/* Narrow screens: let the chip group wrap under the brand instead of
+/* Narrow screens: let the status wrap under the brand instead of
    pushing the page sideways; message truncates rather than overflowing. */
 @media (max-width: 480px) {
   .header-refresh {
