@@ -23,13 +23,11 @@ export function SourceDiagnostics() {
   if (!diagnosticsOpen) {
     return (
       <section className="card">
-        <h2>Source Diagnostics</h2>
-        <button className="primary" onClick={open}>
-          Open diagnostics
-        </button>
-        <p className="kpi-caption" style={{ marginTop: 8 }}>
-          Collector health, discovered repositories, and configuration summary.
-        </p>
+        <div className="diag-header">
+          <h2>Source Diagnostics</h2>
+          <button className="primary" onClick={open}>Open diagnostics</button>
+        </div>
+        <p className="kpi-caption">Collector health, discovered repositories, and configuration summary.</p>
       </section>
     );
   }
