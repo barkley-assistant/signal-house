@@ -142,6 +142,8 @@ function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
     for (const row of s.data!.usage!.byModel) {
       const key = machineKey(row.model);
       if (!key) continue;
+      // "unknown" carries no signal — drop it from the display entirely.
+      if (key === "unknown") continue;
       const existing = map.get(key);
       if (existing) {
         existing.sessions += row.sessions;
