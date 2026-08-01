@@ -132,6 +132,12 @@
 .model-table {
   overflow-x: auto;
 }
+.model-table table.data {
+  /* On narrow screens the 4 columns + sort buttons + mono numbers need
+     more than ~330px; pin a minimum so the wrapper scrolls instead of
+     the cells poking out of the card. */
+  min-width: 480px;
+}
 
 /* Diagnostics. */
 .diag-header {
