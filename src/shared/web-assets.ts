@@ -33,8 +33,13 @@ export async function buildWebBundle(publicDir: string): Promise<void> {
     target: "browser",
   });
   if (!result.success) {
-    for (const log of result.logs) process.stderr.write(log.message + "\n");
+    for (const logLine of result.logs) process.stderr.write(logLine.message + "\n");
     throw new Error("web bundle build failed");
+  }
+  // Surface warnings (side-effect-only imports, oversized chunks, etc.) so
+  // they don't silently disappear from build output.
+  for (const logLine of result.logs) {
+    if (logLine.level === "warning") process.stderr.write(`[bun.build] ${logLine.message}\n`);
   }
 }
 

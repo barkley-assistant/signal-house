@@ -12,10 +12,10 @@ export function authEnabled(config: RuntimeConfig): boolean {
   return config.auth.enabled;
 }
 
-/** Constant-time UTF-8 comparison. */
+/** Constant-time UTF-8 comparison (Web-standard TextEncoder). */
 function timingSafeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
+  const ab = new TextEncoder().encode(a);
+  const bb = new TextEncoder().encode(b);
   if (ab.length !== bb.length) return false;
   let diff = 0;
   for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];

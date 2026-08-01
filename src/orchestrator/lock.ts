@@ -7,7 +7,6 @@
  * the lock row — never snapshots, metrics, or cached state.
  */
 
-import { randomUUID } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { getRefreshMeta, setRefreshMeta, deleteRefreshMeta } from "../db/refresh-meta";
 
@@ -53,7 +52,7 @@ export class RefreshLock {
     if (this.inProcess || (current && !this.isStale(current))) {
       return { ok: false, reason: "in_progress" };
     }
-    const token = randomUUID();
+    const token = crypto.randomUUID();
     this.inProcess = true;
     setRefreshMeta(this.db, this.KEY, { token, owner, acquiredAt: Date.now() });
     return { ok: true, token };

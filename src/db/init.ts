@@ -41,15 +41,10 @@ export function ensureSchema(db: Database): void {
   const userVersion = (db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
   if (userVersion >= SCHEMA_VERSION) return;
 
-  db.exec("BEGIN IMMEDIATE");
-  try {
+  db.transaction(() => {
     db.exec(V2_DDL);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+  })();
 }
 
 /** Refuse to open a V1-shaped database. Call after opening, before ensureSchema. */

@@ -39,17 +39,9 @@ export class DatabaseOwner {
     return new DatabaseOwner(db, path);
   }
 
-  /** Run `fn` inside one immediate transaction; rollback on throw. */
+  /** Run `fn` inside one transaction (native bun:sqlite); rollback on throw. */
   transaction<T>(fn: () => T): T {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      const result = fn();
-      this.db.exec("COMMIT");
-      return result;
-    } catch (err) {
-      this.db.exec("ROLLBACK");
-      throw err;
-    }
+    return this.db.transaction(fn)();
   }
 
   /** Checkpoint WAL and close. Safe to call twice. */

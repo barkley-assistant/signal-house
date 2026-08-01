@@ -17,6 +17,7 @@ import { stateHandler, diagnosticsHandler, healthHandler, refreshHandler, resetL
 import { withAuth } from "./auth/basic";
 import { jsonError, notFound } from "./shared/http";
 import { buildWebBundle, serveWebAsset, publicDirFor } from "./shared/web-assets";
+import { log } from "./shared/logger";
 
 export interface App {
   server: Server<unknown>;
@@ -49,8 +50,10 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
   if (!existsSync(join(publicDir, "index.html"))) {
     try {
       await buildWebBundle(publicDir);
-    } catch {
-      // server still starts; / will return 500 until the bundle builds
+    } catch (err) {
+      // Server still starts; / returns 500 until the bundle builds — surface
+      // the failure so the operator knows why the dashboard is missing.
+      log.warn("server", `web bundle missing and build failed: ${(err as Error).message}`);
     }
   }
 

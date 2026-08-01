@@ -93,7 +93,20 @@ async function readBounded(stream: ReadableStream<Uint8Array> | null, maxBytes: 
     total += value.byteLength;
   }
   reader.releaseLock();
-  let text = Buffer.concat(chunks).toString("utf8");
-  if (truncated) text += "\n[output truncated]";
-  return text;
+  const text = decodeUtf8(chunks);
+  return truncated ? text + "\n[output truncated]" : text;
+}
+
+/** Concatenate Uint8Array chunks and decode as UTF-8 (Web-standard, no Buffer). */
+function decodeUtf8(chunks: Uint8Array[]): string {
+  if (chunks.length === 0) return "";
+  if (chunks.length === 1) return new TextDecoder().decode(chunks[0]);
+  const size = chunks.reduce((n, c) => n + c.byteLength, 0);
+  const buf = new Uint8Array(size);
+  let offset = 0;
+  for (const c of chunks) {
+    buf.set(c, offset);
+    offset += c.byteLength;
+  }
+  return new TextDecoder().decode(buf);
 }

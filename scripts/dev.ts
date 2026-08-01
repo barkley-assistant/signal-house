@@ -13,7 +13,7 @@
 
 import { spawn } from "bun";
 import { networkInterfaces } from "node:os";
-import { mkdirSync, writeFileSync, appendFileSync, watch } from "node:fs";
+import { mkdirSync, appendFileSync, watch } from "node:fs";
 import { resolve, join } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..");
@@ -22,6 +22,8 @@ mkdirSync(devDir, { recursive: true });
 
 function lanIps(): string[] {
   const out: string[] = [];
+  // node:os in Bun is a native implementation (no JS shim); Bun.networkInterfaces
+  // is not available until later Bun versions, so this stays node:os.
   for (const addrs of Object.values(networkInterfaces())) {
     for (const a of addrs ?? []) {
       if (a.family === "IPv4" && !a.internal) out.push(a.address);
@@ -51,12 +53,12 @@ const preferred = Number.parseInt(process.env.PORT ?? "3000", 10) || 3000;
 const port = pickPort(preferred);
 const pid = process.pid;
 
-writeFileSync(join(devDir, "pid"), String(pid));
-writeFileSync(join(devDir, "port"), String(port));
+await Bun.write(join(devDir, "pid"), String(pid));
+await Bun.write(join(devDir, "port"), String(port));
 
 const logPath = join(devDir, "log");
 const accessPath = join(devDir, "access");
-writeFileSync(logPath, "");
+await Bun.write(logPath, "");
 
 const ips = lanIps();
 const localUrl = `http://localhost:${port}`;
@@ -70,13 +72,21 @@ console.log(`  PID:    ${pid}\n`);
 
 async function tee(stream: ReadableStream<Uint8Array> | null, file: string): Promise<void> {
   if (!stream) return;
+  // Streaming TextDecoder keeps multi-byte UTF-8 intact across chunk
+  // boundaries (a per-chunk Buffer.from would mangle split sequences).
+  const decoder = new TextDecoder();
   const reader = stream.getReader();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    const text = Buffer.from(value).toString("utf8");
+    const text = decoder.decode(value, { stream: true });
     process.stdout.write(text);
     appendFileSync(file, text);
+  }
+  const tail = decoder.decode();
+  if (tail) {
+    process.stdout.write(tail);
+    appendFileSync(file, tail);
   }
 }
 
