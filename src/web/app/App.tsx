@@ -21,8 +21,11 @@ export function App() {
     <div>
       <header className="app-header">
         <div className="app-header__brand">
-          <Logo size={40} />
-          <h1>Signal House</h1>
+          <Logo size={64} />
+          <div className="app-header__text">
+            <h1>Signal House</h1>
+            <p className="app-header__tagline">Know whether work is moving — and where it's stuck</p>
+          </div>
         </div>
       </header>
 

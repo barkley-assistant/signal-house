@@ -93,14 +93,18 @@ button.primary {
 .app-header__brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 20px;
 }
-.app-header__brand img {
-  height: 28px;
+.app-header__text h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
 }
-.app-header__brand h1 {
-  font-size: 18px;
-  letter-spacing: 0.02em;
+.app-header__tagline {
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--text-muted);
 }
 .app-header__actions {
   display: flex;
