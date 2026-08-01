@@ -32,9 +32,12 @@ Complete clean-room rewrite of Signal House as a Bun-native single-process appli
 
 ## Test Coverage
 
-- **74 bun:test** — config (11), db (10), privacy (9), lock (5), refresh (5), collectors (12), API contract (9), frontend (12), format (1)
-- **12 Playwright** — desktop (6) + mobile (6): load, API shapes, manual refresh, diagnostics, attention queue, mobile overflow
-- **TSC clean**, **ESLint 0 errors**
+- **103 bun:test** — config, db, privacy, lock, refresh, collectors, API
+  contract, frontend component tests, formatting
+- **18 Playwright e2e** — desktop Chromium, Pixel 7 (Chromium), and iPhone
+  13 (WebKit): load, API shapes, manual refresh, diagnostics, attention
+  queue, mobile overflow
+- **TSC clean**, **ESLint 0 warnings**
 
 ## Bugs Found By Tests
 
@@ -54,14 +57,15 @@ Complete clean-room rewrite of Signal House as a Bun-native single-process appli
 - GitHub token required for GitHub data; without it, the GitHub source is unavailable (graceful degradation)
 - Git collector requires explicit repos or discovery roots; without either, it's unavailable
 - Usage sources are hermes + opencode (DB-backed); github + git supply repo/work telemetry.
-- WebKit-based mobile testing requires system deps not available on this host (Chromium-based mobile testing works)
+- No known test-infrastructure gaps as of the v2.0.0 release — Playwright
+  e2e run green across Chromium (desktop + Pixel 7) and WebKit (iPhone 13).
 
 ## How to Verify
 
 ```bash
-bun run dev          # starts on port 3000
-bun test             # 74 tests, ~300ms
-bunx playwright test # 12 e2e tests, ~10s
+bun run dev          # starts on port 3000 (or next free)
+bun test tests/      # 103 tests
+bunx playwright test # 18 e2e tests (Chromium + WebKit)
 bunx tsc --noEmit    # clean
-bunx eslint .        # 0 errors
+bunx eslint .        # 0 warnings
 ```
