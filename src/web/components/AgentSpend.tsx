@@ -67,6 +67,10 @@ function DailyUsageChart() {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const [loading, setLoading] = useState(true);
+  // Axis peaks are computed once on first data load and frozen — they
+  // define the chart's y-scale. Recomputing them on every filter change
+  // would rescale the axes to the filtered subset, which is jarring.
+  const peaksRef = useRef<{ cost: number; tokens: number } | null>(null);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -92,19 +96,27 @@ function DailyUsageChart() {
         const dt = new Date(Date.UTC(y, m - 1, day));
         return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
       };
-      // Anchor each y-axis to a fixed [0, peak] range from the full dataset.
-      // Without this, toggling a series via the legend auto-rescales the
-      // remaining axis and the surviving line has no context (no scale).
-      const costPeak = points.reduce((m, p) => Math.max(m, p.cost ?? 0), 0);
-      const tokensPeak = points.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0);
-      // Round up to a "nice" number for cleaner tick labels.
-      const niceCeil = (v: number) => {
-        if (v <= 0) return 1;
-        const mag = Math.pow(10, Math.floor(Math.log10(v)));
-        return Math.ceil(v / mag) * mag;
-      };
-      const yMaxCost = Math.max(1, niceCeil(costPeak));
-      const yMaxTokens = Math.max(1, niceCeil(tokensPeak));
+      // Anchor each y-axis to a fixed [0, peak] range from the FIRST dataset
+      // observed — never recomputed on filter changes (the line shape should
+      // adjust, but the scale shouldn't jump).
+      if (peaksRef.current === null) {
+        const costPeak = points.reduce((m, p) => Math.max(m, p.cost ?? 0), 0);
+        const tokensPeak = points.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0);
+        // Round up to a "nice" number with 20% headroom so the top label
+        // and the top of the line don't collide.
+        const niceCeil = (v: number) => {
+          if (v <= 0) return 1;
+          const withHead = v * 1.2;
+          const mag = Math.pow(10, Math.floor(Math.log10(withHead)));
+          return Math.ceil(withHead / mag) * mag;
+        };
+        peaksRef.current = {
+          cost: Math.max(1, niceCeil(costPeak)),
+          tokens: Math.max(1, niceCeil(tokensPeak)),
+        };
+      }
+      const yMaxCost = peaksRef.current.cost;
+      const yMaxTokens = peaksRef.current.tokens;
       // On legend toggle, keep both axes visible and re-anchor their [min,max]
       // to the full-dataset peak so the surviving series has its full context
       // — no auto-rescale to the remaining (smaller) data.
@@ -158,12 +170,14 @@ function DailyUsageChart() {
           {
             type: "value",
             min: 0,
+            max: yMaxCost,
             axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `$${Math.round(v)}` },
             splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
           },
           {
             type: "value",
             min: 0,
+            max: yMaxTokens,
             axisLabel: {
               color: "#64748b",
               fontSize: 10,
