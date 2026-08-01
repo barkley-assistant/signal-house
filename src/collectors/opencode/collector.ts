@@ -145,18 +145,20 @@ WHERE time_created >= ? AND time_created < ?
 GROUP BY day ORDER BY day`;
 
 const MODEL_SQL = `
-SELECT json_extract(model, '$.id') AS model,
-       json_extract(model, '$.providerID') AS provider,
-       COUNT(*) AS sessions,
-       SUM(tokens_input) AS tokens_input,
-       SUM(tokens_output) AS tokens_output,
-       SUM(tokens_reasoning) AS tokens_reasoning,
-       SUM(tokens_cache_read) AS tokens_cache_read,
-       SUM(tokens_cache_write) AS tokens_cache_write,
-       SUM(cost) AS cost
-FROM session
-WHERE time_created >= ? AND time_created < ?
-GROUP BY json_extract(model, '$.id'), json_extract(model, '$.providerID')
+SELECT COALESCE(NULLIF(json_extract(m.data, '$.modelID'), ''), json_extract(s.model, '$.id')) AS model,
+       COALESCE(NULLIF(json_extract(m.data, '$.providerID'), ''), json_extract(s.model, '$.providerID')) AS provider,
+       COUNT(DISTINCT m.session_id) AS sessions,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.input'), 0)) AS tokens_input,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.output'), 0)) AS tokens_output,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.reasoning'), 0)) AS tokens_reasoning,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.cache.read'), 0)) AS tokens_cache_read,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.cache.write'), 0)) AS tokens_cache_write,
+       SUM(COALESCE(json_extract(m.data, '$.cost'), 0)) AS cost
+FROM message m
+JOIN session s ON s.id = m.session_id
+WHERE json_extract(m.data, '$.role') = 'assistant'
+  AND s.time_created >= ? AND s.time_created < ?
+GROUP BY 1, 2
 ORDER BY cost DESC NULLS LAST`;
 
 function queryUsageByDay(db: Database, sinceMs: number): UsageDay[] {

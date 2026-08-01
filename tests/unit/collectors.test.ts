@@ -34,9 +34,26 @@ describe("hermes collector", () => {
         message_count INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
         cache_write_tokens INTEGER, reasoning_tokens INTEGER, estimated_cost_usd REAL, actual_cost_usd REAL
       );
+      CREATE TABLE session_model_usage (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        billing_provider TEXT NOT NULL DEFAULT '',
+        api_call_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        actual_cost_usd REAL NOT NULL DEFAULT 0
+      );
       INSERT INTO sessions VALUES ('s1', ${nowSec - 3600}, NULL, 'MiniMax M3', 'custom', 10, 1000, 100, 0, 0, 0, 0.5, NULL);
       INSERT INTO sessions VALUES ('s2', ${nowSec - 1800}, NULL, 'MiniMax M3', 'custom', 5, 500, 50, 0, 0, 0, 0.25, NULL);
       INSERT INTO sessions VALUES ('s3', 1700000000, NULL, 'old', NULL, 1, 1, 1, 0, 0, 0, 0, NULL);
+      -- per-call usage mirrors the sessions-table cost (actual 0 → falls back to estimated)
+      INSERT INTO session_model_usage VALUES ('s1', 'MiniMax M3', 'custom', 10, 1000, 100, 0, 0, 0, 0.5, 0);
+      INSERT INTO session_model_usage VALUES ('s2', 'MiniMax M3', 'custom', 5, 500, 50, 0, 0, 0, 0.25, 0);
+      INSERT INTO session_model_usage VALUES ('s3', 'old', 'custom', 1, 1, 1, 0, 0, 0, 0, 0);
     `);
     db.close();
 
@@ -71,6 +88,54 @@ describe("hermes collector", () => {
     expect(result.unavailable).toBe(true);
     expect(result.warnings.join()).toContain("sessions");
   });
+
+  test("byModel uses session_model_usage (per-call truth), not sessions.model", async () => {
+    // Regression: a session whose declared model (sessions.model) differs from
+    // the model that actually spent the money. Hermes records the real
+    // per-(session, model) breakdown in session_model_usage; the old query
+    // grouped by sessions.model, misattributing cost.
+    const dbPath = join(dir, "hermes-usage.db");
+    const db = new Database(dbPath);
+    const nowSec = Math.floor(Date.now() / 1000);
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY, started_at REAL, ended_at REAL, model TEXT, billing_provider TEXT,
+        message_count INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER, reasoning_tokens INTEGER, estimated_cost_usd REAL, actual_cost_usd REAL
+      );
+      CREATE TABLE session_model_usage (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        billing_provider TEXT NOT NULL DEFAULT '',
+        api_call_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        actual_cost_usd REAL NOT NULL DEFAULT 0
+      );
+      -- session declares MiniMax M3 but actually spent on DeepSeek-V4-Pro
+      INSERT INTO sessions VALUES ('s1', ${nowSec - 3600}, NULL, 'MiniMax M3', 'custom', 10, 0, 0, 0, 0, 0, 4.76, NULL);
+      INSERT INTO session_model_usage VALUES ('s1', 'DeepSeek-V4-Pro', 'custom', 300, 1000000, 50000, 2000000, 0, 0, 4.7, 0);
+      INSERT INTO session_model_usage VALUES ('s1', 'MiniMax M3', 'custom', 2, 10000, 100, 0, 0, 0, 0.06, 0);
+    `);
+    db.close();
+    const collector = new HermesCollector(dbPath, 30);
+    const result = await collector.collect(new AbortController().signal);
+    const byModel = result.data!.usage!.byModel;
+    const deepseek = byModel.find((m) => m.model === "DeepSeek-V4-Pro");
+    const minimax = byModel.find((m) => m.model === "MiniMax M3");
+    expect(deepseek).toBeDefined();
+    expect(minimax).toBeDefined();
+    expect(deepseek!.cost).toBeCloseTo(4.7, 5);
+    expect(minimax!.cost).toBeCloseTo(0.06, 5);
+    // sessions count = distinct sessions that used the model
+    expect(deepseek!.sessions).toBe(1);
+    // per-model messages are unknown from session_model_usage → null
+    expect(deepseek!.messages).toBeNull();
+  });
 });
 
 describe("opencode collector", () => {
@@ -83,8 +148,19 @@ describe("opencode collector", () => {
         id TEXT PRIMARY KEY, time_created INTEGER, cost REAL, tokens_input INTEGER, tokens_output INTEGER,
         tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER, model TEXT
       );
+      CREATE TABLE message (
+        id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL, data TEXT NOT NULL,
+        CONSTRAINT fk_message_session_id_session_id_fk FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
+      );
+      CREATE INDEX message_session_time_created_id_idx ON message (session_id, time_created, id);
       INSERT INTO session VALUES ('o1', ${nowMs - 3600_000}, 1.25, 1000, 100, 0, 0, 0, '{"id":"DeepSeek-V4-Pro","providerID":"openference","variant":"high"}');
       INSERT INTO session VALUES ('o2', ${nowMs - 1800_000}, 0.5, 500, 50, 0, 0, 0, '{"id":"DeepSeek-V4-Pro","providerID":"openference"}');
+      -- per-message usage mirrors the session rows' cost + tokens
+      INSERT INTO message VALUES ('m1', 'o1', ${nowMs - 3600_000}, ${nowMs - 3600_000},
+        '{"role":"assistant","modelID":"DeepSeek-V4-Pro","providerID":"openference","cost":1.25,"tokens":{"input":1000,"output":100,"reasoning":0,"cache":{"read":0,"write":0}}}');
+      INSERT INTO message VALUES ('m2', 'o2', ${nowMs - 1800_000}, ${nowMs - 1800_000},
+        '{"role":"assistant","modelID":"DeepSeek-V4-Pro","providerID":"openference","cost":0.5,"tokens":{"input":500,"output":50,"reasoning":0,"cache":{"read":0,"write":0}}}');
     `);
     db.close();
 
@@ -106,12 +182,69 @@ describe("opencode collector", () => {
     db.exec(`
       CREATE TABLE session (id TEXT PRIMARY KEY, time_created INTEGER, cost REAL, tokens_input INTEGER,
         tokens_output INTEGER, tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER, model TEXT);
+      CREATE TABLE message (
+        id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL, data TEXT NOT NULL,
+        CONSTRAINT fk_message_session_id_session_id_fk FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
+      );
       INSERT INTO session VALUES ('x', ${nowMs - 60_000}, 0.07079965, 162455, 1180, 0, 0, 0, '{"id":"M","providerID":"p"}');
+      INSERT INTO message VALUES ('mx', 'x', ${nowMs - 60_000}, ${nowMs - 60_000},
+        '{"role":"assistant","modelID":"M","providerID":"p","cost":0.07079965,"tokens":{"input":162455,"output":1180,"reasoning":0,"cache":{"read":0,"write":0}}}');
     `);
     db.close();
     const collector = new OpencodeCollector(dbPath, 30);
     const result = await collector.collect(new AbortController().signal);
     expect(result.data!.usage!.byModel[0].cost).toBeCloseTo(0.07079965, 8);
+  });
+
+  test("multi-model session splits by message-level modelID (not session.model)", async () => {
+    // Regression for the misattribution bug: a session whose `session.model`
+    // row says one model but whose per-call messages used several. opencode
+    // records cost/tokens per message with the ACTUAL model used; the old
+    // collector grouped by session.model, attributing every model's spend to
+    // the session's declared model.
+    const dbPath = join(dir, "oc-multimodel.db");
+    const db = new Database(dbPath);
+    const nowMs = Date.now();
+    db.exec(`
+      CREATE TABLE session (id TEXT PRIMARY KEY, time_created INTEGER, cost REAL, tokens_input INTEGER,
+        tokens_output INTEGER, tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER, model TEXT);
+      INSERT INTO session VALUES ('s1', ${nowMs - 60_000}, 2.0, 1000, 100, 0, 0, 0,
+        '{"id":"gpt-5.6-luna","providerID":"openai"}');
+      CREATE TABLE message (
+        id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL, data TEXT NOT NULL,
+        CONSTRAINT fk_message_session_id_session_id_fk FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
+      );
+      CREATE INDEX message_session_time_created_id_idx ON message (session_id, time_created, id);
+      INSERT INTO message VALUES
+        ('m1', 's1', ${nowMs - 60_000}, ${nowMs - 60_000},
+         '{"role":"assistant","modelID":"GLM-5.2","providerID":"openference","cost":1.5,"tokens":{"input":1000000,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}'),
+        ('m2', 's1', ${nowMs - 50_000}, ${nowMs - 50_000},
+         '{"role":"assistant","modelID":"DeepSeek-V4-Pro","providerID":"openference","cost":0.5,"tokens":{"input":1000000,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}'),
+        ('m3', 's1', ${nowMs - 40_000}, ${nowMs - 40_000},
+         '{"role":"assistant","modelID":"gpt-5.6-luna","providerID":"openai","cost":0.0,"tokens":{"input":1000000,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}'),
+        ('m4', 's1', ${nowMs - 30_000}, ${nowMs - 30_000},
+         '{"role":"user","cost":0.0,"tokens":null}');
+    `);
+    db.close();
+    const collector = new OpencodeCollector(dbPath, 30);
+    const result = await collector.collect(new AbortController().signal);
+    const byModel = result.data!.usage!.byModel;
+    // session.cost total = 2.0 — split across GLM-5.2 (1.5) + DeepSeek (0.5), luna 0.
+    const glm = byModel.find((m) => m.model === "GLM-5.2");
+    const ds = byModel.find((m) => m.model === "DeepSeek-V4-Pro");
+    const luna = byModel.find((m) => m.model === "gpt-5.6-luna");
+    expect(glm).toBeDefined();
+    expect(ds).toBeDefined();
+    expect(luna).toBeDefined();
+    expect(glm!.cost).toBeCloseTo(1.5, 5);
+    expect(ds!.cost).toBeCloseTo(0.5, 5);
+    expect(luna!.cost).toBeCloseTo(0.0, 5);
+    // tokens follow the same split (1M each per message)
+    expect(glm!.inputTokens).toBe(1_000_000);
+    expect(ds!.inputTokens).toBe(1_000_000);
+    expect(luna!.inputTokens).toBe(1_000_000);
   });
 });
 

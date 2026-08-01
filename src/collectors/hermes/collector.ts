@@ -121,7 +121,6 @@ interface HermesModelRow {
   model: string;
   provider: string | null;
   sessions: number;
-  messages: number | null;
   input_tokens: number | null;
   output_tokens: number | null;
   cache_read_tokens: number | null;
@@ -139,7 +138,7 @@ SELECT strftime('%Y-%m-%d', started_at, 'unixepoch') AS day,
        SUM(cache_read_tokens) AS cache_read_tokens,
        SUM(cache_write_tokens) AS cache_write_tokens,
        SUM(reasoning_tokens) AS reasoning_tokens,
-       SUM(COALESCE(actual_cost_usd, estimated_cost_usd)) AS cost
+       SUM(COALESCE(NULLIF(actual_cost_usd, 0), estimated_cost_usd)) AS cost
 FROM sessions
 WHERE started_at >= ? AND started_at < ?
 GROUP BY day ORDER BY day`;
@@ -147,16 +146,15 @@ GROUP BY day ORDER BY day`;
 const MODEL_SQL = `
 SELECT model,
        billing_provider AS provider,
-       COUNT(*) AS sessions,
-       SUM(message_count) AS messages,
+       COUNT(DISTINCT session_id) AS sessions,
        SUM(input_tokens) AS input_tokens,
        SUM(output_tokens) AS output_tokens,
+       SUM(reasoning_tokens) AS reasoning_tokens,
        SUM(cache_read_tokens) AS cache_read_tokens,
        SUM(cache_write_tokens) AS cache_write_tokens,
-       SUM(reasoning_tokens) AS reasoning_tokens,
-       SUM(COALESCE(actual_cost_usd, estimated_cost_usd)) AS cost
-FROM sessions
-WHERE started_at >= ? AND started_at < ?
+       SUM(COALESCE(NULLIF(actual_cost_usd, 0), estimated_cost_usd)) AS cost
+FROM session_model_usage
+WHERE session_id IN (SELECT id FROM sessions WHERE started_at >= ? AND started_at < ?)
 GROUP BY model, billing_provider ORDER BY cost DESC NULLS LAST`;
 
 function queryUsageByDay(db: Database, sinceSec: number, nowSec: number): UsageDay[] {
@@ -180,7 +178,7 @@ function queryModelBreakdown(db: Database, sinceSec: number, nowSec: number): Mo
     model: r.model ?? "unknown",
     provider: r.provider ?? null,
     sessions: r.sessions,
-    messages: r.messages ?? null,
+    messages: null,
     inputTokens: r.input_tokens ?? null,
     outputTokens: r.output_tokens ?? null,
     cacheReadTokens: r.cache_read_tokens ?? null,
