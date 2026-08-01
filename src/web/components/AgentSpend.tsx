@@ -92,6 +92,33 @@ function DailyUsageChart() {
         const dt = new Date(Date.UTC(y, m - 1, day));
         return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
       };
+      // Anchor each y-axis to a fixed [0, peak] range from the full dataset.
+      // Without this, toggling a series via the legend auto-rescales the
+      // remaining axis and the surviving line has no context (no scale).
+      const costPeak = points.reduce((m, p) => Math.max(m, p.cost ?? 0), 0);
+      const tokensPeak = points.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0);
+      // Round up to a "nice" number for cleaner tick labels.
+      const niceCeil = (v: number) => {
+        if (v <= 0) return 1;
+        const mag = Math.pow(10, Math.floor(Math.log10(v)));
+        return Math.ceil(v / mag) * mag;
+      };
+      const yMaxCost = Math.max(1, niceCeil(costPeak));
+      const yMaxTokens = Math.max(1, niceCeil(tokensPeak));
+      // On legend toggle, keep both axes visible and re-anchor their [min,max]
+      // to the full-dataset peak so the surviving series has its full context
+      // — no auto-rescale to the remaining (smaller) data.
+      const onLegendToggle = () => {
+        chartRef.current?.setOption(
+          {
+            yAxis: [
+              { min: 0, max: yMaxCost },
+              { min: 0, max: yMaxTokens },
+            ],
+          },
+          { lazyUpdate: true }
+        );
+      };
       const series: echarts.EChartsOption = {
         animation: true,
         animationDuration: 700,
@@ -130,11 +157,13 @@ function DailyUsageChart() {
         yAxis: [
           {
             type: "value",
+            min: 0,
             axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `$${Math.round(v)}` },
             splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
           },
           {
             type: "value",
+            min: 0,
             axisLabel: {
               color: "#64748b",
               fontSize: 10,
@@ -189,6 +218,7 @@ function DailyUsageChart() {
         ],
       };
       chartRef.current?.setOption(series, true);
+      chartRef.current?.on("legendselectchanged", onLegendToggle);
       setLoading(false);
     });
     return () => {
@@ -197,10 +227,10 @@ function DailyUsageChart() {
   }, []);
 
   return (
-    <div style={{ marginTop: 16, marginLeft: -16, marginRight: -16 }}>
-      <div className="kpi-tile__label" style={{ marginBottom: 8, paddingLeft: 16, paddingRight: 16 }}>Daily cost &amp; tokens</div>
+    <div style={{ marginTop: 16, marginLeft: "-1%", marginRight: "-1%" }}>
+      <div className="kpi-tile__label" style={{ marginBottom: 8, paddingLeft: "1%", paddingRight: "1%" }}>Daily cost &amp; tokens</div>
       {loading && <div className="skeleton" style={{ height: 220 }} />}
-      <div ref={ref} style={{ width: "100%", height: 220 }} aria-label="Daily cost and token trend chart" />
+      <div ref={ref} style={{ width: "98%", margin: "0 auto", height: 220 }} aria-label="Daily cost and token trend chart" />
     </div>
   );
 }
