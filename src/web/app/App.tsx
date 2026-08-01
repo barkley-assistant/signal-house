@@ -32,14 +32,16 @@ export function App() {
         </div>
       )}
 
-      <HealthStrip state={state} />
+      <main className="app-main">
+        <HealthStrip state={state} />
 
-      {state && <RefreshStatus status={state.status} />}
+        {state && <RefreshStatus status={state.status} />}
 
-      <AgentSpend />
-      <AttentionQueue attention={state?.attention ?? []} />
+        <AgentSpend />
+        <AttentionQueue attention={state?.attention ?? []} />
 
-      {state && <SourceDiagnostics />}
+        {state && <SourceDiagnostics />}
+      </main>
 
       <footer className="app-footer">
         <span>Signal House v2 · Bun-native rewrite</span>

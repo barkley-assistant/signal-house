@@ -108,6 +108,15 @@ button.primary {
   gap: 10px;
 }
 
+/* Main content stack — consistent 16px rhythm between every section.
+   (The cards were touching after the work-grid removal: stacked sections
+   had no container gap.) */
+.app-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 /* Cards — bordered surfaces, no decorative shadows (design-system §5). */
 .card {
   background: var(--card-bg);
@@ -237,7 +246,7 @@ table.data td.num, table.data th.num {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 16px;
+  /* spacing to the next section comes from .app-main's gap */
 }
 @media (max-width: 1000px) {
   .health-strip {

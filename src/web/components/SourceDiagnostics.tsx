@@ -22,7 +22,7 @@ export function SourceDiagnostics() {
 
   if (!diagnosticsOpen) {
     return (
-      <section className="card" style={{ marginTop: 16 }}>
+      <section className="card">
         <h2>Source Diagnostics</h2>
         <button className="primary" onClick={open}>
           Open diagnostics
@@ -36,7 +36,7 @@ export function SourceDiagnostics() {
 
   if (diagnosticsLoading) {
     return (
-      <section className="card" style={{ marginTop: 16 }}>
+      <section className="card">
         <h2>Source Diagnostics</h2>
         <div className="skeleton" style={{ height: 80 }} />
       </section>
@@ -45,7 +45,7 @@ export function SourceDiagnostics() {
 
   if (!diagnostics) {
     return (
-      <section className="card" style={{ marginTop: 16 }}>
+      <section className="card">
         <h2>Source Diagnostics</h2>
         <p className="state-label">Failed to load diagnostics.</p>
       </section>
@@ -53,7 +53,7 @@ export function SourceDiagnostics() {
   }
 
   return (
-    <section className="card" style={{ marginTop: 16 }}>
+    <section className="card">
       <div className="diag-header">
         <h2>Source Diagnostics</h2>
         <button onClick={() => setDiagnosticsOpen(false)}>Collapse</button>
