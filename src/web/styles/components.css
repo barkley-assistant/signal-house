@@ -149,6 +149,19 @@
 .diag-section {
   margin-top: 20px;
 }
+/* Source Diagnostics tables carry long content (URLs in warnings, full
+   remote URLs) that cannot wrap; pin a minimum and let the wrapper scroll
+   on narrow screens, matching the by-model table behaviour. */
+.diag-table {
+  overflow-x: auto;
+}
+.diag-table table.data {
+  min-width: 480px;
+}
+.diag-table--repos table.data {
+  /* Repo table has a full remote-URL column; give it a touch more room. */
+  min-width: 560px;
+}
 
 /* Footer. */
 .app-footer {
