@@ -2,8 +2,15 @@ node_modules/
 dist/
 .data/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 .env
+.env.*
+!.env.example
 .DS_Store
 # Local AI runtime state
 .atl/
+# Dev server artifacts (gitignored per rewrite instruction)
+.signal-house-dev/
+test-results/

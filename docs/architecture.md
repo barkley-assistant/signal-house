@@ -1,281 +1,139 @@
-# Signal House — architecture
+# Signal House — Architecture (V2)
 
-Operator manual lives in [`docs/operations.md`](operations.md).
-Visual rules live in [`docs/design-system.md`](design-system.md).
-This file is for the audience that wants to *extend* signal-house:
-add a collector, understand the data flow, or reason about the
-privacy posture.
+The operator manual lives in [`docs/operations.md`](operations.md).
+The visual language lives in [`docs/design-system.md`](design-system.md).
+This file is for the audience that wants to *extend* Signal House:
+add a collector, follow the data flow, or reason about the privacy
+posture. If you're here to fix a live problem, start with operations.md
+instead — it's the file that answers "why is the dashboard lying to me".
 
-Two things to keep in mind throughout:
+## Runtime model
 
-1. **It's a single Node process.** Next.js serves the UI, the API
-   routes run inside it, the poller runs inside it, the SQLite
-   database is the same one the API reads from. There's no
-   separate daemon, no message bus, no second service.
-2. **The UI never talks to GitHub, git, or any upstream source
-   directly.** It's a local dashboard. All upstream access goes
-   through server-side collectors.
-
----
-
-## 1. Data flow
+**One Bun process. That's the whole model.** `Bun.serve` serves the React
+SPA *and* the REST API; the collectors, the optional poller, and SQLite
+all live in the same process. There is no separate frontend server, no
+WebSocket layer, no external database, no microservices, no serverless
+functions. You could run this on a potato and it would shrug.
 
 ```
-                                  ┌──────────────────┐
-   Upstream                        │                  │
-   ─────────                       │   Collectors     │
-   GitHub API  ──────────────────► │   (server/lib/   │
-   local git   ──────────────────► │    <source>/)    │
-   Hermes DB   ──────────────────► │                  │
-   OpenCode DB ──────────────────► │                  │
-                                  └────────┬─────────┘
-                                           │
-                                           ▼
-                                  ┌──────────────────┐
-                                  │  Orchestrator    │
-                                  │  (server/lib/    │
-                                  │   orchestrator/) │
-                                  └────────┬─────────┘
-                                           │
-                                           ▼
-                                  ┌──────────────────┐
-                                  │   SQLite         │
-                                  │   (server/db/)   │
-                                  └────────┬─────────┘
-                                           │
-                                           ▼
-                                  ┌──────────────────┐
-                                  │  API routes      │
-                                  │  (frontend/src/  │
-                                  │   app/api/)      │
-                                  └────────┬─────────┘
-                                           │
-                                           ▼
-                                  ┌──────────────────┐
-                                  │   UI             │
-                                  │  (Next.js page)  │
-                                  └──────────────────┘
+src/server.ts        entry point: config → createApp() → signal handling
+src/app.ts           createApp() factory — the testable core
+src/config/          env parsing, clamping, redaction, compat aliases
+src/shared/          types, dates, math, format, logger, http
+src/db/              schema, init (fresh V2 only), client, snapshots,
+                     latest-state, refresh-meta, daily-metrics, retention
+src/collectors/      explicit registry: github, git, hermes, opencode
+src/orchestrator/    refresh runner, aggregates, persisted lock
+src/poller/          optional background refresh loop
+src/privacy/         fail-closed tri-state resolution
+src/metrics/         daily metrics derivation from collector output
+src/auth/            constant-time Basic auth
+src/api/             build-state, handlers, daily/spend trend
+src/diagnostics/     lazy collector health
+src/web/             React SPA (React 19, ECharts 6, zustand 5, framer-motion 12)
 ```
 
-Four hops. Let's walk them.
+## Data flow
 
-### 1.1 Collectors (`server/lib/<source>/`)
+```
+Collectors (explicit registry — four sources)
+   │  collect(source) → CollectorResult<SourceData>
+   ▼
+Refresh runner (src/orchestrator/refresh.ts)
+   │  concurrency-guarded by a persisted lock (crash-safe)
+   │  per-source: write snapshot → upsert latest_state → derive daily metrics
+   ▼
+SQLite (V2 schema, user_version=1)
+   │  snapshots / latest_state / daily_metrics / refresh_meta
+   ▼
+/api/state        → aggregates + attention (privacy-filtered)
+/api/daily/spend  → per-day cost/tokens trend
+/api/diagnostics  → lazy collector health (privacy-applied)
+```
 
-Each upstream source is a folder under `server/lib/`:
+- **Snapshots** are immutable per-source history; **latest_state** is the
+  current view the API reads. A failed source keeps its last-good
+  `latest_state` — the dashboard shows a partial-data banner instead of
+  fabricating numbers.
+- **Daily metrics** are derived from collector output (issues opened, PRs
+  merged, sessions, cost) and written as `value REAL NULL` rows. A missing
+  row means "no activity that day"; a `NULL` cell means "unknown for a day
+  that has data". Never synthesized zeros — the dashboard's whole
+  personality is "unknown stays unknown".
+- **Discovery-driven GitHub:** the git collector runs first and feeds every
+  discovered GitHub remote into the GitHub collector, so issues/PRs/CI get
+  fetched for all repos under the configured project roots (plus anything
+  explicit). Remote URLs are sanitized of credentials before persistence —
+  a token-bearing `https://x-access-token:…` remote never reaches the DB.
 
-| Folder | Source | What it collects |
+## Privacy — the fail-closed contract
+
+`RepositoryPrivacy = true | false | null`. Only the GitHub API supplies
+real visibility; every other source yields `null`, and `null`/missing is
+treated as **private** on every operator surface (attention queue,
+diagnostics). The single opt-in is `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS`.
+
+Why: an operator dashboard that leaks private repo names by default is not
+a dashboard, it's a data breach with a nice theme. Unknown → private is the
+only posture that can't leak. If you add a new classification flag anywhere
+in this codebase, the type is `boolean | null`, unknown resolves to the
+safe side, and the filter computes the *inverse set* (explicit public only).
+
+## Database
+
+- **Fresh V2 schema only.** The guard refuses to open a database from the
+  previous version and leaves the file byte-identical — V2 will not
+  migrate, adopt, or casually destroy existing data. This is deliberate;
+  V2 is a fresh start.
+- Production path: `~/.local/share/signal-house-v2/runtime/.data/metrics.db`
+  — a dedicated directory that nothing else writes to.
+- WAL mode, foreign keys on, `busy_timeout` set, `user_version = 1`.
+- All writes that must be atomic (refresh persistence, schema init) go
+  through native `bun:sqlite` transactions.
+
+## API
+
+| Method | Path | Notes |
 |---|---|---|
-| `github/` | GitHub REST API | Issues, PRs, workflow runs, repository metadata |
-| `git/` | Local git CLI + remotes | Repo discovery, recent commits, authors |
-| `hermes/` | Hermes's `state.db` | Agent session metrics, token usage |
-| `upstream/` | upstream's database | Operator session metrics |
-| `sessions/` | Local session files | Generic session metadata |
+| GET | `/api/state` | full dashboard payload |
+| GET | `/api/daily/spend` | trend for the Agent Spend chart |
+| GET | `/api/diagnostics` | lazy; fetched on demand by the UI |
+| GET | `/api/health` | liveness only, never triggers collectors |
+| POST | `/api/refresh` | manual refresh; 409 when locked |
+| POST | `/api/refresh/reset-lock` | clears a stuck lock |
 
-Each folder has the same shape:
+All routes pass through constant-time Basic auth when
+`SECRET_HOUSE_ACCESS_PASSWORD` is set. The SPA is served as static files
+from `dist/public/` through the same auth'd handler — Bun's HTML-import
+bundle objects can't apply per-request auth, so the web bundle is built to
+disk instead (that's a documented trade-off, not an accident).
 
-```
-server/lib/<source>/
-  collector.ts        # the main entry point: async collect() => result
-  types.ts            # the input/output types for this collector
-  __tests__/          # tests, colocated
-  (sometimes)
-  aggregates.ts       # if the source has derived metrics
-  db-collector.ts     # if reading from SQLite instead of HTTP/gRPC
-```
+## Time-unit contract
 
-The collector's `collect()` returns a structured result: the data
-it gathered, the errors it hit, and a duration. It doesn't talk to
-the database — that's the orchestrator's job.
+- Hermes `started_at` = epoch **seconds**.
+- OpenCode `time_created` = epoch **milliseconds**.
 
-### 1.2 Orchestrator (`server/lib/orchestrator/`)
+These are never mixed. Each collector converts to UTC date strings at its
+own boundary. If you see a chart that's suddenly empty for one source,
+suspect a 1000× factor error before anything clever.
 
-The orchestrator is the only fan-out point. It runs every enabled
-collector (in parallel, capped at `SECRET_HOUSE_COLLECT_CONCURRENCY`),
-collects the results, **filters out private items by default** (see §3),
-derives aggregates, and writes one atomic snapshot to the database.
+## Extending
 
-The snapshot includes everything the UI might want to render:
-issues, PRs, workflow runs, repo identities, sessions, errors, and
-pre-derived aggregates (throughput, cycle time, CI health, stale
-work, session usage, **and the privacy map**).
+- **New source:** implement `Collector` in `src/collectors/<name>/`, then
+  register it in `src/collectors/index.ts` — one line, no plugin framework,
+  no manifests, no dependency injection framework. Adding a source should
+  feel like adding a row, not adding a religion.
+- **New metric:** add a derivation in `src/metrics/daily.ts`.
+- **New API:** add a handler in `src/api/handlers.ts` and a route in
+  `src/app.ts`.
 
-Two outcomes matter:
+## Testing
 
-- **Successful refresh.** New snapshot written, `latest_state`
-  table updated, poller continues.
-- **Failed refresh.** Error logged to journal, `latest_state` is
-  not updated, poller continues. The dashboard shows the *last
-  good* snapshot with a "last failure at HH:MM" indicator.
-
-Refreshes are **idempotent and overlapping-refresh-safe**. Two
-simultaneous refreshes would corrupt state — the lock is enforced
-by a single in-process guard plus a DB advisory (`refresh_in_progress`).
-You cannot start a manual refresh while an automatic one is
-in flight.
-
-### 1.3 Database (`server/db/`)
-
-SQLite, single file at `~/.local/share/signal-house/runtime/.data/metrics.db`.
-Thirteen tables in the current schema, organised into three
-groups:
-
-| Group | Tables | Purpose |
-|---|---|---|
-| Snapshot lifecycle | `snapshots`, `latest_state` | "When was the last refresh? Is anything in flight? Did it succeed?" |
-| Per-source data | `source_issues`, `source_pull_requests`, `source_workflow_runs`, `source_sessions`, `source_repositories`, `source_local_git` | Raw data from each collector, keyed by `repo_key` and `last_snapshot_id` |
-| Aggregates | `aggregates` | Derived metrics persisted as JSON blobs (`throughput`, `cycleTime`, `ci`, `staleWork`, `sessionUsage`, `repositoryPrivacy`, ...) |
-
-The `aggregates` table holds the derived metrics — including the
-privacy map — but also some that need their own table for query
-performance: `daily_metrics`, `daily_token_usage`.
-
-Most queries join `source_*` tables on `(repo_key, last_snapshot_id)`
-to get the latest data per repo. The exact schema is in
-`server/db/schema.ts`. Migration history (the `_vN` blocks) is
-historical, applied automatically at startup.
-
-### 1.4 API + UI
-
-Two API routes carry the load:
-
-| Endpoint | What it returns |
-|---|---|
-| `GET /api/state` | The full normalised state — window, summary, usage, attention, status, diagnostics |
-| `POST /api/refresh` | Triggers a manual refresh |
-
-The UI fetches `/api/state` every 30s (when the page is open). No
-streaming, no websockets, no GraphQL. The 30s interval is a
-trade-off between "feels live" and "doesn't hammer the DB" — see
-the comment in `frontend/src/app/page.tsx` if you want to tune it.
-
----
-
-## 2. The collector model
-
-If you want to add a new data source (say, an npm metrics API),
-the contract is:
-
-1. **Create `server/lib/<source>/`** with the shape in §1.1:
-   - `collector.ts` exporting `createCollector(config) => { collect(): Promise<CollectorResult> }`
-   - `types.ts` with the input/output types
-   - `__tests__/collector.test.ts` (red first, per AGENTS.md)
-
-2. **Wire it into the orchestrator:**
-   - Add a branch in `server/lib/orchestrator/index.ts`
-   - Add a new `SourceTaskResult` field for the new data type
-   - Decide whether it joins the existing `source_*` schema or
-     needs a new table (probably needs a new table)
-
-3. **Add a new aggregate type** in `types/aggregates.ts` if the
-   dashboard surfaces a derived metric. Otherwise skip.
-
-4. **Persist via `upsert*FromSnapshot`** in `server/db/client.ts`.
-   Add the function, then call it from `persistSnapshot()`.
-
-5. **Update the UI** in `frontend/src/app/page.tsx` (or extract
-   a new component if it's big enough). Follow the design
-   system.
-
-6. **Add docs.** Update `docs/operations.md` env var table if
-   the collector has new config; update this file if the data
-   flow diagram needs updating.
-
-The collector model is *deliberately* simple. There's no plugin
-manifest, no dynamic loading, no shared dependency-injection
-container. Each collector is just a function that takes a config
-and returns a result. If that constraint feels heavy, it is —
-and that's the point. Heavy-to-add means easy-to-reason-about
-once added.
-
----
-
-## 3. Privacy posture
-
-This is non-negotiable for new code. If you're adding a feature
-that touches the privacy surface, read this section first and
-follow the contract.
-
-### 3.1 The contract
-
-Three rules, enforced by the type system:
-
-1. **`isPrivate: boolean` is wrong.** Use `boolean | null`.
-   - `true` = known private (GitHub confirmed)
-   - `false` = known public (GitHub confirmed)
-   - `null` = unknown (collector could not determine)
-
-2. **Missing privacy map entry → treated as private.** A repo
-   that has no entry in `aggregates.repositoryPrivacy.privacyMap`
-   is assumed private for the purposes of operator-facing surfaces.
-
-3. **The `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS` flag is opt-in,
-   not opt-out.** Default is `false`, meaning "hide private data."
-   Setting it to `true` is a deliberate operator action.
-
-### 3.2 Where it's enforced
-
-| Layer | What it does | File |
-|---|---|---|
-| Collectors | Set `isPrivate: null` (or the real value from the API) | `server/lib/github/client.ts`, `server/lib/git/collector.ts` |
-| Orchestrator | Builds the privacy map; resolves `null` to `true` (fail-closed) | `server/lib/orchestrator/index.ts` |
-| API filter | Builds `privateRepoKeys` set from the map; defaults unknown to private | `frontend/src/app/api/state/route.ts` |
-| Diagnostics | Same defensive treatment for `discoveredRepos` and `historicalRepos` | `server/lib/build-diagnostics.ts` |
-
-The case study for this contract is GitHub issue
-[#342](https://github.com/barkley-assistant/signal-house/issues/342).
-Read it before changing anything in the privacy surface.
-
-### 3.3 What "private" leaks if you opt in
-
-Setting `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS=true` will surface:
-
-- Issue titles, IDs, and URLs from private repos that the GitHub
-  token can see
-- Repository names in the Discovered Repositories card
-
-It will **not** leak:
-
-- The GitHub token
-- The env file contents
-- Any credentials
-
-The opt-in is about *identifiable information about your work*,
-not about *credentials*. Re-read §2.3 of `operations.md` before
-flipping the flag.
-
----
-
-## 4. Adding a new data source — checklist
-
-Practical version of §2, copy-pastable:
-
-- [ ] `server/lib/<source>/collector.ts` with `createCollector()` and `collect()`
-- [ ] `server/lib/<source>/types.ts` with input/output types
-- [ ] `server/lib/<source>/__tests__/collector.test.ts` (red first)
-- [ ] `server/db/schema.ts` new table OR extension to existing `source_*` table
-- [ ] `server/db/client.ts` new `upsert*FromSnapshot` + call from `persistSnapshot()`
-- [ ] `server/lib/orchestrator/index.ts` new `SourceTaskResult` branch
-- [ ] (if derived metrics needed) `types/aggregates.ts` new aggregate type
-- [ ] `frontend/src/app/page.tsx` (or new component) — surface the data
-- [ ] `docs/operations.md` — add env vars to the config table
-- [ ] `docs/architecture.md` — update §1.1 collector table
-- [ ] `.env.example` — add the new env vars
-
-If any of these is missing, the change isn't done.
-
----
-
-## 5. Things this file deliberately doesn't cover
-
-- **Function-by-function walkthroughs of `server/db/client.ts`
-  (1164 lines) or `frontend/src/app/page.tsx` (1117 lines).
-  Those are the two biggest files; reading them directly is
-  faster than a tour.
-- **Decision records.** When `docs/decisions/` lands (per issue
-  #344), that's where "why is it built this way" questions live.
-  This file is about "how it works today."
-- **Past migration history.** The `_vN` tables in `schema.ts`
-  are migration artefacts, not coexisting tables. See §1.3.
-
-If you're confused by something this file doesn't explain, that's
-a bug in the file. File an issue.
+- `bun test tests/` — 103 unit, integration, and API-contract tests. The
+  contract tests boot a real `createApp()` against a temp DB on a random
+  port — the exact production code path, zero mocks for the app itself.
+- `bunx playwright test` — 18 e2e tests in `e2e/` across desktop Chromium,
+  Pixel 7 (Chromium), and iPhone 13 (WebKit).
+- Gates before every commit: `bunx tsc --noEmit`, `bunx eslint .`,
+  `bun test tests/`, `bunx playwright test`, `bun run build`. All green,
+  every time. This is not a suggestion; it's the definition of done.
