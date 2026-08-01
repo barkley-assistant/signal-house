@@ -141,10 +141,10 @@ function ModelTable() {
           </thead>
           <tbody>
             {models.map((m) => (
-              <tr key={`${m.provider ?? ""}/${m.model}`}>
+              <tr key={m.model}>
                 <td>
                   {m.model}
-                  {m.provider && <span className="kpi-caption"> · {m.provider}</span>}
+                  {m.family && m.family !== m.model && <span className="kpi-caption"> · {m.family}</span>}
                 </td>
                 <td className="num">{formatNumber(m.sessions)}</td>
                 <td className="num">{formatCompact(m.tokens ?? 0)}</td>

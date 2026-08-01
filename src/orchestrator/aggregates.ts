@@ -7,6 +7,7 @@ import type { PersistedState } from "../config/types";
 import type { RuntimeConfig } from "../config/types";
 import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
+import { modelGroupKey, modelFamily, cleanModelName } from "../shared/models";
 
 export interface UsageAggregate {
   totalSessions: number;
@@ -14,7 +15,7 @@ export interface UsageAggregate {
   totalTokens: number | null;
   totalCost: number | null;
   bySource: Record<string, { sessions: number; cost: number | null; tokens: number | null }>;
-  byModel: Array<{ model: string; provider: string | null; sessions: number; cost: number | null; tokens: number | null }>;
+  byModel: Array<{ model: string; family: string | null; sessions: number; cost: number | null; tokens: number | null }>;
 }
 
 export interface Aggregates {
@@ -123,29 +124,49 @@ function windowCommits(git: NonNullable<PersistedState["data"]> | null, start: s
   return total;
 }
 
-/** Merge per-source byModel rows across sources (cost-null-safe). */
+/**
+ * Merge per-source byModel rows across providers/sources into ONE row per
+ * model. Rows are grouped by a normalised model key (case/separator/vendor-
+ * prefix insensitive — see shared/models.ts), so "DeepSeek-V4-Pro" from
+ * hermes and "deepseek-v4-pro" from opencode collapse into a single row with
+ * combined cost/tokens/sessions. The display name is the spelling with the
+ * most sessions; the family tag (DeepSeek, z.ai, Moonshot, …) replaces the
+ * provider label. Sorted by sessions desc — "which model is seeing work".
+ */
 function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
-  const map = new Map<string, { model: string; provider: string | null; sessions: number; cost: number | null; tokens: number | null }>();
+  const map = new Map<
+    string,
+    { model: string; family: string | null; sessions: number; cost: number | null; tokens: number | null; best: number }
+  >();
   for (const s of states) {
     for (const row of s.data!.usage!.byModel) {
-      const key = `${row.provider ?? ""}/${row.model}`;
+      const key = modelGroupKey(row.model);
+      if (!key) continue;
       const existing = map.get(key);
       if (existing) {
         existing.sessions += row.sessions;
         existing.cost = mergeNullSum(existing.cost, row.cost);
         existing.tokens = mergeNullSum(existing.tokens, rowTokens(row));
+        if (row.sessions > existing.best) {
+          existing.best = row.sessions;
+          existing.model = cleanModelName(row.model);
+          existing.family = modelFamily(row.model);
+        }
       } else {
         map.set(key, {
-          model: row.model,
-          provider: row.provider,
+          model: cleanModelName(row.model),
+          family: modelFamily(row.model),
           sessions: row.sessions,
           cost: row.cost,
           tokens: rowTokens(row),
+          best: row.sessions,
         });
       }
     }
   }
-  return [...map.values()].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
+  return [...map.values()]
+    .map(({ best, ...m }) => m)
+    .sort((a, b) => b.sessions - a.sessions || (b.cost ?? 0) - (a.cost ?? 0));
 }
 
 function rowTokens(row: { inputTokens: number | null; outputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null; reasoningTokens: number | null }): number | null {
