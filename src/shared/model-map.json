@@ -57,7 +57,7 @@
     { "machine": "mimo-v25", "label": "MiMo V2.5", "family": "Xiaomi" },
     { "machine": "mimo-v25-pro", "label": "MiMo V2.5 Pro", "family": "Xiaomi" },
     { "machine": "hy3", "label": "Hy3", "family": "Tencent" },
-    { "machine": "big-pickle", "label": "Big Pickle" },
+    { "machine": "big-pickle", "label": "Big Pickle", "family": "OpenCode" },
     { "machine": "auto", "label": "Auto", "family": "Openference" },
     { "machine": "unknown", "label": "Unknown" }
   ],
