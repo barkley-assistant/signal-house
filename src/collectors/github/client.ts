@@ -116,8 +116,16 @@ export class GitHubClient {
     let page = 0;
     while (nextUrl && page < 10) {
       const res = await this.fetchJson(nextUrl.toString());
-      const body = (await res.json()) as T[];
-      items.push(...body);
+      const body = (await res.json()) as unknown;
+      if (!Array.isArray(body)) {
+        throw new GitHubError(
+          "http",
+          `GitHub ${res.status} returned non-array for ${redactUrl(nextUrl.toString())}: expected array, got ${typeof body}`,
+          page > 0, // page-1 non-array is a hard error; page-2+ retryable
+          res.status,
+        );
+      }
+      items.push(...(body as T[]));
       page++;
       nextUrl = parseNextLink(res.headers.get("link"));
     }
