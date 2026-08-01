@@ -63,7 +63,7 @@ warning. A missing source is never a crash.
 bash scripts/deploy.sh
 ```
 
-Pins `rewrite/bun-native`, pulls, `bun install --frozen-lockfile`, builds,
+Pins `main`, pulls, `bun install --frozen-lockfile`, builds,
 restarts `signal-house.service`, and health-waits until `:8999/api/health`
 answers. If it ever fails to become healthy, the script dumps the last 15
 lines of the journal so you can see why.

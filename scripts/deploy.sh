@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-BRANCH="rewrite/bun-native"
+BRANCH="main"
 LIVE_DIR="${SIGNAL_HOUSE_LIVE_DIR:-$HOME/.local/share/signal-house-v2}"
 ENV_FILE="$HOME/.config/signal-house/.env"
 SERVICE="signal-house.service"

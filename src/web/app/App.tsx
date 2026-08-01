@@ -53,7 +53,7 @@ export function App() {
             Signal House <span className="app-footer__version">v{pkg.version}</span>
           </a>
           <span className="app-footer__sep">·</span>
-          <a href="https://github.com/barkley-assistant/signal-house/blob/rewrite/bun-native/LICENSE" target="_blank" rel="noreferrer">
+          <a href="https://github.com/barkley-assistant/signal-house/blob/main/LICENSE" target="_blank" rel="noreferrer">
             MIT
           </a>
         </div>

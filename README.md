@@ -107,7 +107,7 @@ Signal House ships as a single Bun process, so "deploy" is boring in the best wa
 bash scripts/deploy.sh
 ```
 
-That pins the `rewrite/bun-native` branch, pulls, installs with the frozen lockfile, builds, restarts the systemd user service, and health-waits until `:8999/api/health` answers. A template systemd unit lives at `packaging/systemd/signal-house.service` — it runs `bun run src/server.ts` via `mise exec` and reads `~/.config/signal-house/.env`.
+That pins the `main` branch, pulls, installs with the frozen lockfile, builds, restarts the systemd user service, and health-waits until `:8999/api/health` answers. A template systemd unit lives at `packaging/systemd/signal-house.service` — it runs `bun run src/server.ts` via `mise exec` and reads `~/.config/signal-house/.env`.
 
 ## Docs
 
