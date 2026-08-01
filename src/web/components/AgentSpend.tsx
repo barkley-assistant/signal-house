@@ -20,8 +20,20 @@ export function AgentSpend() {
         <p className="state-label">No usage telemetry yet — sources unavailable or no sessions collected</p>
       ) : (
         <>
-          <div className="big-number total">{formatCost(usage.totalCost)}</div>
-          <div className="kpi-caption">Total cost · {formatNumber(usage.totalSessions)} sessions · {formatCompact(usage.totalTokens ?? 0)} tokens</div>
+          <div className="headline-tiles">
+            <div className="kpi-tile">
+              <div className="kpi-tile__label">Total cost</div>
+              <div className="big-number total">{formatCost(usage.totalCost)}</div>
+            </div>
+            <div className="kpi-tile">
+              <div className="kpi-tile__label">Sessions</div>
+              <div className="big-number total">{formatNumber(usage.totalSessions)}</div>
+            </div>
+            <div className="kpi-tile">
+              <div className="kpi-tile__label">Tokens</div>
+              <div className="big-number total">{formatCompact(usage.totalTokens ?? 0)}</div>
+            </div>
+          </div>
           <div className="spend-subtiles">
             <SpendSource label="OpenCode" source="opencode" usage={usage} />
             <SpendSource label="Hermes" source="hermes" usage={usage} />

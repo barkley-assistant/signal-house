@@ -88,6 +88,38 @@
 .spend-tile {
   padding: 12px;
 }
+/* Headline stats: three kpi-tiles reusing the health-strip grammar
+   (card surface, uppercase label, big mono number) so the totals read as
+   the dashboard's primary stat row. */
+.headline-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+.headline-tiles .kpi-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.headline-tiles .big-number.total {
+  font-size: 40px;
+}
+@media (max-width: 1000px) {
+  .headline-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .headline-tiles .big-number.total {
+    font-size: 34px;
+  }
+}
+@media (max-width: 640px) {
+  .headline-tiles {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
 .big-number.small {
   font-size: 20px;
 }
