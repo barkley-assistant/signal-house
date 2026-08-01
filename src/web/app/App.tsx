@@ -9,9 +9,10 @@ import pkg from "../../../package.json";
 import { HealthStrip } from "../components/HealthStrip";
 import { AttentionQueue } from "../components/AttentionQueue";
 import { AgentSpend } from "../components/AgentSpend";
-import { RefreshStatus } from "../components/RefreshStatus";
+import { HeaderRefreshChip } from "../components/RefreshStatus";
 import { SourceDiagnostics } from "../components/SourceDiagnostics";
 import { Logo } from "../components/Logo";
+import { formatRelative } from "../../shared/format";
 
 export function App() {
   const { state, error } = useDash();
@@ -28,6 +29,7 @@ export function App() {
             <p className="app-header__tagline">Know whether work is moving — and where it's stuck</p>
           </div>
         </div>
+        <div className="app-header__actions">{state && <HeaderRefreshChip status={state.status} />}</div>
       </header>
 
       {error && (
@@ -39,12 +41,10 @@ export function App() {
       <main className="app-main">
         <HealthStrip state={state} />
 
-        {state && <RefreshStatus status={state.status} />}
-
         <AgentSpend />
         <AttentionQueue attention={state?.attention ?? []} />
 
-        {state && <SourceDiagnostics />}
+        {state && <SourceDiagnostics status={state.status} />}
       </main>
 
       <footer className="app-footer">
@@ -61,7 +61,7 @@ export function App() {
           Made with <span className="app-footer__heart">♥</span> in{" "}
           <a href="https://bun.sh" target="_blank" rel="noreferrer">Bun</a>
         </div>
-        {state && <span className="app-footer__right">{state.window.days} days usage</span>}
+        {state && <span className="app-footer__right">{state.window.days} days usage{state.status.refresh.lastSuccessAt ? ` · Last successful refresh ${formatRelative(Date.parse(state.status.refresh.lastSuccessAt))}` : ""}</span>}
       </footer>
     </div>
   );

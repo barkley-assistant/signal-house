@@ -13,7 +13,7 @@ import type { StatePayload } from "../../../src/api/build-state";
 import { useDash } from "../../../src/web/state/store";
 import { HealthStrip } from "../../../src/web/components/HealthStrip";
 import { AttentionQueue } from "../../../src/web/components/AttentionQueue";
-import { RefreshStatus } from "../../../src/web/components/RefreshStatus";
+import { HeaderRefreshChip, RefreshDetail } from "../../../src/web/components/RefreshStatus";
 import { formatNumber, formatCompact, formatCost } from "../../../src/shared/format";
 // Globals are installed by tests/happy-dom.ts (bunfig [test] preload).
 
@@ -173,7 +173,7 @@ describe("RefreshStatus", () => {
         coverageWarnings: ["Last refresh failed — showing last good data"],
       },
     });
-    render(<RefreshStatus status={state.status} />);
+    render(<RefreshDetail status={state.status} />);
     expect(screen.getAllByText(/showing last good data/i).length).toBeGreaterThan(0);
   });
 
@@ -195,14 +195,14 @@ describe("RefreshStatus", () => {
         },
       },
     });
-    render(<RefreshStatus status={state.status} />);
+    render(<RefreshDetail status={state.status} />);
     expect(screen.getByText(/refresh in progress/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /reset stuck lock/i })).toBeTruthy();
   });
 
   test("refresh button is keyboard accessible", () => {
     const state = emptyState();
-    render(<RefreshStatus status={state.status} />);
+    render(<RefreshDetail status={state.status} />);
     const button = screen.getByRole("button", { name: /refresh now/i });
     expect(button).toBeTruthy();
     fireEvent.keyDown(button, { key: "Enter" });

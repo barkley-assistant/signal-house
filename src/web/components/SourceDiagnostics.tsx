@@ -7,8 +7,10 @@
 import { useRef } from "react";
 import { useDash, loadDiagnostics } from "../state/store";
 import { formatRelative } from "../../shared/format";
+import { RefreshDetail } from "./RefreshStatus";
+import type { StatePayload } from "../state/store";
 
-export function SourceDiagnostics() {
+export function SourceDiagnostics({ status }: { status: StatePayload["status"] }) {
   const { diagnostics, diagnosticsLoading, diagnosticsOpen, setDiagnosticsOpen } = useDash();
   const requestedRef = useRef(false);
 
@@ -130,6 +132,8 @@ export function SourceDiagnostics() {
           </div>
         )}
       </div>
+
+      <RefreshDetail status={status} />
     </section>
   );
 }

@@ -42,6 +42,66 @@
   pointer-events: none;
 }
 
+/* Refresh status — header chip. */
+.header-refresh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header-refresh__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  padding: 4px 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.header-refresh__chip:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+.header-refresh__btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.header-refresh__msg {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Narrow screens: let the chip group wrap under the brand instead of
+   pushing the page sideways; message truncates rather than overflowing. */
+@media (max-width: 480px) {
+  .header-refresh {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .header-refresh__msg {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Refresh detail — lives at the bottom of the diagnostics panel. */
+.refresh-detail {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-border);
+}
+.refresh-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
 /* Refresh status row + banners. */
 .refresh-row {
   display: flex;
