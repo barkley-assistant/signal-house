@@ -7,7 +7,7 @@ import type { PersistedState } from "../config/types";
 import type { RuntimeConfig } from "../config/types";
 import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
-import { modelGroupKey, modelFamily, cleanModelName } from "../shared/models";
+import { machineKey, modelFamily, modelLabel } from "../shared/models";
 
 export interface UsageAggregate {
   totalSessions: number;
@@ -140,7 +140,7 @@ function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
   >();
   for (const s of states) {
     for (const row of s.data!.usage!.byModel) {
-      const key = modelGroupKey(row.model);
+      const key = machineKey(row.model);
       if (!key) continue;
       const existing = map.get(key);
       if (existing) {
@@ -149,12 +149,12 @@ function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
         existing.tokens = mergeNullSum(existing.tokens, rowTokens(row));
         if (row.sessions > existing.best) {
           existing.best = row.sessions;
-          existing.model = cleanModelName(row.model);
+          existing.model = modelLabel(row.model);
           existing.family = modelFamily(row.model);
         }
       } else {
         map.set(key, {
-          model: cleanModelName(row.model),
+          model: modelLabel(row.model),
           family: modelFamily(row.model),
           sessions: row.sessions,
           cost: row.cost,

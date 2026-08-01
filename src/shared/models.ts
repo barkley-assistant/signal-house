@@ -2,64 +2,68 @@
  * Model name normalisation + family mapping.
  *
  * Sources (hermes, opencode, sessions) report the same model under many
- * spellings and vendor prefixes ("DeepSeek-V4-Pro", "deepseek/v4-pro",
- * "openrouter/deepseek/deepseek-v4-pro", …). We reduce every raw name to a
- * canonical group key so the same model across providers collapses into ONE
- * row (cost/tokens/sessions merged), and we attach a human family label
- * (DeepSeek, z.ai, Moonshot, OpenAI, …) for display.
+ * spellings and vendor prefixes. We reduce every raw name to a stable
+ * machine key (lowercase, vendor prefix stripped, non-alphanumeric → `-`)
+ * for grouping and lookup. The `model-map.json` file maps machine keys to
+ * friendly labels and families — edit THAT file to add or fix model names.
+ *
+ * Workflow when a new model appears:
+ * 1. Look at the raw names in the dashboard (under "By model")
+ * 2. Add a new entry to `models[]` in `model-map.json` with the right
+ *    machine key, label, and family
+ * 3. Redeploy — no code changes needed
  */
 
-/** Strip vendor/provider prefixes and separators → stable lowercase key. */
-export function modelGroupKey(raw: string): string {
+import modelMap from "./model-map.json";
+
+type ModelEntry = { machine: string; label: string; family?: string };
+type FamilyPrefix = { prefix: string; family: string };
+
+const MODELS = modelMap.models as ModelEntry[];
+const FAMILY_PREFIXES = modelMap.familyPrefixes as FamilyPrefix[];
+
+// Build lookups once at import time (the map is small, this is negligible).
+const BY_MACHINE = new Map<string, ModelEntry>(MODELS.map((m) => [m.machine, m]));
+
+/** Normalise a raw model name → stable machine key for grouping & lookup.
+ *  Strips vendor prefixes ("openrouter/deepseek/…" → "…"), lowercases,
+ *  strips dots, replaces remaining non-alphanumeric with `-`, collapses. */
+export function machineKey(raw: string): string {
   const s = raw.trim().toLowerCase();
-  // Vendor prefixes come as path segments ("openrouter/deepseek/deepseek-v4-pro",
-  // "deepseek/deepseek-v4-pro"); the model body is always the LAST segment.
   const parts = s.split("/");
   const body = parts.length > 1 ? parts[parts.length - 1] : s;
-  // Remove every non-alphanumeric char so "DeepSeek V4 Pro", "deepseek-v4-pro"
-  // and "deepseek_v4_pro" all map to the same key.
-  return body.replace(/[^a-z0-9]+/g, "");
+  return body
+    .replace(/\./g, "") // dots stripped entirely ("GLM-5.2" → "glm-52")
+    .replace(/[^a-z0-9]+/g, "-") // spaces/underscores/dashes → single dash
+    .replace(/^-+|-+$/g, "");
 }
 
-/** Human family label for a model name (or null when unrecognised). */
-export function modelFamily(raw: string): string | null {
-  const key = modelGroupKey(raw);
-  if (!key) return null;
+/** Friendly label for display: curated from model-map.json, title-case
+ *  fallback if the model is not yet in the map. */
+export function modelLabel(raw: string): string {
+  const key = machineKey(raw);
+  if (!key) return raw.trim();
+  const entry = BY_MACHINE.get(key);
+  if (entry) return entry.label;
+  // Fallback: title-case each word, separators → single spaces
+  return raw
+    .trim()
+    .split("/")
+    .pop()!
+    .replace(/[_\s-]+/g, " ")
+    .trim()
+    .replace(/\b([a-z0-9])/g, (c: string) => c.toUpperCase());
+}
 
-  // Longest-prefix wins; check multi-word families before short prefixes.
-  const families: Array<[string, string]> = [
-    ["deepseek", "DeepSeek"],
-    ["glm", "z.ai"],
-    ["zhipu", "z.ai"],
-    ["zai", "z.ai"],
-    ["moonshot", "Moonshot"],
-    ["kimi", "Moonshot"],
-    ["minimax", "MiniMax"],
-    ["qwen", "Qwen"],
-    ["claude", "Anthropic"],
-    ["anthropic", "Anthropic"],
-    ["gpt", "OpenAI"],
-    ["openai", "OpenAI"],
-    ["o1", "OpenAI"],
-    ["o3", "OpenAI"],
-    ["o4", "OpenAI"],
-    ["gemini", "Google"],
-    ["google", "Google"],
-    ["mistral", "Mistral"],
-    ["llama", "Meta"],
-    ["auto", "Auto"],
-  ];
-  for (const [prefix, family] of families) {
+/** Human family label (DeepSeek, z.ai, Moonshot, …) or null. Checks the
+ *  model map first, then falls back to prefix matching. */
+export function modelFamily(raw: string): string | null {
+  const key = machineKey(raw);
+  if (!key) return null;
+  const entry = BY_MACHINE.get(key);
+  if (entry?.family) return entry.family;
+  for (const { prefix, family } of FAMILY_PREFIXES) {
     if (key.startsWith(prefix)) return family;
   }
   return null;
-}
-
-/** Display name for a raw model name: vendor prefixes stripped, spaces
- *  normalised, family casing preserved where known. */
-export function cleanModelName(raw: string): string {
-  const trimmed = raw.trim();
-  const parts = trimmed.split("/");
-  const body = parts.length > 1 ? parts[parts.length - 1] : trimmed;
-  return body.replace(/[_\s]+/g, " ").trim();
 }
