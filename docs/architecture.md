@@ -18,7 +18,7 @@ functions. You could run this on a potato and it would shrug.
 ```
 src/server.ts        entry point: config → createApp() → signal handling
 src/app.ts           createApp() factory — the testable core
-src/config/          env parsing, clamping, redaction, legacy aliases
+src/config/          env parsing, clamping, redaction, compat aliases
 src/shared/          types, dates, math, format, logger, http
 src/db/              schema, init (fresh V2 only), client, snapshots,
                      latest-state, refresh-meta, daily-metrics, retention
@@ -78,17 +78,15 @@ a dashboard, it's a data breach with a nice theme. Unknown → private is the
 only posture that can't leak. If you add a new classification flag anywhere
 in this codebase, the type is `boolean | null`, unknown resolves to the
 safe side, and the filter computes the *inverse set* (explicit public only).
-See `docs/decisions/0001-explicit-null-privacy-contract.md` for the full
-reasoning.
 
 ## Database
 
-- **Fresh V2 schema only.** The guard refuses to open a V1-shaped database
-  and leaves the file byte-identical — V2 will not migrate, adopt, or
-  casually destroy a V1 database. This is deliberate; the V2 rewrite was a
-  fresh start.
+- **Fresh V2 schema only.** The guard refuses to open a database from the
+  previous version and leaves the file byte-identical — V2 will not
+  migrate, adopt, or casually destroy existing data. This is deliberate;
+  V2 is a fresh start.
 - Production path: `~/.local/share/signal-house-v2/runtime/.data/metrics.db`
-  (never the V1 `signal-house/runtime` path).
+  — a dedicated directory that nothing else writes to.
 - WAL mode, foreign keys on, `busy_timeout` set, `user_version = 1`.
 - All writes that must be atomic (refresh persistence, schema init) go
   through native `bun:sqlite` transactions.

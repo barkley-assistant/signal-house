@@ -81,8 +81,8 @@ tired**. It should feel calm, dense, and honest:
 - **Instrument Sans** (body, `--font-body`), 400–500 weight.
 - **JetBrains Mono** (numbers + code, `--font-mono`), 400–700 weight.
 
-Fonts load via `@import` in `base.css` (Google Fonts + Fontshare); they
-are runtime assets like any other — no `next/font`, this is not Next.js.
+Fonts load via `@import` in `base.css` (Google Fonts + Fontshare);
+they are runtime assets like any other.
 
 ### Scale
 

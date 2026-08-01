@@ -15,8 +15,9 @@ If you only remember three things:
    for every key.
 3. **The database is fresh V2** at
    `~/.local/share/signal-house-v2/runtime/.data/`. If the guard refuses
-   to open a database, it's a V1 database — that's deliberate. V2 will
-   never migrate it, and pointing `DB_DIR` at a fresh location is the fix.
+   to open a database, it's one created by an older version — that's
+   deliberate. V2 will never migrate it; pointing `DB_DIR` at a fresh
+   location is the fix.
 
 ## Quick start
 
@@ -29,9 +30,9 @@ bun run start      # production bundle (build first)
 
 ## Configuration
 
-All keys are `SECRET_HOUSE_*`; a small set of legacy aliases (`GITHUB_TOKEN`,
-`GIT_REPOS`, …) still resolves so old env files keep working. `.env.example`
-documents every key with defaults. The important ones:
+All keys are `SECRET_HOUSE_*`; a small set of backward-compatible aliases
+(`GITHUB_TOKEN`, `GIT_REPOS`, …) also resolves, so either spelling works.
+`.env.example` documents every key with defaults. The important ones:
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -79,9 +80,9 @@ The lock persists across restarts by design (crash-safe). Fix:
 `curl -X POST localhost:PORT/api/refresh/reset-lock`, or delete the
 `refresh_lock` row from `refresh_meta` in the SQLite database.
 
-**V1 database refused.**
+**Database from an older version refused.**
 Expected behavior, not a bug. Point `DB_DIR` at a fresh directory or let
-the default V2 path be created. V2 will not touch the V1 file.
+the default path be created. Signal House will not touch existing data.
 
 **WebKit e2e fails to launch.**
 System deps missing: `sudo bunx playwright install-deps webkit`

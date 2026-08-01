@@ -32,7 +32,7 @@
 
 ## Tests
 
-- Bun's test runner (`bun:test`), not Jest. Tests live in `tests/`
+- Bun's test runner (`bun:test`). Tests live in `tests/`
   (unit + contract), Playwright e2e specs live in `e2e/`.
 - Red test first, then implementation.
 - If a test encodes a wrong default, invert the test, then fix the

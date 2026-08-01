@@ -27,7 +27,9 @@ Every metric follows one contract: **unknown stays unknown.** No synthetic zero-
 
 ## Quick start
 
-Requirements: [Bun](https://bun.sh) 1.3.x or newer. That's it. There is no Node.js, no npm, no Next.js, no separate frontend server.
+Requirements: [Bun](https://bun.sh) 1.3.x or newer. That's the entire
+toolchain — one runtime, one package manager, one server. No separate
+frontend server, no build pipeline to babysit.
 
 ```bash
 git clone git@github.com:barkley-assistant/signal-house.git
