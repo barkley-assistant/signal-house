@@ -36,10 +36,18 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 echo "→ installing dependencies"
-(cd "$LIVE_DIR" && bun install --frozen-lockfile)
+# Resolve bun via mise shims (the systemd unit uses `mise exec -- bun`).
+if command -v bun >/dev/null 2>&1; then
+  BUN="bun"
+elif [ -x "$HOME/.local/share/mise/shims/bun" ]; then
+  BUN="$HOME/.local/share/mise/shims/bun"
+else
+  BUN="$HOME/.local/bin/bun"
+fi
+(cd "$LIVE_DIR" && "$BUN" install --frozen-lockfile)
 
 echo "→ building (web bundle + server)"
-(cd "$LIVE_DIR" && bun run build)
+(cd "$LIVE_DIR" && "$BUN" run build)
 
 echo "→ restarting $SERVICE"
 systemctl --user restart "$SERVICE"
