@@ -1,324 +1,214 @@
-# Signal House Design System
+# Signal House — Design System (V2)
 
-A minimal dashboard design system so implementation stays coherent across developers. Spacing, typography, color, borders, and component rules.
+A minimal design system for a dark operator dashboard. This is the source
+of truth for how Signal House *looks*; the tokens live in
+`src/web/styles/tokens.css`, and every component style lives in
+`src/web/styles/base.css` + `src/web/styles/components.css`. If you change
+a visual anywhere, the token changes here first.
 
-> Every visual decision in every other issue derives from here. Do not start any other frontend work before this is documented.
+> Every visual decision derives from this file. If you're tempted to add a
+> new color, a new radius, or a font that isn't listed here — don't. Extend
+> the system, never bypass it.
 
 ---
 
-## 1. Color Palette
+## 1. Design personality
 
-Tailwind CSS v4 extension, dark theme only — Signal House is an operator dashboard.
+Signal House is a **dark operator dashboard for people who are probably
+tired**. It should feel calm, dense, and honest:
 
-### Surface hierarchy (dark)
+- Near-black surfaces, thin borders instead of shadows. **No box-shadows
+  on cards. Ever.** Borders are how we separate; shadows are how we
+  apologise.
+- A subtle grain overlay on the page background — depth without noise.
+- Sparse accent color. Sky blue (`#38bdf8`) is the only accent and it's
+  reserved for active/selected/urgent, never decoration.
+- Numbers are the stars. JetBrains Mono, bold, slightly larger than you'd
+  think. The dashboard's job is to tell the truth about numbers, so they
+  get the good seats.
+- One memorable element: the **health strip** — five cards that stagger
+  into view on page load (80ms apart, 300ms ease-out). It plays once per
+  load, and it respects `prefers-reduced-motion`.
 
-| Token        | Value     | Usage              |
-| ------------ | --------- | ------------------ |
-| `page-bg`    | `#07080a` | Near-black page    |
-| `card-bg`    | `#111318` | Dark card surface  |
-| `card-hover` | `#1a1d24` | Hover state        |
-| `card-border`| `#1e2128` | Card borders       |
-| `divider`    | `#262a33` | Subtle dividers    |
+## 2. Color palette
 
-### Text hierarchy
+### Surfaces (dark)
 
-| Token            | Value     | Usage                      |
-| ---------------- | --------- | -------------------------- |
-| `text-primary`   | `#f1f5f9` | Primary text               |
-| `text-secondary` | `#94a3b8` | Secondary text             |
-| `text-muted`     | `#64748b` | Muted text                 |
-| `text-disabled`  | `#475569` | Disabled text              |
+| Token | Value | Usage |
+|---|---|---|
+| `--page-bg` | `#07080a` | Near-black page background |
+| `--card-bg` | `#111318` | Card surface |
+| `--card-hover` | `#1a1d24` | Card/control hover |
+| `--card-border` | `#1e2128` | Card borders |
+| `--divider` | `#262a33` | Subtle dividers, gridlines |
 
-### Status colors
+### Text
 
-| Token     | Value     | Tailwind ref |
-| --------- | --------- | ------------ |
-| `success` | `#4ade80` | green-400    |
-| `warning` | `#fbbf24` | amber-400    |
-| `error`   | `#f87171` | red-400      |
-| `info`    | `#38bdf8` | sky-400      |
-| `stale`   | `#a78bfa` | violet-400   |
-| `neutral` | `#64748b` | slate-500    |
+| Token | Value | Usage |
+|---|---|---|
+| `--text-primary` | `#f1f5f9` | Primary text |
+| `--text-secondary` | `#94a3b8` | Secondary text, captions |
+| `--text-muted` | `#64748b` | Muted text, metadata |
+| `--text-disabled` | `#475569` | Disabled |
+
+### Status
+
+| Token | Value | Usage |
+|---|---|---|
+| `--success` | `#4ade80` | healthy / passing |
+| `--warning` | `#fbbf24` | stale / partial |
+| `--error` | `#f87171` | failed |
+| `--info` | `#38bdf8` | informational |
+| `--stale` | `#a78bfa` | stale-item flag |
+| `--neutral` | `#64748b` | unavailable / unknown |
 
 ### Accent
 
-| Token    | Value                          |
-| -------- | ------------------------------ |
-| `primary`| `#38bdf8` (sky-400)           |
-| `subtle` | `rgba(56, 189, 248, 0.08)`    |
-
-Register these in `tailwind.config.ts` or `globals.css` `@theme` block (Tailwind v4).
+| Token | Value |
+|---|---|
+| `--primary` | `#38bdf8` (sky) |
+| `--subtle` | `rgba(56, 189, 248, 0.08)` |
 
 ### Rules
 
-- ONE consistent color assignment per status state (never multiple mappings).
-- Sparse accent color: only for active/selected/urgent, never decoration.
-- No hex values in component code — all through Tailwind utilities.
+- ONE consistent color per status state — never multiple mappings.
+- Sparse accent: only for active/selected/urgent, never decoration.
+- No hex values in component code. Everything through the CSS variables.
 
----
+## 3. Typography
 
-## 1b. Background Depth
+- **Satoshi** (headings, `--font-heading`), 600–700 weight.
+- **Instrument Sans** (body, `--font-body`), 400–500 weight.
+- **JetBrains Mono** (numbers + code, `--font-mono`), 400–700 weight.
 
-Avoid flat solid backgrounds. The page background should have subtle depth. Apply a near-black base with an extremely subtle noise/grain texture overlay:
-
-```css
-body {
-  background: #07080a;
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4'/></filter><rect width='100%' height='100%' filter='url(#n)' opacity='0.015'/></svg>");
-  pointer-events: none;
-  z-index: -1;
-}
-```
-
-Card surfaces use a slightly lighter tone with a thin border rather than shadows for separation. **Do NOT use box-shadows on cards.**
-
----
-
-## 2. Typography
-
-Fonts: **Instrument Sans** (body) and **JetBrains Mono** (numbers,
-code), loaded as self-hosted `@font-face` assets bundled by the Bun
-web build (`src/web/styles/tokens.css`). There is no `next/font` —
-V2 is a Bun-native SPA; fonts are static assets like any other.
-
-### CSS variable references
-
-| Role          | Variable            | Font            |
-| ------------- | ------------------- | --------------- |
-| Headings      | `--font-heading`    | Instrument Sans (600–700) |
-| Body          | `--font-body`       | Instrument Sans |
-| Data/numbers  | `--font-mono`       | JetBrains Mono  |
+Fonts load via `@import` in `base.css` (Google Fonts + Fontshare); they
+are runtime assets like any other — no `next/font`, this is not Next.js.
 
 ### Scale
 
-Per frontend guidelines — dramatic jumps, not timid increments:
-
-| Token     | Size  | Usage                                    |
-| --------- | ----- | ---------------------------------------- |
-| `caption` | 12px  | Metadata, badges                         |
-| `small`   | 14px  | Timestamps, secondary labels             |
-| `body`    | 16px  | Default body text (minimum legible size) |
-| `large`   | 18px  | Card headings, section titles            |
-| `h3`      | 24px  | Subsection headings (1.5x jump)          |
-| `h2`      | 32px  | Section headings (2x jump)               |
-| `h1`      | 40px  | Page title (only one per page, 2.5x)     |
-
-### Weights
-
-- Headings: 600–700
-- Body: 400
-- Metric values: 700 (monospace condensed)
+| Token | Size | Usage |
+|---|---|---|
+| caption | 12px | Metadata, badges, table cells |
+| small | 14px | Secondary labels, buttons, timestamps |
+| body | 16px | Default body text (minimum legible size) |
+| large | 18px | Card headings, section titles |
+| h3 | 24px | Subsection headings |
+| h2 | 32px | Section headings |
+| h1 | 40px | Page title (one per page) |
 
 ### Number formatting
 
-- Dashboard values use grouped full numbers by default, for example `1,234,567`.
-- Compact notation, such as `1.2M`, is reserved for cramped chart axes or similarly tight spaces.
-- Use the shared number-formatting utility rather than local component helpers, so tables, cards, and tooltips stay consistent.
+- Grouped full numbers by default: `1,234,567`.
+- Compact notation (`1.2M`) is reserved for chart axes and cramped cells.
+- **Always** use the shared helpers in `src/shared/format.ts`
+  (`formatNumber`, `formatCompact`, `formatCost`) — never local
+  formatters. Tables, cards, and tooltips must agree.
+- Unknown values render as `—` (em dash). **Never `0`.** The `null → "—"`
+  contract is the dashboard's whole personality.
 
 ### Line height
 
-- Body: 1.5–1.6
-- Headings: 1.2
+- Body: 1.5–1.6 · Headings: 1.2
 
----
+## 4. Spacing & layout
 
-## 3. Spacing
+| Context | Value |
+|---|---|
+| Card padding | 16px |
+| Card gap | 12px (grid gap 16px) |
+| Section spacing | 24px |
+| Content max width | 1280px |
 
-Use the Tailwind scale — no custom values.
+Layout is responsive by construction: the health strip collapses to 2
+columns on mobile, the headline tiles to 1, tables that need width scroll
+inside their cards (see `.model-table` — the wrapper scrolls, the page
+never does). Page-level horizontal overflow at ≤430px is a bug, not a
+feature.
 
-| Context       | Token   | Value   |
-| ------------- | ------- | ------- |
-| Section spacing | `p-6` | 24px  |
-| Card padding  | `p-4`   | 16px    |
-| Card gap      | `gap-3` | 12px    |
-| Grid gap      | `gap-4` | 16px    |
-| Content max   | —       | 1280px  |
+## 5. Radius
 
----
+| Element | Value |
+|---|---|
+| Cards | 8px (`--radius-card`) |
+| Buttons / inputs / tooltips | 6px (`--radius-control`) |
+| Badges | pill |
 
-## 4. Border Radius
+## 6. Elevation & transitions
 
-| Element   | Token          | Value |
-| --------- | -------------- | ----- |
-| Cards     | `rounded-lg`   | 8px   |
-| Badges    | `rounded-full` | —     |
-| Buttons   | `rounded-md`   | 6px   |
-| Inputs    | `rounded-md`   | 6px   |
-| Tooltips  | `rounded-md`   | 6px   |
+- **No box-shadows on cards.** Dropdowns only: `shadow-lg` + black/40.
+- Modal backdrop: black/40 + `backdrop-blur-sm`.
+- Default transition: `150ms ease-out`.
+- Entrance animations via Framer Motion:
 
----
-
-## 5. Shadows and Elevation
-
-- **No box-shadows on cards** (use borders instead).
-- Shadows only for:
-  - Dropdown: `shadow-lg` + `rgba(0,0,0,0.4)`
-  - Modal backdrop: `bg-black/40 backdrop-blur-sm`
-  - Hover lift: `translateY(-1px)`
-
----
-
-## 6. Transitions
-
-### Default
-
-`transition-all duration-150 ease-out` (Tailwind, framework-agnostic)
-
-### Entrance animations
-
-Framer Motion `motion.div`:
-
-```ts
+```tsx
 initial={{ opacity: 0, y: 4 }}
 animate={{ opacity: 1, y: 0 }}
-// duration: 0.3
+// duration: 0.3, staggerChildren: 0.08
 ```
 
-Staggered at 80ms between items.
+- Respect `prefers-reduced-motion: reduce` — the CSS base layer handles it.
+- Health strip plays its entrance exactly once per page load.
 
-### Reduced motion
+## 7. Components
 
-Respect `prefers-reduced-motion: reduce`.
+### Cards
 
-### Staggered list pattern
+`section.card` — the universal container: `--card-bg`, 1px
+`--card-border`, 8px radius, 16px padding, 12px `margin-top` rhythm.
+Headings use the `.kpi-tile__label` caption pattern or `h2` for section
+titles. Cards carry an `aria-label` describing their content.
 
-```tsx
-import { motion } from 'framer-motion'
+### The health strip
 
-const container = {
-  animate: { transition: { staggerChildren: 0.08 } },
-}
+`.health-strip` → a grid of `.kpi-tile` cards. Each tile:
 
-const item = {
-  initial: { opacity: 0, y: 4 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
-}
+- `.kpi-tile__label` — caption with a status `.dot` (success/info/warning/
+  error/neutral)
+- `.big-number` — JetBrains Mono 700, the star of the show
+- `.kpi-caption` — secondary context line
 
-// Usage:
-<motion.div variants={container} initial="initial" animate="animate">
-  {items.map(item => (
-    <motion.div key={item.id} variants={item}>
-      ...
-    </motion.div>
-  ))}
-</motion.div>
-```
+### Headline tiles (Agent Spend)
 
----
+`.headline-tiles` → 3-col grid (1-col on mobile) of `.kpi-tile` reusing the
+health-strip grammar, with `.big-number.total` (40px mono) for cost /
+sessions / tokens. `.spend-subtiles` stack below: per-source tiles
+(OpenCode / Hermes / Combined) in `.card.spend-tile`.
 
-## 7. shadcn/ui Theming (`globals.css`)
+### Tables
 
-shadcn/ui uses CSS variables for theming. These override the defaults after `npx shadcn@latest init`:
+`table.data` — the shared data table. Mono numbers, right-aligned `.num`
+cells, sortable headers via `.sort-btn` + `.sort-arrow`. The by-model
+table is pinned to `min-width: 480px` inside a `.model-table` wrapper with
+`overflow-x: auto` — it scrolls inside the card on narrow screens instead
+of poking out.
 
-```css
-/* Dark theme overrides for Signal House */
-:root {
-  --background: #07080a;
-  --foreground: #f1f5f9;
-  --card: #111318;
-  --card-foreground: #f1f5f9;
-  --border: #1e2128;
-  --primary: #38bdf8;
-  --primary-foreground: #07080a;
-  --secondary: #1a1d24;
-  --secondary-foreground: #94a3b8;
-  --muted: #1a1d24;
-  --muted-foreground: #64748b;
-  --accent: rgba(56, 189, 248, 0.08);
-  --accent-foreground: #38bdf8;
-  --destructive: #f87171;
-  --destructive-foreground: #07080a;
-  --ring: #38bdf8;
-  --radius: 0.5rem;
-}
-```
+### Charts
 
----
+ECharts 6, `dark` theme, transparent background, `containLabel` grid.
+Cost line sky `#38bdf8`, tokens line yellow `#facc15` (the one place
+yellow appears — it's the tokens color). Axis labels muted, split lines
+faint `#232732`. Y-axis peaks are computed once from the first dataset and
+frozen — legend toggles re-anchor axes, they never rescale the surviving
+line out of context.
 
-## 8. Performance Guidelines
+### States
 
-- Health summary cards and status strip are above the fold — eager render.
-- Attention queue and model usage sections are below the fold — the
-  diagnostics panel is lazy-loaded (fetched only when opened), and
-  the rest is a single-page React app with no SSR.
-- The source diagnostics panel must be lazy — never fetch or render it until the user expands it.
-- Trend charts should use ECharts' `notMerge` option on updates to prevent memory leaks from accumulated chart instances.
-- No section should cause layout shift (CLS > 0) — all state placeholders (skeletons) must reserve exact real-content dimensions.
-- Target: initial content render within 1.5s on LAN, interactive within 2.5s.
+- **Loading:** `.skeleton` blocks that reserve exact real-content
+  dimensions — zero layout shift (CLS).
+- **No data:** explicit `—` or a `.state-label` ("No usage telemetry yet
+  …"). Never zeros.
+- **Failure:** `.banner.banner--error` with `role="alert"`.
+- **Interactivity:** every clickable element shows `cursor: pointer`
+  (base.css covers `button`, `[role="button"]`, `label[for]`, `select`,
+  `summary`). Non-semantic clickables get `role="button"`, `tabIndex`,
+  and keyboard handlers — full a11y parity or not at all.
 
----
+## 8. Performance
 
-## 9. One Memorable Element
-
-Every page needs one unforgettable design choice. For Signal House this is the **animated health summary strip** — five cards that pulse-stagger into view on page load (80ms delay between each card, 300ms ease-out entrance, implemented via Framer Motion). This is the first thing the user sees and it should feel alive, not static.
-
-- The animation must respect `prefers-reduced-motion: reduce`.
-- Only play once per page load (not on every refresh).
-
----
-
-## 10. Clickable Elements
-
-**Rule: every clickable element must show `cursor: pointer` on hover.** Tailwind CSS v4 preflight does not add `cursor: pointer` to `<button>` elements — the browser default is `cursor: default`, which makes interactive controls feel broken. This applies regardless of how the element is implemented.
-
-### Pattern A — shadcn/ui `<Button>` component
-
-The base `Button` component (`frontend/src/components/ui/button.tsx`) already includes `cursor-pointer` in its `buttonVariants` cva base class. Any new variant or size added to `buttonVariants` inherits the cursor for free. Prefer `<Button>` whenever possible so this stays automatic.
-
-### Pattern B — native `<button>` elements
-
-For raw `<button type="button">` elements used outside the `<Button>` component (dismiss controls, expand/collapse toggles, day-pickers, status pills, etc.) add `cursor-pointer` explicitly to the className:
-
-```tsx
-<button
-  type="button"
-  onClick={handleDismiss}
-  className="cursor-pointer rounded px-2 py-1 text-xs ..."
->
-  Dismiss
-</button>
-```
-
-Native buttons in this codebase that already follow Pattern B include the error/stale banner dismiss buttons in `app/page.tsx`, the source-health chevron toggle, the model-usage expand/collapse button, and the daily-token-usage day selector buttons.
-
-### Pattern C — non-semantic clickable elements (div / span with onClick)
-
-For `<div>` or `<span>` used as buttons, `cursor-pointer` alone is not enough — full a11y parity with `<button>` is required:
-
-1. `cursor-pointer` in the className (signals interactivity to pointer users).
-2. `role="button"` (announces the element to assistive tech).
-3. `tabIndex={0}` (makes it focusable via keyboard).
-4. `onKeyDown` handler for `Enter` and `Space` (provides keyboard activation).
-5. An `aria-label` or visible text (provides an accessible name).
-
-Example — already in use in `AttentionRow.tsx`, `ModelUsageRankList.tsx`, and the page.tsx attention queue:
-
-```tsx
-<div
-  role="button"
-  tabIndex={0}
-  onClick={onToggle}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onToggle();
-    }
-  }}
-  className="cursor-pointer rounded-lg border ..."
-  aria-label="Toggle details"
->
-  ...
-</div>
-```
-
-### Anti-patterns
-
-- **Do NOT** add `cursor-pointer` to non-interactive cards or display-only containers. It is a strong affordance that promises a click action — using it on a static card misleads users.
-- **Do NOT** rely on the browser default for `<button>`. Always add `cursor-pointer` to raw native buttons (Pattern B) or use the `<Button>` component (Pattern A).
-- **Do NOT** use `<div onClick>` without Pattern C's full a11y treatment. A click handler alone is not an accessible button.
+- Health strip + headline are above the fold — eager render.
+- **Source Diagnostics is lazy** — never fetched or rendered until the
+  operator expands the panel.
+- ECharts instances are disposed on unmount and resized via
+  `ResizeObserver`; no accumulated instances, no leaked observers.
+- No section causes layout shift — skeletons reserve exact dimensions.
+- Target: initial content render < 1.5s on LAN, interactive < 2.5s.
