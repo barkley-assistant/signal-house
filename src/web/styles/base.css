@@ -247,6 +247,24 @@ table.data td {
   padding: 6px 8px;
   border-bottom: 1px solid var(--card-border);
 }
+/* Model name + family in the by-model table. Desktop: dot + family inline
+   after the name. Mobile: family (with its dot) drops to its own line. */
+.model-name {
+  white-space: nowrap;
+}
+.model-family {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.model-family::before {
+  content: " · ";
+}
+@media (max-width: 640px) {
+  .model-family {
+    display: block;
+    margin-top: 1px;
+  }
+}
 table.data td.num, table.data th.num {
   text-align: right;
   font-family: var(--font-mono);

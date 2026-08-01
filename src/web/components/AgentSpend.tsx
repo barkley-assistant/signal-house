@@ -97,7 +97,7 @@ function DailyUsageChart() {
         animationDuration: 700,
         animationEasing: "cubicOut",
         backgroundColor: "transparent",
-        grid: { left: 44, right: 52, top: 24, bottom: 28, containLabel: true },
+        grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
         tooltip: {
           trigger: "axis",
           confine: true,
@@ -130,22 +130,28 @@ function DailyUsageChart() {
         yAxis: [
           {
             type: "value",
-            axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `$${v}` },
+            axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `$${Math.round(v)}` },
             splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
           },
           {
             type: "value",
-            axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => formatCompact(v) },
+            axisLabel: {
+              color: "#64748b",
+              fontSize: 10,
+              formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
+            },
             splitLine: { show: false },
           },
         ],
         legend: {
           data: ["Cost ($)", "Tokens"],
+          orient: "horizontal",
           top: 0,
-          right: 0,
+          right: 8,
           icon: "circle",
           itemWidth: 8,
           itemHeight: 8,
+          itemGap: 18,
           textStyle: { color: "#94a3b8", fontSize: 11 },
         },
         // Media queries: on narrow screens, shrink the label gutters so the
@@ -155,7 +161,7 @@ function DailyUsageChart() {
           {
             query: { maxWidth: 480 },
             option: {
-              grid: { left: 36, right: 36, top: 24, bottom: 28, containLabel: true },
+              grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
               legend: { textStyle: { fontSize: 10 } },
             },
           },
@@ -191,8 +197,8 @@ function DailyUsageChart() {
   }, []);
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div className="kpi-tile__label" style={{ marginBottom: 8 }}>Daily cost &amp; tokens</div>
+    <div style={{ marginTop: 16, marginLeft: -16, marginRight: -16 }}>
+      <div className="kpi-tile__label" style={{ marginBottom: 8, paddingLeft: 16, paddingRight: 16 }}>Daily cost &amp; tokens</div>
       {loading && <div className="skeleton" style={{ height: 220 }} />}
       <div ref={ref} style={{ width: "100%", height: 220 }} aria-label="Daily cost and token trend chart" />
     </div>
@@ -200,17 +206,45 @@ function DailyUsageChart() {
 }
 
 type SortKey = "model" | "sessions" | "tokens" | "cost" | null;
+type SortState = { key: SortKey; asc: boolean };
+
+const SORT_STORAGE_KEY = "signal-house:model-sort";
+
+function readSortState(): SortState {
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as SortState;
+      if (parsed && (parsed.key === null || ["model", "sessions", "tokens", "cost"].includes(parsed.key)) && typeof parsed.asc === "boolean") {
+        return { key: parsed.key, asc: parsed.asc };
+      }
+    }
+  } catch {
+    /* storage unavailable or corrupt — fall through to default */
+  }
+  return { key: null, asc: false };
+}
 
 /** By-model table spanning all sources; unknown cost renders "—".
  *  Click a column header to sort: sessions/tokens/cost sort descending,
  *  model sorts alphabetically. Clicking the active column again cycles
- *  (desc → asc → back to default session order). */
+ *  (desc → asc → back to default session order). Sort state persists
+ *  across page loads via localStorage. */
 function ModelTable() {
   const { state } = useDash();
   const usage = state?.usage ?? null;
   const models = usage?.byModel ?? [];
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [asc, setAsc] = useState(false);
+  const [sort, setSort] = useState<SortState>(readSortState);
+  const { key: sortKey, asc } = sort;
+
+  // Persist every change; survives reloads (and the default is a no-op).
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(sort));
+    } catch {
+      /* storage unavailable — sorting still works for this session */
+    }
+  }, [sort]);
 
   const sorted = [...models];
   if (sortKey) {
@@ -226,13 +260,11 @@ function ModelTable() {
 
   const cycle = (key: Exclude<SortKey, null>) => {
     if (sortKey !== key) {
-      setSortKey(key);
-      setAsc(false);
+      setSort({ key, asc: false });
     } else if (!asc) {
-      setAsc(true);
+      setSort({ key, asc: true });
     } else {
-      setSortKey(null); // back to default session order
-      setAsc(false);
+      setSort({ key: null, asc: false }); // back to default session order
     }
   };
 
@@ -258,8 +290,8 @@ function ModelTable() {
             {sorted.map((m) => (
               <tr key={m.model}>
                 <td>
-                  {m.model}
-                  {m.family && m.family !== m.model && <span className="kpi-caption"> · {m.family}</span>}
+                  <span className="model-name">{m.model}</span>
+                  {m.family && m.family !== m.model && <span className="model-family">{m.family}</span>}
                 </td>
                 <td className="num">{formatNumber(m.sessions)}</td>
                 <td className="num">{formatCompact(m.tokens ?? 0)}</td>
