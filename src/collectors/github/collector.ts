@@ -80,7 +80,10 @@ export class GitHubCollector implements Collector<SourceData> {
         if (r instanceof GitHubError) {
           if (r.kind === "not_found") {
             // A discovered repo may have been renamed/removed on GitHub —
-            // worth a warning, never a whole-source failure.
+            // worth a warning, never a whole-source failure. (404s on the
+            // /pulls endpoint are handled earlier in the client: a zero-PR
+            // repo 404s there and is treated as an empty list, so this
+            // branch only sees real repo-level 404s.)
             warnings.push(r.message);
             continue;
           }

@@ -446,3 +446,48 @@ describe("github client (mock API)", () => {
     server.stop(true);
   });
 });
+
+describe("github client — 404 on /pulls is tolerated (zero-PR repo)", () => {
+  test("pulls 404 → empty PR list, repo detail/issues still succeed", async () => {
+    // GitHub returns 404 (not []) for a repo that has never had a PR. The
+    // client must tolerate that one endpoint: the repo is real, issues and
+    // CI still collect, and the pulls list is just empty.
+    let srv: ReturnType<typeof Bun.serve> | null = null;
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url);
+        if (url.pathname === "/repos/acme/noprs") {
+          return Response.json({ id: 1, name: "noprs", full_name: "acme/noprs", private: false, default_branch: "main", html_url: "https://github.com/acme/noprs", archived: false });
+        }
+        if (url.pathname === "/repos/acme/noprs/issues") {
+          return Response.json([{ id: 9, number: 9, title: "an issue", state: "open", created_at: "2026-07-30T00:00:00Z", updated_at: "2026-07-30T00:00:00Z", closed_at: null, html_url: "u", labels: [], user: { login: "a" } }]);
+        }
+        if (url.pathname === "/repos/acme/noprs/pulls") return Response.json({ message: "Not Found" }, { status: 404 });
+        if (url.pathname === "/repos/acme/noprs/actions/runs") return Response.json([]);
+        return Response.json({}, { status: 404 });
+      },
+    });
+    srv = server;
+
+    const client = new GitHubClient({ token: "ghp_test", baseUrl: `http://localhost:${server.port}` });
+    const detail = await client.fetchRepo("acme", "noprs", "2026-07-01T00:00:00Z");
+    expect(detail.repo.name).toBe("noprs");
+    expect(detail.pullRequests).toEqual([]);
+    expect(detail.issues.length).toBe(1); // issue data survived the pulls 404
+    server.stop(true);
+  });
+
+  test("repo-level 404 still rejects (renamed/removed repo stays a real error)", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        return Response.json({ message: "Not Found" }, { status: 404 });
+      },
+    });
+
+    const client = new GitHubClient({ token: "ghp_test", baseUrl: `http://localhost:${server.port}` });
+    await expect(client.fetchRepo("acme", "gone", "2026-01-01T00:00:00Z")).rejects.toMatchObject({ kind: "not_found" });
+    server.stop(true);
+  });
+});

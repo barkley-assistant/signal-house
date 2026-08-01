@@ -78,6 +78,8 @@ export class GitHubError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly status: number | null = null,
+    /** Request path that produced the error, e.g. /repos/o/r/pulls (for 404 disambiguation). */
+    readonly path: string | null = null,
   ) {
     super(message);
     this.name = "GitHubError";
@@ -161,7 +163,7 @@ export class GitHubClient {
           : `GitHub access denied (403)${remaining ? `, ${remaining} requests remaining` : ""}`;
       throw new GitHubError("rate_limit", message, true, 403);
     }
-    if (res.status === 404) throw new GitHubError("not_found", `GitHub resource not found (404): ${redactUrl(url)}`, false, 404);
+    if (res.status === 404) throw new GitHubError("not_found", `GitHub resource not found (404): ${redactUrl(url)}`, false, 404, new URL(url).pathname);
     if (!res.ok) throw new GitHubError("http", `GitHub HTTP ${res.status} for ${redactUrl(url)}`, true, res.status);
     return res;
   }
@@ -177,6 +179,10 @@ export class GitHubClient {
   async fetchRepo(owner: string, repoName: string, since: string): Promise<GitHubRepoDetail> {
     const encOwner = encodeURIComponent(owner);
     const encRepo = encodeURIComponent(repoName);
+    // A repo that has never had a pull request 404s on /pulls (GitHub quirk,
+    // not an error). Tolerate that one endpoint — the repo is real, issues
+    // and CI still collect; the pulls list is just empty.
+    const pullsPath = `/repos/${encOwner}/${encRepo}/pulls`;
     const [detailRes, issues, pullRequests, workflowRuns] = await Promise.all([
       this.fetchJson(`${opts_base(this.opts)}/repos/${encOwner}/${encRepo}`).then((r) => r.json() as Promise<Record<string, unknown>>),
       this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/issues`, {
@@ -184,7 +190,10 @@ export class GitHubClient {
         since,
         per_page: 100,
       }),
-      this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/pulls`, { state: "all", per_page: 100 }),
+      this.getPaged<Record<string, unknown>>(pullsPath, { state: "all", per_page: 100 }).catch((err: unknown) => {
+        if (err instanceof GitHubError && err.kind === "not_found" && err.path?.endsWith("/pulls")) return [];
+        throw err;
+      }),
       this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/actions/runs`, { per_page: 100 }, "workflow_runs"),
     ]);
 
