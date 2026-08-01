@@ -10,7 +10,7 @@ export type RepositoryPrivacy = true | false | null;
 
 export type SourceTier = "core" | "agent" | "tool";
 
-export type CollectorId = "github" | "git" | "hermes" | "opencode" | "sessions";
+export type CollectorId = "github" | "git" | "hermes" | "opencode";
 
 export interface RepositoryIdentity {
   /** Stable identity: `github:<owner>/<repo>` or `local:<abs path>` (or `local:<name>` for un-remote repos). */
@@ -76,16 +76,6 @@ export interface WorkflowRunRecord {
   url: string;
 }
 
-export interface SessionRecord {
-  id: string;
-  toolName: string;
-  action: string;
-  timestamp: string;
-  durationMs: number | null;
-  success: boolean;
-  metadata: Record<string, unknown>;
-}
-
 export interface LocalGitRecord {
   repoKey: string;
   path: string;
@@ -144,7 +134,6 @@ export interface SourceData {
   issues: IssueRecord[];
   pullRequests: PullRequestRecord[];
   workflowRuns: WorkflowRunRecord[];
-  sessions: SessionRecord[];
   localGit: LocalGitRecord[];
   usage: UsageSummary | null;
   /** Per-UTC-day commit counts observed from local git (bounded window). */
@@ -157,7 +146,6 @@ export function emptySourceData(): SourceData {
     issues: [],
     pullRequests: [],
     workflowRuns: [],
-    sessions: [],
     localGit: [],
     usage: null,
     commitsByDay: {},

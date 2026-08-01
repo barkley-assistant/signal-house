@@ -23,7 +23,7 @@ export interface RuntimeConfig {
   };
   hermes: { dbPath: string };
   opencode: { dbPath: string };
-  sessions: { periodDays: number; dir: string | null };
+  usage: { periodDays: number };
   poller: {
     enabled: boolean;
     intervalSeconds: number;

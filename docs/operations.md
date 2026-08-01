@@ -40,7 +40,6 @@ documents every key. The important ones:
 | `SECRET_HOUSE_GIT_REPOS` / `SECRET_HOUSE_PROJECT_ROOTS` | — | local git inputs |
 | `SECRET_HOUSE_HERMES_DB_PATH` | `~/.hermes/state.db` | Hermes usage |
 | `SECRET_HOUSE_OPENCODE_DB_PATH` | `~/.local/share/opencode/opencode.db` | OpenCode usage |
-| `SECRET_HOUSE_SESSIONS_DIR` | — | optional sessions source |
 | `SECRET_HOUSE_POLLER_ENABLED` | `false` | background refresh loop |
 | `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS` | `false` | privacy opt-in |
 

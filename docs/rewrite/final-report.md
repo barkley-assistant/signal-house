@@ -53,7 +53,7 @@ Complete clean-room rewrite of Signal House as a Bun-native single-process appli
 
 - GitHub token required for GitHub data; without it, the GitHub source is unavailable (graceful degradation)
 - Git collector requires explicit repos or discovery roots; without either, it's unavailable
-- Sessions collector is optional and requires `SECRET_HOUSE_SESSIONS_DIR`
+- Usage sources are hermes + opencode (DB-backed); github + git supply repo/work telemetry.
 - WebKit-based mobile testing requires system deps not available on this host (Chromium-based mobile testing works)
 
 ## How to Verify

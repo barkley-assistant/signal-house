@@ -1,7 +1,7 @@
 /**
  * Model name normalisation + family mapping.
  *
- * Sources (hermes, opencode, sessions) report the same model under many
+ * Sources (hermes, opencode) report the same model under many
  * spellings and vendor prefixes. We reduce every raw name to a stable
  * machine key (lowercase, vendor prefix stripped, non-alphanumeric → `-`)
  * for grouping and lookup. The `model-map.json` file maps machine keys to

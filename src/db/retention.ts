@@ -1,9 +1,5 @@
 /**
  * Retention — runs safely and predictably at startup and after each refresh.
- *
- * Sessions and workflow runs live inside `snapshots.data` JSON in the V2
- * schema, so the sessions/workflow retention knobs constrain snapshot pruning
- * (documented in the traceability doc, C11).
  */
 
 import type { Database } from "bun:sqlite";

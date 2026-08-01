@@ -186,9 +186,8 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
     opencode: {
       dbPath: p.path("SECRET_HOUSE_OPENCODE_DB_PATH") ?? resolve(homedir(), ".local/share/opencode/opencode.db"),
     },
-    sessions: {
+    usage: {
       periodDays: p.int("SECRET_HOUSE_SESSIONS_PERIOD_DAYS", 30, 1, 3650),
-      dir: p.path("SECRET_HOUSE_SESSIONS_DIR"),
     },
     poller: {
       enabled: p.bool("SECRET_HOUSE_POLLER_ENABLED", false),

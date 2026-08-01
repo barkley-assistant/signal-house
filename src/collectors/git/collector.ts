@@ -78,7 +78,6 @@ export class GitCollector implements Collector<SourceData> {
         issues: [],
         pullRequests: [],
         workflowRuns: [],
-        sessions: [],
         localGit: data.localGit,
         usage: null,
         commitsByDay,

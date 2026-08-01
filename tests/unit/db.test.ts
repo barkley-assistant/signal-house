@@ -24,7 +24,7 @@ const baseConfig: RuntimeConfig = {
   git: { repos: [], roots: [], globs: ["*"], maxDepth: 3, excludes: ["node_modules"] },
   hermes: { dbPath: "/tmp/hermes.db" },
   opencode: { dbPath: "/tmp/opencode.db" },
-  sessions: { periodDays: 30, dir: null },
+  usage: { periodDays: 30 },
   poller: { enabled: false, intervalSeconds: 300, startupDelaySeconds: 5, runOnStartup: true },
   orchestrator: { concurrency: 3, lookbackDays: 28 },
   staleness: { staleThresholdDays: 14, staleThresholdMinutes: 15 },

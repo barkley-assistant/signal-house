@@ -98,7 +98,7 @@ testing requirements, LAN dev server, git discipline, final report.
 | Temp DBs for tests; never test against the real/legacy DB | `tests/` use `openMemoryDatabase()` + temp files |
 | Fresh DB creation; idempotent re-init; **refuses to open a V1-shaped database** (fresh start, no migration — user decision 2026-07-31) | `src/db/init.ts`, `tests/unit/db.test.ts` |
 | Schema versioning via `PRAGMA user_version` | `src/db/schema.ts` |
-| Retention: snapshots (30d), daily metrics (90d), sessions (90d), workflow runs (90d) | `src/db/retention.ts`; env `SECRET_HOUSE_RETENTION_*` |
+| Retention: snapshots (30d), daily metrics (90d) | `src/db/retention.ts`; env `SECRET_HOUSE_RETENTION_*` |
 
 ### 2.4 Refresh semantics (README §Refresh, architecture §1.2, instruction §Refresh Semantics)
 
@@ -131,7 +131,6 @@ testing requirements, LAN dev server, git discipline, final report.
 | Local git: explicit paths, discovery roots, max depth, name globs, excludes, invalid repos, permission failures, remote identity normalisation, worktrees, recent commits/authors, bounded runtime | `src/collectors/git/` |
 | Hermes: read-only external SQLite; missing file, locked DB, empty DB, partial fields, schema detection, time-window filtering, ms-vs-s (contract #10) | `src/collectors/hermes/` |
 | OpenCode: read-only external SQLite; `session.cost` read faithfully (contract #6); `providerID` from JSON (contract #8); no zero-row days (contract #9) | `src/collectors/opencode/` |
-| Generic local sessions: optional dir source, degrades gracefully | `src/collectors/sessions/` |
 | Small explicit collector interface; validated config; structured result (data, duration, warnings, errors); no direct DB writes; independently testable; timeout/cancellation; no secret logging; source-unavailable ≠ zero results | `src/collectors/types.ts`, each collector, `tests/unit/*` |
 | Explicit collector registration (instruction overrides dynamic plugin discovery) | `src/collectors/index.ts` |
 | Orchestrator owns: running collectors, concurrency limits, result combination, privacy resolution, aggregate derivation, atomic persistence, refresh status | `src/orchestrator/` |
@@ -234,7 +233,7 @@ testing requirements, LAN dev server, git discipline, final report.
 | C8 | **uPlot** (07-23 plan) vs **ECharts** (07-24 decision #1, 00-overview, instruction "ECharts unless planning docs supersede") | ECharts (newest accepted planning decision). |
 | C9 | **Tailwind v4** (design-system.md is Tailwind-flavoured) vs **"your own CSS / UnoCSS"** (00-overview locked stack) vs **instruction "Tailwind CSS 4 or the project's documented equivalent"** | Hand-rolled CSS implementing the exact design-system tokens (`#07080a`, `#111318`, `#38bdf8`, status colors, type scale). The documented equivalent. |
 | C10 | **Ark UI** (decision #4, 00-overview) vs **instruction "Freshly generated or independently implemented accessible UI primitives"** | Ark UI retained (documented project choice) — it *is* the independently-implemented accessible primitive layer; no shadcn recipes, no copied components. All components are freshly written. |
-| C11 | **Retention "keep daily_metrics forever"** (07 decision E) vs **`SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS=90`** (.env.example, ops §2.1) | Ops/.env.example are the operative config surface: snapshots 30d, daily metrics 90d, sessions 90d, workflow runs 90d. Sessions/workflow data live inside snapshot JSON, so those two knobs constrain snapshot pruning (documented). |
+| C11 | **Retention "keep daily_metrics forever"** (07 decision E) vs **`SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS=90`** (.env.example, ops §2.1) | Ops/.env.example are the operative config surface: snapshots 30d, daily metrics 90d. Raw payloads (issues/PRs/runs) live inside snapshot JSON, so snapshot pruning governs them. |
 | C12 | **V1 `frontend`/`server` layout** vs **instruction's suggested `src/` layout** | Instruction's `src/` layout adopted (with `web/` for the dashboard). |
 | C13 | **"No dependency pinning; install latest"** (decision #9) vs **instruction: "Pin or sensibly constrain dependencies and commit bun.lock"** | `bun.lock` committed (captures installed versions). `package.json` lists deps without manual version ranges (bun writes them at install); `bun.lock` is the pin artifact. |
 | C14 | **V1 CI (npm/Node)** vs **Bun-native checks** | `.github/workflows/ci.yml` rewritten to `bun install` + `bun run check`. |
