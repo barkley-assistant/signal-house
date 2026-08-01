@@ -31,7 +31,7 @@ jobs:
         run: bunx eslint .
 
       - name: Tests
-        run: bun test
+        run: bun test tests/
 
       - name: Build web bundle
         run: bun run build

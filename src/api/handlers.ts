@@ -32,7 +32,7 @@ export function diagnosticsHandler(deps: ApiDeps): Response {
 }
 
 /** GET /api/health — lightweight, never triggers collectors. */
-export function healthHandler(deps: ApiDeps): Response {
+export function healthHandler(_deps: ApiDeps): Response {
   return json({
     status: "ok",
     service: "signal-house",

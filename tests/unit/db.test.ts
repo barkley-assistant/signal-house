@@ -28,7 +28,7 @@ const baseConfig: RuntimeConfig = {
   poller: { enabled: false, intervalSeconds: 300, startupDelaySeconds: 5, runOnStartup: true },
   orchestrator: { concurrency: 3, lookbackDays: 28 },
   staleness: { staleThresholdDays: 14, staleThresholdMinutes: 15 },
-  retention: { snapshotsDays: 30, dailyMetricsDays: 90, sessionsDays: 90, workflowRunsDays: 90 },
+  retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
   privacy: { showPrivateRepoItems: false },
   refresh: { lockStaleMs: 600_000 },
 };
@@ -148,7 +148,7 @@ describe("database", () => {
     replaceDayForSource(owner2.db, "2026-01-01", "hermes", [{ date: "2026-01-01", metric: "sessions.total", value: 1, tags: {} }]);
     replaceDayForSource(owner2.db, "2026-07-31", "hermes", [{ date: "2026-07-31", metric: "sessions.total", value: 2, tags: {} }]);
 
-    const report = runRetention(owner2.db, { ...baseConfig, retention: { snapshotsDays: 30, dailyMetricsDays: 90, sessionsDays: 90, workflowRunsDays: 90 } });
+    const report = runRetention(owner2.db, { ...baseConfig, retention: { snapshotsDays: 30, dailyMetricsDays: 90 } });
     expect(report.prunedSnapshots).toBe(1);
     expect(latestSnapshot(owner2.db, "github")).not.toBeNull();
     const remainingDays = queryDailyMetrics(owner2.db, { from: "2026-01-01", to: "2026-07-31" }).map((r) => r.date);

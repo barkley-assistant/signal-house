@@ -82,7 +82,7 @@ export async function loadDiagnostics(): Promise<void> {
   try {
     const payload = await fetchJson<DiagnosticsPayload>("/api/diagnostics");
     setDiagnostics(payload);
-  } catch (err) {
+  } catch {
     setDiagnostics(null);
     setDiagnosticsLoading(false);
   }

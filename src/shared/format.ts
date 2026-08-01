@@ -10,10 +10,6 @@ const compactFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-const groupedFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 2,
-});
-
 /** Grouped full number: 1234567 → "1,234,567". null → "—". */
 export function formatNumber(value: number | null | undefined, fractionDigits = 0): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";

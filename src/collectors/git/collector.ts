@@ -10,21 +10,12 @@
  */
 
 import { readdirSync, statSync } from "node:fs";
-import { join, resolve, basename, dirname } from "node:path";
+import { join, resolve, basename } from "node:path";
 import { runCommand } from "../process";
 import type { Collector, CollectorResult, LocalGitRecord, SourceData } from "../../shared/types";
 import { emptySourceData } from "../../shared/types";
 import { utcDaysAgo } from "../../shared/dates";
 import type { RuntimeConfig } from "../../config/types";
-
-interface GitRepoMeta {
-  path: string;
-  remoteUrl: string | null;
-  githubOwner: string | null;
-  githubRepo: string | null;
-  defaultBranch: string | null;
-  repoName: string;
-}
 
 export class GitCollector implements Collector<SourceData> {
   readonly id = "git" as const;
@@ -256,7 +247,7 @@ export class GitCollector implements Collector<SourceData> {
     paths: string[],
     since: string,
     signal: AbortSignal,
-    errors: CollectorResult["errors"],
+    _errors: CollectorResult["errors"],
   ): Promise<Record<string, number>> {
     const days: Record<string, number> = {};
     for (const path of paths) {

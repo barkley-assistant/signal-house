@@ -4,7 +4,7 @@
  * (privacy-filtered server-side).
  */
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useDash, loadDiagnostics } from "../state/store";
 import { formatRelative } from "../../shared/format";
 

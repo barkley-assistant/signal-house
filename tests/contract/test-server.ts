@@ -37,7 +37,7 @@ export async function startServer(opts: { dbPath: string; port?: number; auth?: 
     poller: { enabled: false, intervalSeconds: 300, startupDelaySeconds: 0, runOnStartup: false },
     orchestrator: { concurrency: 3, lookbackDays: 28 },
     staleness: { staleThresholdDays: 14, staleThresholdMinutes: 15 },
-    retention: { snapshotsDays: 30, dailyMetricsDays: 90, sessionsDays: 90, workflowRunsDays: 90 },
+    retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
     privacy: { showPrivateRepoItems: false },
     refresh: { lockStaleMs: 600_000 },
   };

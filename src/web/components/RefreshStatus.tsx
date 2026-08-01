@@ -9,7 +9,7 @@ import { useDash, triggerRefresh, resetLock } from "../state/store";
 import { formatRelative, formatAbsolute } from "../../shared/format";
 
 export function RefreshStatus({ status }: { status: StatePayload["status"] }) {
-  const { refreshing, refreshMessage, setRefreshing, setRefreshMessage } = useDash();
+  const { refreshing, refreshMessage } = useDash();
   const refresh = status.refresh;
 
   const bannerKind = refresh.status === "failed" ? "error" : refresh.status === "partial" ? "warning" : status.freshness.state === "stale" ? "stale" : status.freshness.state === "missing" ? "neutral" : null;

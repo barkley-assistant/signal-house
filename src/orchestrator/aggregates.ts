@@ -167,7 +167,7 @@ function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
     }
   }
   return [...map.values()]
-    .map(({ best, ...m }) => m)
+    .map(({ best: _best, ...m }) => m)
     .sort((a, b) => b.sessions - a.sessions || (b.cost ?? 0) - (a.cost ?? 0));
 }
 

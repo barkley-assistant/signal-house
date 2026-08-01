@@ -24,7 +24,7 @@ const baseConfig: RuntimeConfig = {
   poller: { enabled: false, intervalSeconds: 300, startupDelaySeconds: 5, runOnStartup: true },
   orchestrator: { concurrency: 3, lookbackDays: 28 },
   staleness: { staleThresholdDays: 14, staleThresholdMinutes: 15 },
-  retention: { snapshotsDays: 30, dailyMetricsDays: 90, sessionsDays: 90, workflowRunsDays: 90 },
+  retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
   privacy: { showPrivateRepoItems: false },
   refresh: { lockStaleMs: 600_000 },
 };

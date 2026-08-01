@@ -32,7 +32,7 @@ export interface RuntimeConfig {
   };
   orchestrator: { concurrency: number; lookbackDays: number };
   staleness: { staleThresholdDays: number; staleThresholdMinutes: number };
-  retention: { snapshotsDays: number; dailyMetricsDays: number; sessionsDays: number; workflowRunsDays: number };
+  retention: { snapshotsDays: number; dailyMetricsDays: number };
   privacy: { showPrivateRepoItems: boolean };
   refresh: { lockStaleMs: number };
 }

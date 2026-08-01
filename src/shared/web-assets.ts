@@ -8,7 +8,7 @@
  */
 
 import { existsSync, mkdirSync } from "node:fs";
-import { join, resolve, normalize } from "node:path";
+import { resolve, normalize } from "node:path";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

@@ -207,8 +207,6 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
     retention: {
       snapshotsDays: p.int("SECRET_HOUSE_RETENTION_SNAPSHOTS_DAYS", 30, 1, 3650),
       dailyMetricsDays: p.int("SECRET_HOUSE_RETENTION_DAILY_METRICS_DAYS", 90, 7, 3650),
-      sessionsDays: p.int("SECRET_HOUSE_RETENTION_SESSIONS_DAYS", 90, 7, 3650),
-      workflowRunsDays: p.int("SECRET_HOUSE_RETENTION_WORKFLOW_RUNS_DAYS", 90, 7, 3650),
     },
     privacy: {
       showPrivateRepoItems: p.bool("SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS", false),

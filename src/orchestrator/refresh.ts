@@ -62,7 +62,6 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
     };
   }
 
-  const startedMs = Date.now();
   try {
     const results = await runCollectors(ctx);
 
