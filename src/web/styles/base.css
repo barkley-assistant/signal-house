@@ -206,10 +206,6 @@ button.primary {
   font-size: 34px;
   line-height: 1.1;
 }
-/* Agent Spend headline total — the biggest number on the dashboard. */
-.big-number.total {
-  font-size: 44px;
-}
 .kpi-caption {
   color: var(--text-muted);
   font-size: 12px;

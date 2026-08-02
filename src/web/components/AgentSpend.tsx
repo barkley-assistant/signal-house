@@ -1,7 +1,8 @@
 /**
  * Agent Spend card — consolidated cost/tokens view (planning 03 §Card, decision #10).
- * Headline combined cost + OpenCode/Hermes sub-tiles + stacked daily chart + by-model table.
- * Sources without cost telemetry render "—", never 0.
+ * A single panel: macro totals in a hero on the left, per-source breakdown
+ * (OpenCode / Hermes) as a ledger on the right, then the stacked daily chart
+ * and by-model table. Sources without cost telemetry render "—", never 0.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -20,24 +21,22 @@ export function AgentSpend() {
         <p className="state-label">No usage telemetry yet — sources unavailable or no sessions collected</p>
       ) : (
         <>
-          <div className="headline-tiles">
-            <div className="kpi-tile">
+          <div className="spend-overview">
+            <div className="spend-hero">
               <div className="kpi-tile__label">Total cost</div>
-              <div className="big-number total">{formatCost(usage.totalCost)}</div>
+              <div className="spend-hero__amount">{formatCost(usage.totalCost)}</div>
+              <div className="spend-hero__meta">
+                <span>{formatNumber(usage.totalSessions)} Sessions</span>
+                <span className="spend-hero__dot" aria-hidden="true">·</span>
+                <span>{formatCompact(usage.totalTokens)} Tokens</span>
+              </div>
             </div>
-            <div className="kpi-tile">
-              <div className="kpi-tile__label">Sessions</div>
-              <div className="big-number total">{formatNumber(usage.totalSessions)}</div>
-            </div>
-            <div className="kpi-tile">
-              <div className="kpi-tile__label">Tokens</div>
-              <div className="big-number total">{formatCompact(usage.totalTokens ?? 0)}</div>
+            <div className="spend-sources">
+              <SpendSource label="OpenCode" source="opencode" usage={usage} />
+              <SpendSource label="Hermes" source="hermes" usage={usage} />
             </div>
           </div>
-          <div className="spend-subtiles">
-            <SpendSource label="OpenCode" source="opencode" usage={usage} />
-            <SpendSource label="Hermes" source="hermes" usage={usage} />
-          </div>
+          <hr className="spend-divider" />
           <DailyUsageChart />
           <ModelTable />
         </>
@@ -48,13 +47,18 @@ export function AgentSpend() {
 
 type UsageLike = NonNullable<ReturnType<typeof useDash.getState>["state"]>["usage"];
 
+/** One agent row in the right-hand ledger — cost up front, sessions·tokens muted. */
 function SpendSource({ label, source, usage }: { label: string; source: string; usage: UsageLike }) {
   const src = usage?.bySource[source as keyof typeof usage.bySource];
   return (
-    <div className="card spend-tile">
-      <div className="kpi-tile__label heading">{label}</div>
-      <div className="big-number small">{src ? formatCost(src.cost) : "—"}</div>
-      <div className="kpi-caption">{src ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens ?? 0)} tokens` : "No data"}</div>
+    <div className="spend-source-row">
+      <div className="spend-source-row__head">
+        <span className="kpi-tile__label heading">{label}</span>
+        <span className="big-number small">{src ? formatCost(src.cost) : "—"}</span>
+      </div>
+      <div className="spend-source-row__meta">
+        {src ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens` : "No data"}
+      </div>
     </div>
   );
 }

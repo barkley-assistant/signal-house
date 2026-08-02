@@ -167,12 +167,14 @@ titles. Cards carry an `aria-label` describing their content.
 - `.big-number` — JetBrains Mono 700, the star of the show
 - `.kpi-caption` — secondary context line
 
-### Headline tiles (Agent Spend)
+### Agent Spend overview
 
-`.headline-tiles` → 3-col grid (1-col on mobile) of `.kpi-tile` reusing the
-health-strip grammar, with `.big-number.total` (40px mono) for cost /
-sessions / tokens. `.spend-subtiles` stack below: per-source tiles
-(OpenCode / Hermes / Combined) in `.card.spend-tile`.
+`.spend-overview` → a single two-region panel: the **macro hero** on the left
+(`.spend-hero`: 56px mono total cost, then muted "Sessions · Tokens" beneath
+it, dot-separated) and the **micro ledger** on the right (`.spend-sources` —
+one `.spend-source-row` per agent, cost up front plus sessions·tokens muted,
+agents separated by a divider rather than nested boxes). Collapses to one
+column below 700px.
 
 ### Tables
 

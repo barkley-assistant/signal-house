@@ -7,13 +7,15 @@
  * formatting.
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test, afterEach, vi } from "bun:test";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import * as echarts from "echarts";
 import type { StatePayload } from "../../../src/api/build-state";
 import { useDash } from "../../../src/web/state/store";
 import { HealthStrip } from "../../../src/web/components/HealthStrip";
 import { AttentionQueue } from "../../../src/web/components/AttentionQueue";
 import { HeaderRefreshChip, RefreshDetail } from "../../../src/web/components/RefreshStatus";
+import { AgentSpend } from "../../../src/web/components/AgentSpend";
 import { formatNumber, formatCompact, formatCost } from "../../../src/shared/format";
 // Globals are installed by tests/happy-dom.ts (bunfig [test] preload).
 
@@ -207,6 +209,82 @@ describe("RefreshStatus", () => {
     expect(button).toBeTruthy();
     fireEvent.keyDown(button, { key: "Enter" });
     fireEvent.click(button);
+  });
+});
+
+describe("AgentSpend", () => {
+  function usageState(overrides: Partial<NonNullable<StatePayload["usage"]>> = {}): StatePayload {
+    return emptyState({
+      usage: {
+        totalSessions: 1597,
+        totalMessages: 1000,
+        totalTokens: 5420000000,
+        totalCost: 515.95,
+        bySource: {
+          opencode: { sessions: 900, cost: 300, tokens: 3000000000 },
+          hermes: { sessions: 697, cost: 215.95, tokens: 2420000000 },
+        },
+        byModel: [],
+        ...overrides,
+      },
+    });
+  }
+
+  let chartSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    // The spend chart (DailyUsageChart) mounts echarts; in happy-dom there is
+    // no canvas, so stub echarts.init to keep the AgentSpend render honest.
+    chartSpy = vi.spyOn(echarts, "init").mockImplementation(
+      // @ts-expect-error minimal stub; only the API DailyUsageChart uses is exercised
+      () => ({ setOption() {}, resize() {}, dispose() {}, on() {} }),
+    );
+  });
+
+  afterEach(() => {
+    chartSpy.mockRestore();
+  });
+
+  test("hero shows total cost as the headline figure", () => {
+    useDash.setState({ state: usageState() });
+    render(<AgentSpend />);
+    expect(screen.getByText("$515.95")).toBeTruthy();
+  });
+
+  test("hero meta lists sessions and tokens beneath the cost", () => {
+    useDash.setState({ state: usageState() });
+    render(<AgentSpend />);
+    expect(screen.getByText("1,597 Sessions")).toBeTruthy();
+    expect(screen.getByText("5.42B Tokens")).toBeTruthy();
+  });
+
+  test("renders both agent source rows", () => {
+    useDash.setState({ state: usageState() });
+    render(<AgentSpend />);
+    expect(screen.getByText("OpenCode")).toBeTruthy();
+    expect(screen.getByText("Hermes")).toBeTruthy();
+    // formatCost() always emits two decimals ($300.00), matching the hero + ledger.
+    expect(screen.getByText("$300.00")).toBeTruthy();
+    expect(screen.getByText("$215.95")).toBeTruthy();
+  });
+
+  test("unknown source cost renders em-dash, never zero", () => {
+    useDash.setState({
+      state: usageState({
+        bySource: {
+          opencode: { sessions: 0, cost: null, tokens: null },
+          hermes: { sessions: 0, cost: null, tokens: null },
+        },
+      }),
+    });
+    render(<AgentSpend />);
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  test("shows empty state when usage is absent", () => {
+    useDash.setState({ state: emptyState() });
+    render(<AgentSpend />);
+    expect(screen.getByText(/no usage telemetry yet/i)).toBeTruthy();
   });
 });
 
