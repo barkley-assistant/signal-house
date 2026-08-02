@@ -60,21 +60,6 @@
   color: var(--text-muted);
 }
 
-/* Narrow screens: let the status wrap under the brand instead of
-   pushing the page sideways; message truncates rather than overflowing. */
-@media (max-width: 480px) {
-  .header-refresh {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-  .header-refresh__msg {
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
 /* Refresh detail — lives at the bottom of the diagnostics panel. */
 .refresh-detail {
   margin-top: 20px;

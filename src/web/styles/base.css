@@ -87,6 +87,7 @@ button.primary {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   margin: 32px 0 24px;
 }
@@ -115,6 +116,24 @@ button.primary {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Tablet and below: lift the refresh lozenge to its own row above the
+   brand. flex-direction:column stacks the rows; order swaps __actions
+   above __brand. Tighten the header's top margin so the lozenge sits
+   close to the page top instead of floating in 32px of space. Single
+   mounted instance, no duplication. */
+@media (max-width: 700px) {
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: 8px;
+    gap: 4px;
+  }
+  .app-header__actions {
+    order: -1;
+    justify-content: flex-end;
+  }
 }
 
 /* Main content stack — consistent 16px rhythm between every section.

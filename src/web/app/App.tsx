@@ -29,6 +29,10 @@ export function App() {
             <p className="app-header__tagline">Know whether work is moving — and where it's stuck</p>
           </div>
         </div>
+        {/* On tablet/mobile the chip relocates above the brand via CSS
+            order — see .app-header media query in base.css. Keeps a single
+            mounted instance (one useDash subscription) while giving the
+            lozenge its own row instead of crowding the logo. */}
         <div className="app-header__actions">{state && <HeaderRefreshChip status={state.status} />}</div>
       </header>
 
