@@ -7,7 +7,7 @@
  * is built to disk (dist/public) instead. Recorded in the traceability doc.
  */
 
-import { mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve, normalize, join } from "node:path";
 
 const MIME: Record<string, string> = {
@@ -81,7 +81,18 @@ export function serveWebAsset(publicDir: string, urlPath: string): Response | nu
   const filePath = resolve(publicDir, normalized);
   const root = resolve(publicDir);
   if (filePath !== root && !filePath.startsWith(root + "/")) return null;
-  if (filePath === root || !setIndex(publicDir).has(filePath)) return null;
+  if (filePath === root) return null;
+
+  const index = setIndex(publicDir);
+  if (!index.has(filePath)) {
+    // The manifest is snapshotted at startup and only re-walked by an
+    // in-process build. Dev rebuilds run in a SUBPROCESS (scripts/dev.ts),
+    // so their bundles land on disk without touching our index. Heal by
+    // stat-ing the filesystem on a miss and remembering the hit — this keeps
+    // new hashed chunks servable without a full re-walk on every request.
+    if (!existsSync(filePath)) return null;
+    index.add(filePath);
+  }
 
   const ext = filePath.slice(filePath.lastIndexOf("."));
   const body = Bun.file(filePath);
