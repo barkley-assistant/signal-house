@@ -80,7 +80,9 @@ export function AgentSpend() {
 
 type UsageLike = NonNullable<ReturnType<typeof useDash.getState>["state"]>["usage"];
 
-/** One agent row in the right-hand ledger — cost up front, sessions·tokens muted. */
+/** One agent row in the right-hand ledger — title + substats stack on the
+ *  left (vertically centered), cost figure anchored right (vertically
+ *  centered against the stack). */
 function SpendSource({ label, source, usage }: { label: string; source: string; usage: UsageLike }) {
   const src = usage?.bySource[source as keyof typeof usage.bySource];
   return (
@@ -91,13 +93,13 @@ function SpendSource({ label, source, usage }: { label: string; source: string; 
         visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
       }}
     >
-      <div className="spend-source-row__head">
+      <div className="spend-source-row__info">
         <span className="kpi-tile__label heading">{label}</span>
-        <span className="big-number small">{src ? formatCost(src.cost) : "—"}</span>
+        <span className="spend-source-row__meta">
+          {src ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens` : "No data"}
+        </span>
       </div>
-      <div className="spend-source-row__meta">
-        {src ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens` : "No data"}
-      </div>
+      <span className="big-number small">{src ? formatCost(src.cost) : "—"}</span>
     </motion.div>
   );
 }
