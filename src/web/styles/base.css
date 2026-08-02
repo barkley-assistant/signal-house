@@ -263,14 +263,9 @@ table.data td {
   border-bottom: 1px solid var(--card-border);
 }
 /* By-model table row rhythm: alternating rows get a faint zebra tint
-   (variant 2, between the card bg and the hover shade), and hovering a
-   row lifts it to a third, slightly stronger variant so it never
-   collides with the zebra stripes. */
+   so the eye can track across the wide rows. */
 table.data tbody tr:nth-child(odd) {
   background: rgba(255, 255, 255, 0.018);
-}
-table.data tbody tr:hover {
-  background: rgba(255, 255, 255, 0.045);
 }
 /* Model name + family in the by-model table. Desktop: dot + family inline
    after the name. Mobile: family (with its dot) drops to its own line. */
