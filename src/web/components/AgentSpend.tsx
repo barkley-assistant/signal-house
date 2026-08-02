@@ -37,7 +37,6 @@ export function AgentSpend() {
           <div className="spend-subtiles">
             <SpendSource label="OpenCode" source="opencode" usage={usage} />
             <SpendSource label="Hermes" source="hermes" usage={usage} />
-            <SpendCombined usage={usage} />
           </div>
           <DailyUsageChart />
           <ModelTable />
@@ -56,16 +55,6 @@ function SpendSource({ label, source, usage }: { label: string; source: string; 
       <div className="kpi-tile__label heading">{label}</div>
       <div className="big-number small">{src ? formatCost(src.cost) : "—"}</div>
       <div className="kpi-caption">{src ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens ?? 0)} tokens` : "No data"}</div>
-    </div>
-  );
-}
-
-function SpendCombined({ usage }: { usage: UsageLike }) {
-  return (
-    <div className="card spend-tile">
-      <div className="kpi-tile__label heading">Combined</div>
-      <div className="big-number small">{formatCost(usage?.totalCost)}</div>
-      <div className="kpi-caption">{formatNumber(usage?.totalSessions ?? 0)} sessions across sources</div>
     </div>
   );
 }
