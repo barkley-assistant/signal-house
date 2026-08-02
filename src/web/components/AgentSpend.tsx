@@ -6,13 +6,38 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
 import { formatNumber, formatCost, formatCompact } from "../../shared/format";
 
+/** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
+ *  Plain requestAnimationFrame loop (no framer motion-value indirection) so
+ *  it's deterministic. prefers-reduced-motion is honoured by the global CSS
+ *  kill in base.css. */
+function useCountUp(target: number | null, duration = 900) {
+  const [text, setText] = useState<string>(target === null ? "—" : formatCost(0));
+  useEffect(() => {
+    if (target === null) return;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      setText(formatCost(target * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else setText(formatCost(target));
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return text;
+}
+
 export function AgentSpend() {
   const { state } = useDash();
   const usage = state?.usage ?? null;
+  const heroAmount = useCountUp(usage?.totalCost ?? null);
 
   return (
     <section className="card" aria-label="Agent spend">
@@ -24,17 +49,25 @@ export function AgentSpend() {
           <div className="spend-overview">
             <div className="spend-hero">
               <div className="kpi-tile__label">Total cost</div>
-              <div className="spend-hero__amount">{formatCost(usage.totalCost)}</div>
+              <div className="spend-hero__amount">{heroAmount}</div>
               <div className="spend-hero__meta">
                 <span>{formatNumber(usage.totalSessions)} Sessions</span>
                 <span className="spend-hero__dot" aria-hidden="true">·</span>
                 <span>{formatCompact(usage.totalTokens)} Tokens</span>
               </div>
             </div>
-            <div className="spend-sources">
+            <motion.div
+              className="spend-sources"
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } },
+              }}
+            >
               <SpendSource label="OpenCode" source="opencode" usage={usage} />
               <SpendSource label="Hermes" source="hermes" usage={usage} />
-            </div>
+            </motion.div>
           </div>
           <hr className="spend-divider" />
           <DailyUsageChart />
@@ -51,7 +84,13 @@ type UsageLike = NonNullable<ReturnType<typeof useDash.getState>["state"]>["usag
 function SpendSource({ label, source, usage }: { label: string; source: string; usage: UsageLike }) {
   const src = usage?.bySource[source as keyof typeof usage.bySource];
   return (
-    <div className="spend-source-row">
+    <motion.div
+      className="spend-source-row"
+      variants={{
+        hidden: { opacity: 0, y: 6 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
+      }}
+    >
       <div className="spend-source-row__head">
         <span className="kpi-tile__label heading">{label}</span>
         <span className="big-number small">{src ? formatCost(src.cost) : "—"}</span>
@@ -59,7 +98,7 @@ function SpendSource({ label, source, usage }: { label: string; source: string; 
       <div className="spend-source-row__meta">
         {src ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens` : "No data"}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
