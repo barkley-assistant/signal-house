@@ -22,18 +22,18 @@ export interface ApiDeps {
 }
 
 /** GET /api/state */
-export function stateHandler(deps: ApiDeps): Response {
-  return json(buildState(deps.db, deps.config, deps.collectors));
+export function stateHandler(deps: ApiDeps, req: Request): Response {
+  return json(req, buildState(deps.db, deps.config, deps.collectors));
 }
 
 /** GET /api/diagnostics — lazy; the UI only fetches when the panel opens. */
-export function diagnosticsHandler(deps: ApiDeps): Response {
-  return json(buildDiagnostics(deps.db, deps.config, deps.collectors));
+export function diagnosticsHandler(deps: ApiDeps, req: Request): Response {
+  return json(req, buildDiagnostics(deps.db, deps.config, deps.collectors));
 }
 
 /** GET /api/health — lightweight, never triggers collectors. */
-export function healthHandler(_deps: ApiDeps): Response {
-  return json({
+export function healthHandler(_deps: ApiDeps, req: Request): Response {
+  return json(req, {
     status: "ok",
     service: "signal-house",
     version: "2.0.0",
@@ -47,18 +47,18 @@ export function dailyTrendHandler(deps: ApiDeps, req: Request): Response {
   const url = new URL(req.url);
   const to = url.searchParams.get("to") ?? utcDay();
   const from = url.searchParams.get("from") ?? utcDaysAgo(30);
-  return json({ from, to, points: queryDailyTrend(deps.db, from, to) });
+  return json(req, { from, to, points: queryDailyTrend(deps.db, from, to) });
 }
 
 /** POST /api/refresh — manual refresh through the SAME runner as the poller. */
-export async function refreshHandler(deps: ApiDeps): Promise<Response> {
+export async function refreshHandler(deps: ApiDeps, req: Request): Promise<Response> {
   const outcome = await runRefresh(deps.refreshCtx(), "manual");
   setRefreshMeta(deps.db, "last_manual_refresh_at", new Date().toISOString());
   if (outcome.status === "failed" && outcome.results.length === 0) {
     // Lock refused (overlap) → 409 Conflict.
-    return jsonError(409, "refresh already in progress", { inProgress: true });
+    return jsonError(req, 409, "refresh already in progress", { inProgress: true });
   }
-  return json({
+  return json(req, {
     status: outcome.status,
     startedAt: outcome.startedAt,
     finishedAt: outcome.finishedAt,
@@ -68,7 +68,7 @@ export async function refreshHandler(deps: ApiDeps): Promise<Response> {
 }
 
 /** POST /api/refresh/reset-lock — clears ONLY lock state; never data. */
-export function resetLockHandler(deps: ApiDeps): Response {
+export function resetLockHandler(deps: ApiDeps, req: Request): Response {
   deps.lock.reset();
-  return json({ status: "ok", message: "refresh lock cleared" });
+  return json(req, { status: "ok", message: "refresh lock cleared" });
 }

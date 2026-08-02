@@ -6,8 +6,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { RuntimeConfig } from "../config/types";
-import type { PersistedState } from "../config/types";
-import { getAllLatestState } from "../db/latest-state";
+import { parsedLatestStates } from "../db/latest-state";
 import { getRefreshMeta } from "../db/refresh-meta";
 import { resolvePrivacyMap, visibleRepoKeys, uncoveredRepos } from "../privacy/privacy";
 import { redactConfig } from "../config/redact";
@@ -44,9 +43,7 @@ export interface DiagnosticsPayload {
 }
 
 export function buildDiagnostics(db: Database, config: RuntimeConfig, collectors: Collector[], now: number = Date.now()): DiagnosticsPayload {
-  const states = getAllLatestState(db)
-    .map((row) => JSON.parse(row.data) as PersistedState)
-    .filter((s) => s.ok && s.data !== null);
+  const states = parsedLatestStates(db);
 
   const bySource = new Map(states.map((s) => [s.source, s]));
 

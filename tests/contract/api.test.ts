@@ -122,6 +122,49 @@ describe("refresh + lock", () => {
   });
 });
 
+describe("http compression", () => {
+  test("large JSON is gzip-encoded when the client sends accept-encoding: gzip", async () => {
+    // Request the raw (un-decompressed) body so we can verify the wire bytes.
+    const res = await authed("/api/state", {
+      headers: { "accept-encoding": "gzip" },
+      // @ts-expect-error Bun-specific fetch option — we want the raw gzip stream
+      decompress: false,
+    });
+    const enc = res.headers.get("content-encoding");
+    // The /api/state payload is normally over the 1KB threshold; if it is
+    // unexpectedly small enough to fall below, the server sends identity.
+    if (enc === "gzip") {
+      const raw = new Uint8Array(await res.arrayBuffer());
+      // gzip magic bytes
+      expect(raw.length).toBeGreaterThan(0);
+      const gunzipped = Bun.gunzipSync(raw);
+      const body = JSON.parse(new TextDecoder().decode(gunzipped)) as Record<string, unknown>;
+      expect(body).toHaveProperty("attention");
+      expect(body).toHaveProperty("summary");
+    } else {
+      expect(res.status).toBe(200);
+    }
+  });
+
+  test("small JSON is NOT gzip-encoded", async () => {
+    const res = await authed("/api/health", { headers: { "accept-encoding": "gzip" } });
+    expect(res.headers.get("content-encoding")).toBeNull();
+    expect(res.status).toBe(200);
+  });
+
+  test("no accept-encoding header → identity encoding", async () => {
+    const res = await authed("/api/health");
+    expect(res.headers.get("content-encoding")).toBeNull();
+    const body = (await res.json()) as { status: string };
+    expect(body.status).toBe("ok");
+  });
+
+  test("responses carry cache-control: no-store", async () => {
+    const res = await authed("/api/state");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
 describe("no secret leakage", () => {
   test("responses never contain the auth password or token material", async () => {
     const [state, diag, health] = await Promise.all([

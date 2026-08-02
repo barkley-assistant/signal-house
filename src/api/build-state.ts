@@ -8,10 +8,9 @@
 
 import type { Database } from "bun:sqlite";
 import type { RuntimeConfig } from "../config/types";
-import type { PersistedState } from "../config/types";
 import type { Collector } from "../collectors";
-import { getAllLatestState } from "../db/latest-state";
-import { getRefreshMeta } from "../db/refresh-meta";
+import { parsedLatestStates } from "../db/latest-state";
+import { getRefreshMetaMany } from "../db/refresh-meta";
 import { computeAggregates, type UsageAggregate } from "../orchestrator/aggregates";
 import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/privacy";
 import { utcDaysAgo, utcDay } from "../shared/dates";
@@ -68,9 +67,7 @@ export interface StatePayload {
 const ATTENTION_LIMIT = 20;
 
 export function buildState(db: Database, config: RuntimeConfig, collectors: Collector[], now: number = Date.now()): StatePayload {
-  const states = getAllLatestState(db)
-    .map((row) => JSON.parse(row.data) as PersistedState)
-    .filter((s) => s.ok && s.data !== null);
+  const states = parsedLatestStates(db);
 
   const bySource = new Map(states.map((s) => [s.source, s]));
   const aggregates = computeAggregates(states, config);
@@ -196,22 +193,33 @@ export function buildState(db: Database, config: RuntimeConfig, collectors: Coll
 }
 
 function readRefreshState(db: Database, config: RuntimeConfig): RefreshState {
-  const meta = getRefreshMeta<Record<string, unknown>>(db, "refresh_state");
-  const status = (meta?.status as RefreshState["status"]) ?? (getRefreshMeta<string>(db, "last_failure_at") ? "failed" : "idle");
-  const lock = getRefreshMeta<{ token: string; owner: "manual" | "poller"; acquiredAt: number }>(db, "refresh_lock");
+  // One batched query instead of 8 PK lookups per /api/state request.
+  const meta = getRefreshMetaMany(db, [
+    "refresh_state",
+    "refresh_lock",
+    "last_run_started_at",
+    "last_run_finished_at",
+    "last_success_at",
+    "last_failure_at",
+    "last_failure_message",
+    "last_manual_refresh_at",
+  ]);
+  const refreshState = meta.get("refresh_state") as { status?: RefreshState["status"]; partialData?: boolean } | null | undefined;
+  const status = (refreshState?.status ?? (meta.get("last_failure_at") ? "failed" : "idle")) as RefreshState["status"];
+  const lock = meta.get("refresh_lock") as { token: string; owner: "manual" | "poller"; acquiredAt: number } | null | undefined;
   const staleLock = lock ? Date.now() - lock.acquiredAt > config.refresh.lockStaleMs : false;
 
   return {
     status,
     inProgress: !!(lock && !staleLock),
-    lastRunStartedAt: getRefreshMeta<string | null>(db, "last_run_started_at") ?? null,
-    lastRunFinishedAt: getRefreshMeta<string | null>(db, "last_run_finished_at") ?? null,
-    lastSuccessAt: getRefreshMeta<string | null>(db, "last_success_at") ?? null,
-    lastFailureAt: getRefreshMeta<string | null>(db, "last_failure_at") ?? null,
-    lastFailureMessage: getRefreshMeta<string | null>(db, "last_failure_message") ?? null,
-    lastManualRefreshAt: getRefreshMeta<string | null>(db, "last_manual_refresh_at") ?? null,
+    lastRunStartedAt: (meta.get("last_run_started_at") as string | null | undefined) ?? null,
+    lastRunFinishedAt: (meta.get("last_run_finished_at") as string | null | undefined) ?? null,
+    lastSuccessAt: (meta.get("last_success_at") as string | null | undefined) ?? null,
+    lastFailureAt: (meta.get("last_failure_at") as string | null | undefined) ?? null,
+    lastFailureMessage: (meta.get("last_failure_message") as string | null | undefined) ?? null,
+    lastManualRefreshAt: (meta.get("last_manual_refresh_at") as string | null | undefined) ?? null,
     lockOwner: lock && !staleLock ? lock.owner : null,
-    partialData: Boolean(meta?.partialData),
+    partialData: Boolean(refreshState?.partialData),
   };
 }
 

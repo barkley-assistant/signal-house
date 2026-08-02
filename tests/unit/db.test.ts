@@ -6,8 +6,8 @@ import { Database } from "bun:sqlite";
 import { DatabaseOwner, openMemoryDatabase } from "../../src/db/client";
 import { V1DatabaseRefusedError, ensureSchema, looksLikeV1Database } from "../../src/db/init";
 import { insertSnapshot, latestSnapshot, pruneSnapshots } from "../../src/db/snapshots";
-import { setLatestState, getLatestState } from "../../src/db/latest-state";
-import { setRefreshMeta, getRefreshMeta } from "../../src/db/refresh-meta";
+import { setLatestState, getLatestState, parsedLatestStates } from "../../src/db/latest-state";
+import { setRefreshMeta, getRefreshMeta, getRefreshMetaMany } from "../../src/db/refresh-meta";
 import { replaceDayForSource, backfillDaysForSource, queryDailyMetrics } from "../../src/db/daily-metrics";
 import { runRetention } from "../../src/db/retention";
 import { SCHEMA_VERSION } from "../../src/db/schema";
@@ -155,5 +155,77 @@ describe("database", () => {
     expect(remainingDays).not.toContain("2026-01-01");
     expect(remainingDays).toContain("2026-07-31");
     owner2.close();
+  });
+});
+
+describe("parsedLatestStates cache", () => {
+  test("returns parsed states from fresh writes", () => {
+    const owner = openMemoryDatabase();
+    setLatestState(owner.db, "github", { source: "github", ok: true, data: { issues: [] } }, 1000);
+    const states = parsedLatestStates(owner.db);
+    expect(states).toHaveLength(1);
+    expect(states[0].source).toBe("github");
+    owner.close();
+  });
+
+  test("returns cached version on second call without writes", () => {
+    const owner = openMemoryDatabase();
+    setLatestState(owner.db, "github", { source: "github", ok: true, data: { issues: [] } }, 1000);
+    const first = parsedLatestStates(owner.db);
+    const second = parsedLatestStates(owner.db);
+    // Same object identity — the cache was hit
+    expect(second).toBe(first);
+    owner.close();
+  });
+
+  test("invalidates after a new write", () => {
+    const owner = openMemoryDatabase();
+    const source = { source: "github", ok: true, data: { issues: [] } };
+    setLatestState(owner.db, "github", source, 1000);
+    const first = parsedLatestStates(owner.db);
+    setLatestState(owner.db, "github", { source: "github", ok: true, data: { issues: [], pulls: [] } }, 2000);
+    const second = parsedLatestStates(owner.db);
+    expect(second).not.toBe(first);
+    expect(second[0].data).toHaveProperty("pulls");
+    owner.close();
+  });
+
+  test("filters out non-ok states", () => {
+    const owner = openMemoryDatabase();
+    setLatestState(owner.db, "github", { source: "github", ok: false, data: null }, 1000);
+    setLatestState(owner.db, "hermes", { source: "hermes", ok: true, data: { usage: null } }, 1000);
+    const states = parsedLatestStates(owner.db);
+    expect(states).toHaveLength(1);
+    expect(states[0].source).toBe("hermes");
+    owner.close();
+  });
+});
+
+describe("getRefreshMetaMany batch reader", () => {
+  test("reads multiple keys in one query", () => {
+    const owner = openMemoryDatabase();
+    setRefreshMeta(owner.db, "a", 1, 1000);
+    setRefreshMeta(owner.db, "b", "hello", 1000);
+    setRefreshMeta(owner.db, "c", { x: 1 }, 1000);
+    const map = getRefreshMetaMany(owner.db, ["a", "b", "c"]);
+    expect(map.get("a")).toBe(1);
+    expect(map.get("b")).toBe("hello");
+    expect((map.get("c") as Record<string, unknown>).x).toBe(1);
+    owner.close();
+  });
+
+  test("missing keys are absent from the map", () => {
+    const owner = openMemoryDatabase();
+    setRefreshMeta(owner.db, "a", 1, 1000);
+    const map = getRefreshMetaMany(owner.db, ["a", "nope"]);
+    expect(map.get("a")).toBe(1);
+    expect(map.has("nope")).toBe(false);
+    owner.close();
+  });
+
+  test("returns empty map for empty keys list", () => {
+    const owner = openMemoryDatabase();
+    expect(getRefreshMetaMany(owner.db, []).size).toBe(0);
+    owner.close();
   });
 });

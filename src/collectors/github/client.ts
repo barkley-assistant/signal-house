@@ -94,6 +94,10 @@ export interface GitHubClientOptions {
 
 const API_BASE = "https://api.github.com";
 
+// Concurrent repo fetches. GitHub rewards parallelism, but too many concurrent
+// calls trip its secondary rate limits — 5 is a conservative middle ground.
+const REPO_CONCURRENCY = 5;
+
 export class GitHubClient {
   private readonly headers: Record<string, string>;
   private readonly timeoutMs: number;
@@ -210,16 +214,25 @@ export class GitHubClient {
     };
   }
 
-  /** Fetch details for several repos; failures are per-repo, never fatal. */
+  /** Fetch details for several repos with a bounded concurrency pool.
+   *  Failures are per-repo, never fatal; result order matches input order. */
   async fetchRepos(repos: Array<{ owner: string; repo: string }>, since: string): Promise<Array<GitHubRepoDetail | GitHubError>> {
-    const out: Array<GitHubRepoDetail | GitHubError> = [];
-    for (const r of repos) {
-      try {
-        out.push(await this.fetchRepo(r.owner, r.repo, since));
-      } catch (err) {
-        out.push(err instanceof GitHubError ? err : new GitHubError("network", `unexpected GitHub error: ${message(err)}`, true));
+    const out: Array<GitHubRepoDetail | GitHubError> = new Array(repos.length);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const i = next++;
+        if (i >= repos.length) return;
+        const r = repos[i];
+        try {
+          out[i] = await this.fetchRepo(r.owner, r.repo, since);
+        } catch (err) {
+          out[i] = err instanceof GitHubError ? err : new GitHubError("network", `unexpected GitHub error: ${message(err)}`, true);
+        }
       }
-    }
+    };
+    const workers = Array.from({ length: Math.max(1, Math.min(REPO_CONCURRENCY, repos.length)) }, worker);
+    await Promise.all(workers);
     return out;
   }
 }

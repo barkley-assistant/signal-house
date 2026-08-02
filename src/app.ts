@@ -43,7 +43,17 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
     refreshCtx: () => ({ owner, config, collectors, lock }),
   };
 
-  const api = (handler: (deps: ApiDeps) => Response | Promise<Response>) => withAuth(() => handler(deps), config);
+  const api = (handler: (deps: ApiDeps, req: Request) => Response | Promise<Response>) =>
+    withAuth((req) => handler(deps, req), config);
+
+  // Pre-bound route handlers — one closure per route, built once at startup
+  // instead of re-allocating a wrapper per request.
+  const apiState = api(stateHandler);
+  const apiDiagnostics = api(diagnosticsHandler);
+  const apiHealth = api(healthHandler);
+  const apiRefresh = api(refreshHandler);
+  const apiResetLock = api(resetLockHandler);
+  const apiDailyTrend = withAuth((req) => dailyTrendHandler(deps, req), config);
 
   // The SPA is served as static files (dist/public) through the auth'd handler.
   const publicDir = publicDirFor(process.cwd());
@@ -67,13 +77,13 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
       const path = url.pathname;
 
       if (path.startsWith("/api/")) {
-        if (path === "/api/state" && req.method === "GET") return api(stateHandler)(req);
-        if (path === "/api/diagnostics" && req.method === "GET") return api(diagnosticsHandler)(req);
-        if (path === "/api/health" && req.method === "GET") return api(healthHandler)(req);
-        if (path === "/api/refresh" && req.method === "POST") return api(refreshHandler)(req);
-        if (path === "/api/refresh/reset-lock" && req.method === "POST") return api(resetLockHandler)(req);
-        if (path === "/api/daily/spend" && req.method === "GET") return withAuth(() => dailyTrendHandler(deps, req), config)(req);
-        return req.method === "GET" || req.method === "POST" ? notFound() : jsonError(405, "Method Not Allowed");
+        if (path === "/api/state" && req.method === "GET") return apiState(req);
+        if (path === "/api/diagnostics" && req.method === "GET") return apiDiagnostics(req);
+        if (path === "/api/health" && req.method === "GET") return apiHealth(req);
+        if (path === "/api/refresh" && req.method === "POST") return apiRefresh(req);
+        if (path === "/api/refresh/reset-lock" && req.method === "POST") return apiResetLock(req);
+        if (path === "/api/daily/spend" && req.method === "GET") return apiDailyTrend(req);
+        return req.method === "GET" || req.method === "POST" ? notFound(req) : jsonError(req, 405, "Method Not Allowed");
       }
 
       // SPA: serve built assets; any other GET falls back to index.html.
@@ -83,10 +93,10 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
           const asset = serveWebAsset(publicDir, decoded);
           if (asset) return asset;
           const index = serveWebAsset(publicDir, "index.html");
-          return index ?? jsonError(500, "web bundle not built");
+          return index ?? jsonError(req, 500, "web bundle not built");
         }, config)(req);
       }
-      return notFound();
+      return notFound(req);
     },
   });
 
