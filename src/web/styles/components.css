@@ -167,6 +167,27 @@
     grid-template-columns: 1fr;
     gap: 8px;
   }
+  /* On phones the hero figure is huge and the per-source ledger stretches
+     its label/cost apart via space-between. Tier both: smaller hero, and
+     the ledger rows keep label + cost adjacent with breath between rows. */
+  .spend-hero__amount {
+    font-size: 44px;
+  }
+  .spend-hero__meta {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    font-size: 13px;
+  }
+  .spend-source-row {
+    padding: 12px 0;
+  }
+  .spend-source-row__head {
+    justify-content: flex-start;
+    gap: 16px;
+  }
+  .spend-source-row__head .big-number.small {
+    font-size: 22px;
+  }
 }
 /* Separator between the overview (macro + micro) and the chart below. */
 .spend-divider {
