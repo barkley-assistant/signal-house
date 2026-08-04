@@ -48,6 +48,7 @@ export default [
         Node: "readonly",
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
+        performance: "readonly",
         MutationObserver: "readonly",
         getComputedStyle: "readonly",
         matchMedia: "readonly",

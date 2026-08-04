@@ -233,6 +233,12 @@ describe("AgentSpend", () => {
   let chartSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    // happy-dom's requestAnimationFrame doesn't advance on fake timers; mock
+    // it to fire once at the animation's end so useCountUp settles synchronously.
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+      cb(performance.now() + 1000);
+      return 0;
+    });
     // The spend chart (DailyUsageChart) mounts echarts; in happy-dom there is
     // no canvas, so stub echarts.init to keep the AgentSpend render honest.
     chartSpy = vi.spyOn(echarts, "init").mockImplementation(
