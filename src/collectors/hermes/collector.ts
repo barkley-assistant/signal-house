@@ -9,10 +9,9 @@
 
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import type { Collector, CollectorResult, SourceData, UsageDay, ModelUsageRow, UsageSummary } from "../../shared/types";
+import type { Collector, CollectorResult, SourceData, UsageDay, ModelUsageRow } from "../../shared/types";
 import { emptySourceData } from "../../shared/types";
 import { utcDaysAgo } from "../../shared/dates";
-import { WINDOW_PRESETS } from "../../shared/window";
 
 export class HermesCollector implements Collector<SourceData> {
   readonly id = "hermes" as const;
@@ -68,19 +67,20 @@ export class HermesCollector implements Collector<SourceData> {
       const sinceSec = sinceMs / 1000;
       const nowSec = Date.now() / 1000;
       const data = emptySourceData();
-      // Per-window model breakdowns (7/30/90 days) so the dashboard filter can
-      // show an exact by-model table per window. The period query stays the
-      // fallback for sources that predate this field.
-      const byModelByWindow: NonNullable<UsageSummary["byModelByWindow"]> = {};
-      for (const days of WINDOW_PRESETS) {
-        byModelByWindow[days] = queryModelBreakdown(db, Date.parse(`${utcDaysAgo(days)}T00:00:00Z`) / 1000, nowSec);
+      // Per-day model breakdowns ride along on byDay so the orchestrator can
+      // persist signal-house's own per-day per-model history (the dashboard
+      // keeps 90 days of by-model data independent of upstream retention).
+      const byDay = queryUsageByDay(db, sinceSec, nowSec);
+      const modelsByDay = queryModelBreakdownByDay(db, sinceSec, nowSec);
+      for (const day of byDay) {
+        const rows = modelsByDay.get(day.date);
+        if (rows) day.byModel = rows;
       }
       data.usage = {
         source: "hermes",
         periodDays: this.periodDays,
-        byDay: queryUsageByDay(db, sinceSec, nowSec),
+        byDay,
         byModel: queryModelBreakdown(db, sinceSec, nowSec),
-        byModelByWindow,
       };
       if (signal.aborted) {
         return {
@@ -166,6 +166,30 @@ FROM session_model_usage
 WHERE session_id IN (SELECT id FROM sessions WHERE started_at >= ? AND started_at < ?)
 GROUP BY model, billing_provider ORDER BY cost DESC NULLS LAST`;
 
+/** Same breakdown grouped by UTC session day — feeds signal-house's own
+ *  per-day per-model history (daily_metrics), which accumulates 90 days of
+ *  by-model data regardless of upstream retention. */
+const MODEL_BY_DAY_SQL = `
+SELECT strftime('%Y-%m-%d', s.started_at, 'unixepoch') AS day,
+       u.model AS model,
+       u.billing_provider AS provider,
+       COUNT(DISTINCT u.session_id) AS sessions,
+       SUM(u.input_tokens) AS input_tokens,
+       SUM(u.output_tokens) AS output_tokens,
+       SUM(u.reasoning_tokens) AS reasoning_tokens,
+       SUM(u.cache_read_tokens) AS cache_read_tokens,
+       SUM(u.cache_write_tokens) AS cache_write_tokens,
+       SUM(COALESCE(NULLIF(u.actual_cost_usd, 0), u.estimated_cost_usd)) AS cost
+FROM session_model_usage u
+JOIN sessions s ON s.id = u.session_id
+WHERE s.started_at >= ? AND s.started_at < ?
+GROUP BY 1, 2, 3
+ORDER BY 1, cost DESC NULLS LAST`;
+
+interface HermesModelDayRow extends HermesModelRow {
+  day: string;
+}
+
 function queryUsageByDay(db: Database, sinceSec: number, nowSec: number): UsageDay[] {
   const rows = db.query(DAY_SQL).all(sinceSec, nowSec) as unknown as HermesDayRow[];
   return rows.map((r) => ({
@@ -195,4 +219,32 @@ function queryModelBreakdown(db: Database, sinceSec: number, nowSec: number): Mo
     reasoningTokens: r.reasoning_tokens ?? null,
     cost: r.cost ?? null,
   }));
+}
+
+/** Per-UTC-day model rows, keyed by day — the per-day breakdown the
+ *  orchestrator persists into daily_metrics. */
+function queryModelBreakdownByDay(db: Database, sinceSec: number, nowSec: number): Map<string, ModelUsageRow[]> {
+  const rows = db.query(MODEL_BY_DAY_SQL).all(sinceSec, nowSec) as unknown as HermesModelDayRow[];
+  const byDay = new Map<string, ModelUsageRow[]>();
+  for (const r of rows) {
+    if (!r.day) continue;
+    let list = byDay.get(r.day);
+    if (!list) {
+      list = [];
+      byDay.set(r.day, list);
+    }
+    list.push({
+      model: r.model ?? "unknown",
+      provider: r.provider ?? null,
+      sessions: r.sessions,
+      messages: null,
+      inputTokens: r.input_tokens ?? null,
+      outputTokens: r.output_tokens ?? null,
+      cacheReadTokens: r.cache_read_tokens ?? null,
+      cacheWriteTokens: r.cache_write_tokens ?? null,
+      reasoningTokens: r.reasoning_tokens ?? null,
+      cost: r.cost ?? null,
+    });
+  }
+  return byDay;
 }

@@ -9,7 +9,7 @@ import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { machineKey, modelFamily, modelLabel } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
-import type { UsageDay } from "../shared/types";
+import type { ModelUsageRow, UsageDay } from "../shared/types";
 
 export interface UsageAggregate {
   totalSessions: number;
@@ -29,7 +29,7 @@ export interface Aggregates {
   usage: UsageAggregate | null;
 }
 
-export function computeAggregates(states: PersistedState[], config: RuntimeConfig, days: number = DEFAULT_WINDOW_DAYS): Aggregates {
+export function computeAggregates(states: PersistedState[], config: RuntimeConfig, days: number = DEFAULT_WINDOW_DAYS, usageOverride: UsageAggregate | null = null): Aggregates {
   const end = utcDay();
   const start = utcDaysAgo(days);
   const window = { start, end, days };
@@ -87,9 +87,10 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
       ? { staleIssues, stalePrs, thresholdDays: config.staleness.staleThresholdDays }
       : null;
 
-  // Usage — combined across hermes + opencode, windowed to the requested days.
-  const usage =
-    usageStates.length > 0
+  // Usage — signal-house's OWN daily_metrics history wins when it exists
+  // (it accumulates 90 days independent of upstream retention); the snapshot
+  // derivation below is the fallback for a fresh DB before the first refresh.
+  const usage = usageOverride ?? (usageStates.length > 0
       ? {
           totalSessions: sum(usageStates.map((s) => s.data?.usage?.byDay.filter(inWindowDay).reduce((a, d) => a + d.sessions, 0) ?? null)) ?? 0,
           totalMessages: sum(usageStates.map((s) => sum(s.data?.usage?.byDay.filter(inWindowDay).map((d) => d.messages) ?? []))),
@@ -111,9 +112,9 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
               },
             ]),
           ),
-          byModel: combineModels(usageStates, days),
+          byModel: combineModels(usageStates),
         }
-      : null;
+      : null);
 
   return { window, throughput, cycleTime, ci, staleWork, usage };
 }
@@ -135,45 +136,43 @@ function windowCommits(git: NonNullable<PersistedState["data"]> | null, start: s
  * combined cost/tokens/sessions. The display name is the spelling with the
  * most sessions; the family tag (DeepSeek, z.ai, Moonshot, …) replaces the
  * provider label. Sorted by sessions desc — "which model is seeing work".
- *
- * When the collector has precomputed per-window breakdowns
- * (`usage.byModelByWindow`), the window's rows are used so the table matches
- * the selected time range exactly; sources collected before that field
- * existed fall back to the period aggregate (`usage.byModel`).
  */
-function combineModels(states: PersistedState[], days: number): UsageAggregate["byModel"] {
+function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
+  return mergeModelRows(states.flatMap((s) => s.data!.usage!.byModel));
+}
+
+/** Core merge for model rows from ANY source (snapshot byModel or the
+ *  accumulated daily_metrics history) — shared by combineModels and
+ *  metrics/usage-history. */
+export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"] {
   const map = new Map<
     string,
     { model: string; family: string | null; sessions: number; cost: number | null; tokens: number | null; best: number }
   >();
-  for (const s of states) {
-    const usage = s.data!.usage!;
-    const rows = usage.byModelByWindow?.[days] ?? usage.byModel;
-    for (const row of rows) {
-      const key = machineKey(row.model);
-      if (!key) continue;
-      // "unknown" carries no signal — drop it from the display entirely.
-      if (key === "unknown") continue;
-      const existing = map.get(key);
-      if (existing) {
-        existing.sessions += row.sessions;
-        existing.cost = mergeNullSum(existing.cost, row.cost);
-        existing.tokens = mergeNullSum(existing.tokens, rowTokens(row));
-        if (row.sessions > existing.best) {
-          existing.best = row.sessions;
-          existing.model = modelLabel(row.model);
-          existing.family = modelFamily(row.model);
-        }
-      } else {
-        map.set(key, {
-          model: modelLabel(row.model),
-          family: modelFamily(row.model),
-          sessions: row.sessions,
-          cost: row.cost,
-          tokens: rowTokens(row),
-          best: row.sessions,
-        });
+  for (const row of rows) {
+    const key = machineKey(row.model);
+    if (!key) continue;
+    // "unknown" carries no signal — drop it from the display entirely.
+    if (key === "unknown") continue;
+    const existing = map.get(key);
+    if (existing) {
+      existing.sessions += row.sessions;
+      existing.cost = mergeNullSum(existing.cost, row.cost);
+      existing.tokens = mergeNullSum(existing.tokens, rowTokens(row));
+      if (row.sessions > existing.best) {
+        existing.best = row.sessions;
+        existing.model = modelLabel(row.model);
+        existing.family = modelFamily(row.model);
       }
+    } else {
+      map.set(key, {
+        model: modelLabel(row.model),
+        family: modelFamily(row.model),
+        sessions: row.sessions,
+        cost: row.cost,
+        tokens: rowTokens(row),
+        best: row.sessions,
+      });
     }
   }
   return [...map.values()]

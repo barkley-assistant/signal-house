@@ -14,10 +14,9 @@
 
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import type { Collector, CollectorResult, SourceData, UsageDay, ModelUsageRow, UsageSummary } from "../../shared/types";
+import type { Collector, CollectorResult, SourceData, UsageDay, ModelUsageRow } from "../../shared/types";
 import { emptySourceData } from "../../shared/types";
 import { utcDaysAgo } from "../../shared/dates";
-import { WINDOW_PRESETS } from "../../shared/window";
 
 export class OpencodeCollector implements Collector<SourceData> {
   readonly id = "opencode" as const;
@@ -71,19 +70,20 @@ export class OpencodeCollector implements Collector<SourceData> {
 
       const sinceMs = Date.parse(`${utcDaysAgo(this.periodDays)}T00:00:00Z`);
       const data = emptySourceData();
-      // Per-window model breakdowns (7/30/90 days) so the dashboard filter can
-      // show an exact by-model table per window. The period query stays the
-      // fallback for sources that predate this field.
-      const byModelByWindow: NonNullable<UsageSummary["byModelByWindow"]> = {};
-      for (const days of WINDOW_PRESETS) {
-        byModelByWindow[days] = queryModelBreakdown(db, Date.parse(`${utcDaysAgo(days)}T00:00:00Z`));
+      // Per-day model breakdowns ride along on byDay so the orchestrator can
+      // persist signal-house's own per-day per-model history (the dashboard
+      // keeps 90 days of by-model data independent of upstream retention).
+      const byDay = queryUsageByDay(db, sinceMs);
+      const modelsByDay = queryModelBreakdownByDay(db, sinceMs);
+      for (const day of byDay) {
+        const rows = modelsByDay.get(day.date);
+        if (rows) day.byModel = rows;
       }
       data.usage = {
         source: "opencode",
         periodDays: this.periodDays,
-        byDay: queryUsageByDay(db, sinceMs),
+        byDay,
         byModel: queryModelBreakdown(db, sinceMs),
-        byModelByWindow,
       };
       if (signal.aborted) {
         return {
@@ -170,6 +170,31 @@ WHERE json_extract(m.data, '$.role') = 'assistant'
 GROUP BY 1, 2
 ORDER BY cost DESC NULLS LAST`;
 
+/** Same breakdown grouped by UTC session day — feeds signal-house's own
+ *  per-day per-model history (daily_metrics), which accumulates 90 days of
+ *  by-model data regardless of upstream retention. */
+const MODEL_BY_DAY_SQL = `
+SELECT strftime('%Y-%m-%d', s.time_created / 1000, 'unixepoch') AS day,
+       COALESCE(NULLIF(json_extract(m.data, '$.modelID'), ''), json_extract(s.model, '$.id')) AS model,
+       COALESCE(NULLIF(json_extract(m.data, '$.providerID'), ''), json_extract(s.model, '$.providerID')) AS provider,
+       COUNT(DISTINCT m.session_id) AS sessions,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.input'), 0)) AS tokens_input,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.output'), 0)) AS tokens_output,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.reasoning'), 0)) AS tokens_reasoning,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.cache.read'), 0)) AS tokens_cache_read,
+       SUM(COALESCE(json_extract(m.data, '$.tokens.cache.write'), 0)) AS tokens_cache_write,
+       SUM(COALESCE(json_extract(m.data, '$.cost'), 0)) AS cost
+FROM message m
+JOIN session s ON s.id = m.session_id
+WHERE json_extract(m.data, '$.role') = 'assistant'
+  AND s.time_created >= ? AND s.time_created < ?
+GROUP BY 1, 2, 3
+ORDER BY 1, cost DESC NULLS LAST`;
+
+interface OpencodeModelDayRow extends OpencodeModelRow {
+  day: string;
+}
+
 function queryUsageByDay(db: Database, sinceMs: number): UsageDay[] {
   const rows = db.query(DAY_SQL).all(sinceMs, Date.now()) as unknown as OpencodeDayRow[];
   return rows.map((r) => ({
@@ -199,4 +224,32 @@ function queryModelBreakdown(db: Database, sinceMs: number): ModelUsageRow[] {
     reasoningTokens: r.tokens_reasoning ?? null,
     cost: r.cost ?? null,
   }));
+}
+
+/** Per-UTC-day model rows, keyed by day — the per-day breakdown the
+ *  orchestrator persists into daily_metrics. */
+function queryModelBreakdownByDay(db: Database, sinceMs: number): Map<string, ModelUsageRow[]> {
+  const rows = db.query(MODEL_BY_DAY_SQL).all(sinceMs, Date.now()) as unknown as OpencodeModelDayRow[];
+  const byDay = new Map<string, ModelUsageRow[]>();
+  for (const r of rows) {
+    if (!r.day) continue;
+    let list = byDay.get(r.day);
+    if (!list) {
+      list = [];
+      byDay.set(r.day, list);
+    }
+    list.push({
+      model: r.model ?? "unknown",
+      provider: r.provider ?? null,
+      sessions: r.sessions,
+      messages: null,
+      inputTokens: r.tokens_input ?? null,
+      outputTokens: r.tokens_output ?? null,
+      cacheReadTokens: r.tokens_cache_read ?? null,
+      cacheWriteTokens: r.tokens_cache_write ?? null,
+      reasoningTokens: r.tokens_reasoning ?? null,
+      cost: r.cost ?? null,
+    });
+  }
+  return byDay;
 }

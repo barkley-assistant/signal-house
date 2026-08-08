@@ -13,6 +13,7 @@ import { OpencodeCollector } from "../../src/collectors/opencode/collector";
 import { GitCollector, parseRemote, sanitizeRemoteUrl } from "../../src/collectors/git/collector";
 import { mergeTargets, extractGithubTargets } from "../../src/collectors/github/collector";
 import { emptySourceData } from "../../src/shared/types";
+import { utcDay, utcDaysAgo } from "../../src/shared/dates";
 import { GitHubClient, GitHubError } from "../../src/collectors/github/client";
 
 let dir: string;
@@ -137,10 +138,10 @@ describe("hermes collector", () => {
     expect(deepseek!.messages).toBeNull();
   });
 
-  test("byModelByWindow precomputes 7/30/90-day breakdowns from session start times", async () => {
-    // The dashboard time filter (7/30/90 days) needs an exact by-model table
-    // per window. The collector must therefore compute the breakdown for each
-    // preset window, not just the collection period.
+  test("byDay carries per-day model breakdowns (byModel on each day)", async () => {
+    // The dashboard keeps its own 90-day by-model history in daily_metrics;
+    // the collector must expose the per-day model breakdown so the
+    // orchestrator can persist it (it is stripped from snapshots afterward).
     const dbPath = join(dir, "hermes-windows.db");
     const db = new Database(dbPath);
     const nowSec = Math.floor(Date.now() / 1000);
@@ -173,17 +174,17 @@ describe("hermes collector", () => {
     db.close();
     const collector = new HermesCollector(dbPath, 90);
     const result = await collector.collect(new AbortController().signal);
-    const byWindow = result.data!.usage!.byModelByWindow!;
-    expect(Object.keys(byWindow).sort()).toEqual(["30", "7", "90"]);
+    const byDay = result.data!.usage!.byDay;
 
-    const week = byWindow[7]!;
-    const weekModels = week.map((m) => m.model);
-    expect(weekModels).toContain("DeepSeek-V4-Pro");
-    expect(weekModels).not.toContain("Oldmodel");
-
-    const ninety = byWindow[90]!;
-    expect(ninety.map((m) => m.model).sort()).toEqual(["DeepSeek-V4-Pro", "Oldmodel"]);
-    expect(ninety.find((m) => m.model === "Oldmodel")!.cost).toBeCloseTo(9, 5);
+    const today = byDay.find((d) => d.date === utcDay())!;
+    const old = byDay.find((d) => d.date === utcDaysAgo(40))!;
+    expect(today.byModel!.map((m) => m.model)).toEqual(["DeepSeek-V4-Pro"]);
+    expect(old.byModel!.map((m) => m.model)).toEqual(["Oldmodel"]);
+    expect(old.byModel![0].cost).toBeCloseTo(9, 5);
+    // byDay only contains days that HAD sessions — and every such day must
+    // carry its per-day model breakdown.
+    expect(byDay.length).toBeGreaterThan(0);
+    expect(byDay.every((d) => d.byModel !== undefined && d.byModel!.length > 0)).toBe(true);
   });
 });
 

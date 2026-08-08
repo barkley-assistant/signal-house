@@ -10,7 +10,7 @@ import { describe, expect, test } from "bun:test";
 import type { PersistedState } from "../../src/config/types";
 import type { RuntimeConfig } from "../../src/config/types";
 import type { SourceData } from "../../src/shared/types";
-import { computeAggregates } from "../../src/orchestrator/aggregates";
+import { computeAggregates, type UsageAggregate } from "../../src/orchestrator/aggregates";
 import { emptySourceData } from "../../src/shared/types";
 import { utcDay, utcDaysAgo } from "../../src/shared/dates";
 
@@ -101,32 +101,27 @@ describe("computeAggregates windowing", () => {
     expect(a7.usage!.bySource.hermes.cost).toBeCloseTo(8, 5);
   });
 
-  test("byModel uses the precomputed per-window breakdown when present", () => {
-    const data = emptySourceData();
-    data.usage = {
-      source: "opencode",
-      periodDays: 90,
-      byDay: [{ date: utcDay(), sessions: 1, messages: null, tokensInput: 1, tokensOutput: 1, tokensCacheRead: 0, tokensCacheWrite: 0, tokensReasoning: 0, cost: 1 }],
-      byModel: [{ model: "Periodmodel", provider: null, sessions: 9, messages: null, inputTokens: 9, outputTokens: 9, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: 9 }],
-      byModelByWindow: {
-        7: [{ model: "Weekmodel", provider: null, sessions: 2, messages: null, inputTokens: 2, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: 2 }],
-        30: [{ model: "Monthmodel", provider: null, sessions: 5, messages: null, inputTokens: 5, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: 5 }],
-        // no 90 entry → the 90-day view must fall back to the period aggregate
-      },
+  test("usageOverride (daily_metrics history) wins when provided", () => {
+    const s = usageDays(40);
+    const override: UsageAggregate = {
+      totalSessions: 999,
+      totalMessages: null,
+      totalTokens: 1000,
+      totalCost: 42,
+      bySource: { opencode: { sessions: 999, cost: 42, tokens: 1000 } },
+      byModel: [{ model: "Weekmodel", family: null, sessions: 2, cost: 2, tokens: 2 }],
     };
-    const s = state("opencode", data);
+    const a = computeAggregates([s], config, 7, override);
+    expect(a.usage!.totalSessions).toBe(999);
+    expect(a.usage!.totalCost).toBeCloseTo(42, 5);
+    expect(a.usage!.byModel[0].model).toBe("Weekmodel");
+  });
 
-    const a7 = computeAggregates([s], config, 7);
-    expect(a7.usage!.byModel).toHaveLength(1);
-    expect(a7.usage!.byModel[0].model).toBe("Weekmodel");
-    expect(a7.usage!.byModel[0].cost).toBeCloseTo(2, 5);
-
-    const a30 = computeAggregates([s], config, 30);
-    expect(a30.usage!.byModel[0].model).toBe("Monthmodel");
-
-    // Fallback: no byModelByWindow[90] → period byModel.
-    const a90 = computeAggregates([s], config, 90);
-    expect(a90.usage!.byModel[0].model).toBe("Periodmodel");
+  test("usage falls back to the snapshot when no history override is given", () => {
+    const s = usageDays(40);
+    const a = computeAggregates([s], config, 7, null);
+    expect(a.usage!.totalSessions).toBe(8);
+    expect(a.usage!.totalCost).toBeCloseTo(8, 5);
   });
 
   test("cycle time counts only PRs merged inside the window", () => {

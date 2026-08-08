@@ -29,6 +29,22 @@ import { extractGithubTargets } from "../collectors/github/collector";
 import { utcDay } from "../shared/dates";
 import { log } from "../shared/logger";
 
+/** Drop `byDay[].byModel` from a collector payload before snapshot
+ *  persistence. The per-day model detail has already been written to
+ *  daily_metrics (signal-house's own history) by the time this runs; keeping
+ *  it in latest_state/snapshots would bloat every persisted blob (and every
+ *  snapshot row, ~720/day) with data nothing else reads. */
+function stripUsageDayModels(data: SourceData): SourceData {
+  if (!data.usage?.byDay?.some((d) => d.byModel !== undefined)) return data;
+  return {
+    ...data,
+    usage: {
+      ...data.usage,
+      byDay: data.usage.byDay.map(({ byModel: _byModel, ...day }) => day),
+    },
+  };
+}
+
 export interface RefreshContext {
   owner: DatabaseOwner;
   config: RuntimeConfig;
@@ -99,22 +115,26 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
 
       for (const result of succeeded) {
         const data = result.data!;
+        // Per-day model breakdowns feed daily_metrics (signal-house's own
+        // by-model history) but are stripped before snapshot persistence —
+        // latest_state/snapshots stay lean (day totals + period byModel).
+        const rows = deriveDailyRows(result.source, data);
+        const persisted = stripUsageDayModels(data);
         const state: PersistedState = {
           source: result.source,
           ok: true,
           unavailable: result.unavailable,
           capturedAt: nowMs,
           window: { start: utcDay(new Date(nowMs - ctx.config.orchestrator.lookbackDays * 86_400_000)), end: today },
-          data,
+          data: persisted,
           warnings: result.warnings,
           errors: result.errors,
-          usage: data.usage,
+          usage: persisted.usage,
         };
         setLatestState(ctx.owner.db, result.source, state, nowMs);
-        insertSnapshot(ctx.owner.db, result.source, nowMs, data);
+        insertSnapshot(ctx.owner.db, result.source, nowMs, persisted);
 
         // Same-day metrics replace; earlier days insert-or-ignore (stay intact).
-        const rows = deriveDailyRows(result.source, data);
         const todayRows = rows.filter((r) => r.date === today);
         const olderRows = rows.filter((r) => r.date !== today);
         if (todayRows.length > 0) replaceDayForSource(ctx.owner.db, today, result.source, todayRows);

@@ -72,6 +72,19 @@ export function deriveDailyRows(source: CollectorId, data: SourceData): DailyWri
       bump(day.date, "tokens.cache_write", day.tokensCacheWrite);
       bump(day.date, "tokens.reasoning", day.tokensReasoning);
       bump(day.date, "cost.total", day.cost);
+      // Per-day per-model rows (tags carry the raw model name) — signal-house's
+      // OWN by-model history. The aggregate layer groups them by normalized
+      // model key across sources; nothing here needs the upstream tool alive.
+      for (const row of day.byModel ?? []) {
+        const tags = { model: row.model };
+        bump(day.date, "model.sessions", row.sessions, tags);
+        bump(day.date, "model.cost", row.cost, tags);
+        bump(day.date, "model.tokens_input", row.inputTokens, tags);
+        bump(day.date, "model.tokens_output", row.outputTokens, tags);
+        bump(day.date, "model.tokens_cache_read", row.cacheReadTokens, tags);
+        bump(day.date, "model.tokens_cache_write", row.cacheWriteTokens, tags);
+        bump(day.date, "model.tokens_reasoning", row.reasoningTokens, tags);
+      }
     }
   }
 

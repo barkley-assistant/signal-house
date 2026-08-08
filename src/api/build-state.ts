@@ -15,6 +15,7 @@ import { computeAggregates, type UsageAggregate } from "../orchestrator/aggregat
 import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/privacy";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
+import { queryUsageAggregate } from "../metrics/usage-history";
 import type { RefreshState } from "../shared/types";
 
 export interface AttentionItem {
@@ -71,7 +72,12 @@ export function buildState(db: Database, config: RuntimeConfig, collectors: Coll
   const states = parsedLatestStates(db);
 
   const bySource = new Map(states.map((s) => [s.source, s]));
-  const aggregates = computeAggregates(states, config, days);
+  // Usage reads signal-house's own accumulated daily_metrics history for the
+  // window (it keeps 90 days independent of upstream retention); the snapshot
+  // derivation is the fallback inside computeAggregates.
+  const start = utcDaysAgo(days);
+  const end = utcDay();
+  const aggregates = computeAggregates(states, config, days, queryUsageAggregate(db, start, end));
 
   const allRepos = states.flatMap((s) => s.data!.repositories);
   const privacyMap = resolvePrivacyMap(allRepos);

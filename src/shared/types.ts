@@ -105,6 +105,14 @@ export interface UsageDay {
   tokensReasoning: number | null;
   /** null = this source has no cost telemetry (or cost unknown for that day). */
   cost: number | null;
+  /**
+   * Per-model breakdown for THIS day, when the collector could compute it.
+   * Used only to feed signal-house's own daily_metrics history (the model
+   * rows are persisted per day so the dashboard keeps 90 days of by-model
+   * history independent of upstream retention); stripped before the snapshot
+   * is persisted so latest_state/snapshots stay lean.
+   */
+  byModel?: ModelUsageRow[];
 }
 
 /** Per-model usage across the collection window. */
@@ -127,14 +135,6 @@ export interface UsageSummary {
   byDay: UsageDay[];
   /** Model breakdown over the whole collection window (periodDays). */
   byModel: ModelUsageRow[];
-  /**
-   * Model breakdown precomputed per dashboard window preset (7/30/90 days).
-   * The dashboard filter can then show an exact by-model table for the
-   * selected window without carrying per-day model detail in the snapshot.
-   * Absent for sources collected before this field existed; consumers fall
-   * back to `byModel` (the period aggregate).
-   */
-  byModelByWindow?: Partial<Record<number, ModelUsageRow[]>>;
 }
 
 /** Everything a collector observes about its source in one pass. */

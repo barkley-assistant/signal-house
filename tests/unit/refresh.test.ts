@@ -82,6 +82,40 @@ describe("refresh runner", () => {
     owner.close();
   });
 
+  test("per-day model breakdowns reach daily_metrics but are stripped from snapshots", async () => {
+    const owner = openMemoryDatabase();
+    const hermes = stubCollector("hermes", {
+      data: {
+        usage: {
+          source: "hermes",
+          periodDays: 30,
+          byDay: [
+            {
+              date: "2026-07-31", sessions: 5, messages: 100, tokensInput: 1000, tokensOutput: 100,
+              tokensCacheRead: 0, tokensCacheWrite: 0, tokensReasoning: 0, cost: 2.5,
+              byModel: [{ model: "DeepSeek-V4-Pro", provider: "custom", sessions: 5, messages: null, inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: 2.5 }],
+            },
+          ],
+          byModel: [{ model: "DeepSeek-V4-Pro", provider: "custom", sessions: 5, messages: 100, inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: 2.5 }],
+        },
+      },
+    });
+    const out = await runRefresh(ctx(owner, [hermes]), "manual");
+    expect(out.status).toBe("success");
+
+    // daily_metrics carries the per-day per-model history (tags = model name).
+    const modelRows = queryDailyMetrics(owner.db, { from: "2026-07-31", to: "2026-07-31", metric: "model.sessions" });
+    expect(modelRows.length).toBe(1);
+    expect(modelRows[0].tags.model).toBe("DeepSeek-V4-Pro");
+    expect(modelRows[0].value).toBe(5);
+
+    // The snapshot is stripped: no byModel inside byDay (keeps blobs lean).
+    const state = getLatestState(owner.db, "hermes");
+    const parsed = JSON.parse(state!.data) as { data: { usage: { byDay: Array<Record<string, unknown>> } } };
+    expect(parsed.data.usage.byDay[0]).not.toHaveProperty("byModel");
+    owner.close();
+  });
+
   test("a successful refresh clears prior failure metadata", async () => {
     const owner = openMemoryDatabase();
     // Prime a failure record (as if a previous refresh had failed)
