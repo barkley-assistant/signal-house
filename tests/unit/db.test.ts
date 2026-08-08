@@ -81,7 +81,7 @@ describe("database", () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  test("daily_metrics: same-day replace, earlier days stay intact", () => {
+  test("daily_metrics: same-day replace, earlier days refreshed only when values differ", () => {
     const owner2 = openMemoryDatabase();
     const db = owner2.db;
     replaceDayForSource(db, "2026-07-30", "hermes", [
@@ -90,15 +90,32 @@ describe("database", () => {
     backfillDaysForSource(db, "2026-07-30", "hermes", [
       { date: "2026-07-30", metric: "cost.total", value: 5, tags: {} },
     ]);
-    // backfill on the same (earlier) day must NOT clobber existing rows, but may add new metrics
+    // backfill on an earlier day must NOT clobber existing rows, but may add new metrics
     expect(queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes" }).length).toBe(2);
+
+    // ...but a CHANGED value for an existing metric DOES refresh history
+    // (upstream cost corrections, e.g. hermes estimated → actual).
+    backfillDaysForSource(db, "2026-07-30", "hermes", [
+      { date: "2026-07-30", metric: "cost.total", value: 7, tags: {} },
+    ]);
+    const updated = queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes", metric: "cost.total" });
+    expect(updated[0].value).toBe(7);
+
+    // An identical value is a no-op: observed_at does not move.
+    const before = queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes", metric: "cost.total" });
+    backfillDaysForSource(db, "2026-07-30", "hermes", [
+      { date: "2026-07-30", metric: "cost.total", value: 7, tags: {} },
+    ]);
+    const after = queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes", metric: "cost.total" });
+    expect(after[0].value).toBe(7);
+    expect(after[0].observedAt).toBe(before[0].observedAt);
 
     // replace today's day entirely
     replaceDayForSource(db, "2026-07-31", "hermes", [
       { date: "2026-07-31", metric: "sessions.total", value: 3, tags: {} },
     ]);
     expect(queryDailyMetrics(db, { from: "2026-07-31", to: "2026-07-31", source: "hermes" }).length).toBe(1);
-    // earlier day untouched
+    // earlier day untouched (the replace only touches its own day)
     expect(queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes" }).length).toBe(2);
     owner2.close();
   });

@@ -134,7 +134,8 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
         setLatestState(ctx.owner.db, result.source, state, nowMs);
         insertSnapshot(ctx.owner.db, result.source, nowMs, persisted);
 
-        // Same-day metrics replace; earlier days insert-or-ignore (stay intact).
+        // Same-day metrics replace; earlier days upsert (refresh rows whose
+        // values changed, leave pruned-upstream days untouched).
         const todayRows = rows.filter((r) => r.date === today);
         const olderRows = rows.filter((r) => r.date !== today);
         if (todayRows.length > 0) replaceDayForSource(ctx.owner.db, today, result.source, todayRows);

@@ -46,19 +46,28 @@ export function replaceDayForSource(db: Database, date: string, source: string, 
 }
 
 /**
- * Backfill earlier days without touching existing rows.
- * INSERT OR IGNORE skips rows whose (date, source, metric, tags) already exist —
- * that is the "earlier days remain intact" guarantee.
+ * Backfill earlier days, refreshing rows when the collector has newer truth.
+ *
+ * Upsert semantics: an existing (date, source, metric, tags) row is updated
+ * only when the value differs — upstream cost corrections (hermes estimated
+ * → actual, etc.) propagate into signal-house's history, while identical
+ * values cause no write at all. Days the collector no longer emits (upstream
+ * pruned the sessions) are left untouched, so signal-house's own history
+ * survives upstream retention.
  */
 export function backfillDaysForSource(db: Database, date: string, source: string, rows: DailyWrite[]): number {
   if (rows.length === 0) return 0;
-  const insert = db.query(
-    "INSERT OR IGNORE INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+  const upsert = db.query(
+    `INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(date, source, metric, tags) DO UPDATE SET
+       value = excluded.value,
+       observed_at = excluded.observed_at
+     WHERE daily_metrics.value IS NOT excluded.value`,
   );
   const observedAt = Date.now();
   let n = 0;
   for (const r of rows) {
-    insert.run(date, source, r.metric, r.value, JSON.stringify(r.tags), observedAt);
+    upsert.run(date, source, r.metric, r.value, JSON.stringify(r.tags), observedAt);
     n++;
   }
   return n;
