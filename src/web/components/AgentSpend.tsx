@@ -113,10 +113,15 @@ function DailyUsageChart() {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const [loading, setLoading] = useState(true);
-  // Axis peaks are computed once on first data load and frozen — they
-  // define the chart's y-scale. Recomputing them on every filter change
-  // would rescale the axes to the filtered subset, which is jarring.
+  const days = useDash((s) => s.days);
+  // Axis peaks are computed once per window and frozen within it — they
+  // define the chart's y-scale. A deliberate window change rescales to fit
+  // the new data; the 30s poll within a window must not (recomputing on
+  // every refresh would make the axes jump around).
   const peaksRef = useRef<{ cost: number; tokens: number } | null>(null);
+  // Latest requested window — lets a slow response for an older window be
+  // discarded when the user switches 30 → 7 → 90 quickly.
+  const requestedDaysRef = useRef(days);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -133,9 +138,16 @@ function DailyUsageChart() {
   }, []);
 
   useEffect(() => {
+    requestedDaysRef.current = days;
+    peaksRef.current = null; // deliberate window change → rescale axes
+    // No skeleton here: the previous window's data stays visible until the
+    // new window's points arrive, which reads better than flashing.
+  }, [days]);
+
+  useEffect(() => {
     let disposed = false;
-    void loadTrend().then((points) => {
-      if (disposed || !chartRef.current) return;
+    void loadTrend(days).then((points) => {
+      if (disposed || !chartRef.current || requestedDaysRef.current !== days) return;
       const dates = points.map((p) => p.date);
       const fmtDay = (d: string) => {
         const [y, m, day] = d.split("-").map(Number);
@@ -284,7 +296,7 @@ function DailyUsageChart() {
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [days]);
 
   return (
     <div style={{ marginTop: 16, marginLeft: "-1%", marginRight: "-1%" }}>

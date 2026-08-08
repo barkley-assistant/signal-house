@@ -9,6 +9,7 @@ import pkg from "../../../package.json";
 import { HealthStrip } from "../components/HealthStrip";
 import { AttentionQueue } from "../components/AttentionQueue";
 import { AgentSpend } from "../components/AgentSpend";
+import { TimeRangeFilter } from "../components/TimeRangeFilter";
 import { HeaderRefreshChip } from "../components/RefreshStatus";
 import { SourceDiagnostics } from "../components/SourceDiagnostics";
 import { Logo } from "../components/Logo";
@@ -43,6 +44,10 @@ export function App() {
       )}
 
       <main className="app-main">
+        <div className="app-filter-row">
+          <TimeRangeFilter />
+        </div>
+
         <HealthStrip state={state} />
 
         <AgentSpend />

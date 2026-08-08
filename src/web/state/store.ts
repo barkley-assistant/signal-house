@@ -6,8 +6,34 @@ import { create } from "zustand";
 import type { StatePayload } from "../../api/build-state";
 import type { DiagnosticsPayload } from "../../diagnostics/sources";
 import { formatNumber, formatCompact } from "../../shared/format";
+import { DEFAULT_WINDOW_DAYS, isWindowDays, type WindowDays } from "../../shared/window";
 
 export type { StatePayload, DiagnosticsPayload };
+
+/** localStorage key for the selected time window (same persistence pattern
+ *  as the by-model sort state). */
+export const WINDOW_STORAGE_KEY = "signal-house:window-days";
+
+export function readStoredDays(): WindowDays {
+  try {
+    const raw = localStorage.getItem(WINDOW_STORAGE_KEY);
+    if (raw !== null) {
+      const n = Number(raw);
+      if (isWindowDays(n)) return n;
+    }
+  } catch {
+    /* storage unavailable or corrupt — fall through to the default */
+  }
+  return DEFAULT_WINDOW_DAYS;
+}
+
+export function storeWindowDays(days: WindowDays): void {
+  try {
+    localStorage.setItem(WINDOW_STORAGE_KEY, String(days));
+  } catch {
+    /* storage unavailable — the window still applies for this session */
+  }
+}
 
 export interface RefreshStatus {
   inProgress: boolean;
@@ -27,6 +53,8 @@ interface DashState {
   diagnostics: DiagnosticsPayload | null;
   diagnosticsLoading: boolean;
   diagnosticsOpen: boolean;
+  /** Selected dashboard time window (7/30/90 days), restored from storage. */
+  days: WindowDays;
   setState(payload: StatePayload): void;
   setLoading(v: boolean): void;
   setError(e: string | null): void;
@@ -35,6 +63,7 @@ interface DashState {
   setDiagnostics(p: DiagnosticsPayload | null): void;
   setDiagnosticsLoading(v: boolean): void;
   setDiagnosticsOpen(v: boolean): void;
+  setDays(d: WindowDays): void;
 }
 
 export const useDash = create<DashState>((set) => ({
@@ -47,6 +76,7 @@ export const useDash = create<DashState>((set) => ({
   diagnostics: null,
   diagnosticsLoading: false,
   diagnosticsOpen: false,
+  days: readStoredDays(),
   setState: (p) => set({ state: p, lastStateSync: Date.now(), loading: false }),
   setLoading: (v) => set({ loading: v }),
   setError: (e) => set({ error: e, loading: false }),
@@ -55,6 +85,7 @@ export const useDash = create<DashState>((set) => ({
   setDiagnostics: (p) => set({ diagnostics: p, diagnosticsLoading: false }),
   setDiagnosticsLoading: (v) => set({ diagnosticsLoading: v }),
   setDiagnosticsOpen: (v) => set({ diagnosticsOpen: v }),
+  setDays: (d) => set({ days: d }),
 }));
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -67,9 +98,9 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function loadState(): Promise<void> {
-  const { setState, setError } = useDash.getState();
+  const { setState, setError, days } = useDash.getState();
   try {
-    const payload = await fetchJson<StatePayload>("/api/state");
+    const payload = await fetchJson<StatePayload>(`/api/state?days=${days}`);
     setState(payload);
   } catch (err) {
     setError((err as Error).message);
@@ -125,10 +156,10 @@ export interface TrendPoint {
   tokens: number | null;
 }
 
-/** Load the daily spend trend for the Agent Spend chart. */
-export async function loadTrend(): Promise<TrendPoint[]> {
+/** Load the daily spend trend for the Agent Spend chart, windowed. */
+export async function loadTrend(days: WindowDays): Promise<TrendPoint[]> {
   try {
-    const res = await fetchJson<{ points: TrendPoint[] }>("/api/daily/spend");
+    const res = await fetchJson<{ points: TrendPoint[] }>(`/api/daily/spend?days=${days}`);
     return res.points;
   } catch {
     return [];

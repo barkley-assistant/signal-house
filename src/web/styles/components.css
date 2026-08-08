@@ -300,3 +300,59 @@
     gap: 8px;
   }
 }
+
+/* Time-range filter — segmented control scoping the whole dashboard.
+   Card grammar: card surface, 1px border, radius; the active window gets
+   the accent tint so the current scope is obvious at a glance. Vertical
+   rhythm with the health strip comes from .app-main's gap — no margin here. */
+.app-filter-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.time-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+
+.time-filter__btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 14px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.time-filter__btn:hover {
+  color: var(--text-primary);
+}
+
+.time-filter__btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.time-filter__btn.is-active {
+  color: var(--primary);
+  background: var(--subtle);
+}
+
+/* Mobile: bigger tap targets (WCAG 2.5.8 floor is 24px; thumb-reach comfort
+   wants ~32px on a dense dashboard). */
+@media (max-width: 480px) {
+  .time-filter__btn {
+    padding: 10px 14px;
+  }
+}
