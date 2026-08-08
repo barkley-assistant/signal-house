@@ -68,4 +68,21 @@ test.describe("dashboard (desktop)", () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
     expect(overflow).toBe(false);
   });
+
+  test("time-range filter switches the whole dashboard window", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("group", { name: "Time range" })).toBeVisible();
+    // Default window is 30 days.
+    await expect(page.getByRole("button", { name: "30 days" })).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "90 days" }).click();
+    await expect(page.getByRole("button", { name: "90 days" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "30 days" })).toHaveAttribute("aria-pressed", "false");
+    // The window survives a reload (localStorage).
+    await page.reload();
+    await expect(page.getByRole("button", { name: "90 days" })).toHaveAttribute("aria-pressed", "true");
+    // Back to 30 days for a clean state.
+    await page.getByRole("button", { name: "30 days" }).click();
+    await expect(page.getByRole("button", { name: "30 days" })).toHaveAttribute("aria-pressed", "true");
+  });
 });

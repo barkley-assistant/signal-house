@@ -64,8 +64,8 @@ One process, six endpoints. All require HTTP Basic auth when `SECRET_HOUSE_ACCES
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/state` | Full dashboard payload (privacy-filtered) |
-| GET | `/api/daily/spend` | Per-day cost + tokens trend for the Agent Spend chart |
+| GET | `/api/state` | Full dashboard payload (privacy-filtered). Optional `?days=7\|30\|90` scopes every windowed metric (default 30) |
+| GET | `/api/daily/spend` | Per-day cost + tokens trend for the Agent Spend chart. `?days=7\|30\|90` picks the window (default 30) |
 | GET | `/api/diagnostics` | Collector health + discovered repos (lazy, privacy-applied) |
 | GET | `/api/health` | Liveness check — never triggers collectors |
 | POST | `/api/refresh` | Manual refresh, concurrency-guarded (409 when busy) |
