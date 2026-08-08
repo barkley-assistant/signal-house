@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { startServer, type TestServer } from "./test-server";
 import { runRefresh } from "../../src/orchestrator/refresh";
 import { createCollectors } from "../../src/collectors";
+import { utcDaysAgo } from "../../src/shared/dates";
 
 let dir: string;
 let server: TestServer;
@@ -88,6 +89,39 @@ describe("state contract", () => {
     const res = await authed("/api/state");
     const body = (await res.json()) as { status: { freshness: { state: string } } };
     expect(["fresh", "stale", "missing"]).toContain(body.status.freshness.state);
+  });
+
+  test("?days=7|30|90 scopes the window; unknown values fall back to 30", async () => {
+    const d7 = (await (await authed("/api/state?days=7")).json()) as { window: { days: number; start: string } };
+    expect(d7.window.days).toBe(7);
+    expect(d7.window.start).toBe(utcDaysAgo(7));
+
+    const d30 = (await (await authed("/api/state?days=30")).json()) as { window: { days: number } };
+    expect(d30.window.days).toBe(30);
+
+    const d90 = (await (await authed("/api/state?days=90")).json()) as { window: { days: number; start: string } };
+    expect(d90.window.days).toBe(90);
+    expect(d90.window.start).toBe(utcDaysAgo(90));
+
+    // A custom window is not a preset — the API must not silently honor it
+    // (collectors only precompute the presets, so the data would be partial).
+    const bad = (await (await authed("/api/state?days=45")).json()) as { window: { days: number } };
+    expect(bad.window.days).toBe(30);
+    const junk = (await (await authed("/api/state?days=banana")).json()) as { window: { days: number } };
+    expect(junk.window.days).toBe(30);
+  });
+
+  test("/api/daily/spend?days=N maps to the matching from window", async () => {
+    const res = await authed("/api/daily/spend?days=90");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { from: string; to: string; days: number; points: unknown[] };
+    expect(body.days).toBe(90);
+    expect(body.from).toBe(utcDaysAgo(90));
+    expect(body.to).toBe(utcDaysAgo(0));
+    expect(Array.isArray(body.points)).toBe(true);
+
+    const fallback = (await (await authed("/api/daily/spend?days=13")).json()) as { days: number };
+    expect(fallback.days).toBe(30);
   });
 });
 

@@ -8,6 +8,8 @@ import type { RuntimeConfig } from "../config/types";
 import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { machineKey, modelFamily, modelLabel } from "../shared/models";
+import { DEFAULT_WINDOW_DAYS } from "../shared/window";
+import type { UsageDay } from "../shared/types";
 
 export interface UsageAggregate {
   totalSessions: number;
@@ -27,10 +29,10 @@ export interface Aggregates {
   usage: UsageAggregate | null;
 }
 
-export function computeAggregates(states: PersistedState[], config: RuntimeConfig): Aggregates {
+export function computeAggregates(states: PersistedState[], config: RuntimeConfig, days: number = DEFAULT_WINDOW_DAYS): Aggregates {
   const end = utcDay();
-  const start = utcDaysAgo(config.orchestrator.lookbackDays);
-  const window = { start, end, days: config.orchestrator.lookbackDays };
+  const start = utcDaysAgo(days);
+  const window = { start, end, days };
 
   const github = states.find((s) => s.source === "github")?.data ?? null;
   const git = states.find((s) => s.source === "git")?.data ?? null;
@@ -38,6 +40,7 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
 
   // Throughput — counts inside the window (issues/PRs from github, commits from git).
   const inWindow = (iso: string | null): boolean => !!iso && iso.slice(0, 10) >= start && iso.slice(0, 10) <= end;
+  const inWindowDay = (d: UsageDay): boolean => d.date >= start && d.date <= end;
   const throughput = github
     ? {
         issuesOpened: github.issues.filter((i) => inWindow(i.createdAt)).length,
@@ -48,8 +51,8 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
       }
     : null;
 
-  // Cycle time — merged PRs: mergedAt − createdAt (seconds).
-  const merged = (github?.pullRequests ?? []).filter((p) => p.mergedAt && p.createdAt);
+  // Cycle time — merged PRs inside the window: mergedAt − createdAt (seconds).
+  const merged = (github?.pullRequests ?? []).filter((p) => p.mergedAt && p.createdAt && inWindow(p.mergedAt));
   const cycleTimes = merged.map((p) => (Date.parse(p.mergedAt!) - Date.parse(p.createdAt)) / 1000);
   const cycleTime =
     merged.length > 0
@@ -84,31 +87,31 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
       ? { staleIssues, stalePrs, thresholdDays: config.staleness.staleThresholdDays }
       : null;
 
-  // Usage — combined across hermes + opencode.
+  // Usage — combined across hermes + opencode, windowed to the requested days.
   const usage =
     usageStates.length > 0
       ? {
-          totalSessions: sum(usageStates.map((s) => s.data?.usage?.byDay.reduce((a, d) => a + d.sessions, 0) ?? null)) ?? 0,
-          totalMessages: sum(usageStates.map((s) => sum(s.data?.usage?.byDay.map((d) => d.messages) ?? []))),
+          totalSessions: sum(usageStates.map((s) => s.data?.usage?.byDay.filter(inWindowDay).reduce((a, d) => a + d.sessions, 0) ?? null)) ?? 0,
+          totalMessages: sum(usageStates.map((s) => sum(s.data?.usage?.byDay.filter(inWindowDay).map((d) => d.messages) ?? []))),
           totalTokens: sum(
             usageStates.map((s) =>
-              sum(s.data?.usage?.byDay.flatMap((d) => [d.tokensInput, d.tokensOutput, d.tokensCacheRead, d.tokensCacheWrite, d.tokensReasoning]) ?? []),
+              sum(s.data?.usage?.byDay.filter(inWindowDay).flatMap((d) => [d.tokensInput, d.tokensOutput, d.tokensCacheRead, d.tokensCacheWrite, d.tokensReasoning]) ?? []),
             ),
           ),
-          totalCost: sum(usageStates.map((s) => sum(s.data?.usage?.byDay.map((d) => d.cost) ?? []))),
+          totalCost: sum(usageStates.map((s) => sum(s.data?.usage?.byDay.filter(inWindowDay).map((d) => d.cost) ?? []))),
           bySource: Object.fromEntries(
             usageStates.map((s) => [
               s.source,
               {
-                sessions: s.data!.usage!.byDay.reduce((a, d) => a + d.sessions, 0),
-                cost: sum(s.data!.usage!.byDay.map((d) => d.cost)),
+                sessions: s.data!.usage!.byDay.filter(inWindowDay).reduce((a, d) => a + d.sessions, 0),
+                cost: sum(s.data!.usage!.byDay.filter(inWindowDay).map((d) => d.cost)),
                 tokens: sum(
-                  s.data!.usage!.byDay.flatMap((d) => [d.tokensInput, d.tokensOutput, d.tokensCacheRead, d.tokensCacheWrite, d.tokensReasoning]),
+                  s.data!.usage!.byDay.filter(inWindowDay).flatMap((d) => [d.tokensInput, d.tokensOutput, d.tokensCacheRead, d.tokensCacheWrite, d.tokensReasoning]),
                 ),
               },
             ]),
           ),
-          byModel: combineModels(usageStates),
+          byModel: combineModels(usageStates, days),
         }
       : null;
 
@@ -132,14 +135,21 @@ function windowCommits(git: NonNullable<PersistedState["data"]> | null, start: s
  * combined cost/tokens/sessions. The display name is the spelling with the
  * most sessions; the family tag (DeepSeek, z.ai, Moonshot, …) replaces the
  * provider label. Sorted by sessions desc — "which model is seeing work".
+ *
+ * When the collector has precomputed per-window breakdowns
+ * (`usage.byModelByWindow`), the window's rows are used so the table matches
+ * the selected time range exactly; sources collected before that field
+ * existed fall back to the period aggregate (`usage.byModel`).
  */
-function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
+function combineModels(states: PersistedState[], days: number): UsageAggregate["byModel"] {
   const map = new Map<
     string,
     { model: string; family: string | null; sessions: number; cost: number | null; tokens: number | null; best: number }
   >();
   for (const s of states) {
-    for (const row of s.data!.usage!.byModel) {
+    const usage = s.data!.usage!;
+    const rows = usage.byModelByWindow?.[days] ?? usage.byModel;
+    for (const row of rows) {
       const key = machineKey(row.model);
       if (!key) continue;
       // "unknown" carries no signal — drop it from the display entirely.

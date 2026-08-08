@@ -14,9 +14,10 @@
 
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import type { Collector, CollectorResult, SourceData, UsageDay, ModelUsageRow } from "../../shared/types";
+import type { Collector, CollectorResult, SourceData, UsageDay, ModelUsageRow, UsageSummary } from "../../shared/types";
 import { emptySourceData } from "../../shared/types";
 import { utcDaysAgo } from "../../shared/dates";
+import { WINDOW_PRESETS } from "../../shared/window";
 
 export class OpencodeCollector implements Collector<SourceData> {
   readonly id = "opencode" as const;
@@ -70,11 +71,19 @@ export class OpencodeCollector implements Collector<SourceData> {
 
       const sinceMs = Date.parse(`${utcDaysAgo(this.periodDays)}T00:00:00Z`);
       const data = emptySourceData();
+      // Per-window model breakdowns (7/30/90 days) so the dashboard filter can
+      // show an exact by-model table per window. The period query stays the
+      // fallback for sources that predate this field.
+      const byModelByWindow: NonNullable<UsageSummary["byModelByWindow"]> = {};
+      for (const days of WINDOW_PRESETS) {
+        byModelByWindow[days] = queryModelBreakdown(db, Date.parse(`${utcDaysAgo(days)}T00:00:00Z`));
+      }
       data.usage = {
         source: "opencode",
         periodDays: this.periodDays,
         byDay: queryUsageByDay(db, sinceMs),
         byModel: queryModelBreakdown(db, sinceMs),
+        byModelByWindow,
       };
       if (signal.aborted) {
         return {

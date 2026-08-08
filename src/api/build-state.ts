@@ -14,6 +14,7 @@ import { getRefreshMetaMany } from "../db/refresh-meta";
 import { computeAggregates, type UsageAggregate } from "../orchestrator/aggregates";
 import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/privacy";
 import { utcDaysAgo, utcDay } from "../shared/dates";
+import { DEFAULT_WINDOW_DAYS } from "../shared/window";
 import type { RefreshState } from "../shared/types";
 
 export interface AttentionItem {
@@ -66,11 +67,11 @@ export interface StatePayload {
 
 const ATTENTION_LIMIT = 20;
 
-export function buildState(db: Database, config: RuntimeConfig, collectors: Collector[], now: number = Date.now()): StatePayload {
+export function buildState(db: Database, config: RuntimeConfig, collectors: Collector[], now: number = Date.now(), days: number = DEFAULT_WINDOW_DAYS): StatePayload {
   const states = parsedLatestStates(db);
 
   const bySource = new Map(states.map((s) => [s.source, s]));
-  const aggregates = computeAggregates(states, config);
+  const aggregates = computeAggregates(states, config, days);
 
   const allRepos = states.flatMap((s) => s.data!.repositories);
   const privacyMap = resolvePrivacyMap(allRepos);

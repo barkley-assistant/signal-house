@@ -16,7 +16,8 @@ describe("config", () => {
     expect(c.poller.intervalSeconds).toBe(300);
     expect(c.privacy.showPrivateRepoItems).toBe(false);
     expect(c.auth.enabled).toBe(false);
-    expect(c.orchestrator.lookbackDays).toBe(28);
+    expect(c.orchestrator.lookbackDays).toBe(90);
+    expect(c.usage.periodDays).toBe(90);
     expect(c.retention.snapshotsDays).toBe(30);
     expect(c.retention.dailyMetricsDays).toBe(90);
   });

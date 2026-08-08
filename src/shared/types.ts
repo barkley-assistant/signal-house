@@ -125,7 +125,16 @@ export interface UsageSummary {
   source: CollectorId;
   periodDays: number;
   byDay: UsageDay[];
+  /** Model breakdown over the whole collection window (periodDays). */
   byModel: ModelUsageRow[];
+  /**
+   * Model breakdown precomputed per dashboard window preset (7/30/90 days).
+   * The dashboard filter can then show an exact by-model table for the
+   * selected window without carrying per-day model detail in the snapshot.
+   * Absent for sources collected before this field existed; consumers fall
+   * back to `byModel` (the period aggregate).
+   */
+  byModelByWindow?: Partial<Record<number, ModelUsageRow[]>>;
 }
 
 /** Everything a collector observes about its source in one pass. */

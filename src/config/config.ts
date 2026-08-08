@@ -187,7 +187,7 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
       dbPath: p.path("SECRET_HOUSE_OPENCODE_DB_PATH") ?? resolve(homedir(), ".local/share/opencode/opencode.db"),
     },
     usage: {
-      periodDays: p.int("SECRET_HOUSE_SESSIONS_PERIOD_DAYS", 30, 1, 3650),
+      periodDays: p.int("SECRET_HOUSE_SESSIONS_PERIOD_DAYS", 90, 1, 3650),
     },
     poller: {
       enabled: p.bool("SECRET_HOUSE_POLLER_ENABLED", false),
@@ -197,7 +197,7 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
     },
     orchestrator: {
       concurrency: p.int("SECRET_HOUSE_COLLECT_CONCURRENCY", 3, 1, 16),
-      lookbackDays: p.int("SECRET_HOUSE_COLLECT_LOOKBACK_DAYS", 28, 1, 365),
+      lookbackDays: p.int("SECRET_HOUSE_COLLECT_LOOKBACK_DAYS", 90, 1, 365),
     },
     staleness: {
       staleThresholdDays: p.int("SECRET_HOUSE_STALE_THRESHOLD_DAYS", 14, 1, 365),

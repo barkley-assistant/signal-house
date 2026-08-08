@@ -136,6 +136,55 @@ describe("hermes collector", () => {
     // per-model messages are unknown from session_model_usage → null
     expect(deepseek!.messages).toBeNull();
   });
+
+  test("byModelByWindow precomputes 7/30/90-day breakdowns from session start times", async () => {
+    // The dashboard time filter (7/30/90 days) needs an exact by-model table
+    // per window. The collector must therefore compute the breakdown for each
+    // preset window, not just the collection period.
+    const dbPath = join(dir, "hermes-windows.db");
+    const db = new Database(dbPath);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const DAY = 86_400;
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY, started_at REAL, ended_at REAL, model TEXT, billing_provider TEXT,
+        message_count INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER, reasoning_tokens INTEGER, estimated_cost_usd REAL, actual_cost_usd REAL
+      );
+      CREATE TABLE session_model_usage (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        billing_provider TEXT NOT NULL DEFAULT '',
+        api_call_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        actual_cost_usd REAL NOT NULL DEFAULT 0
+      );
+      -- one session today, one 40 days ago
+      INSERT INTO sessions VALUES ('recent', ${nowSec - 3600}, NULL, 'DeepSeek-V4-Pro', 'custom', 10, 0, 0, 0, 0, 0, 2, NULL);
+      INSERT INTO sessions VALUES ('old', ${nowSec - 40 * DAY}, NULL, 'Oldmodel', 'custom', 10, 0, 0, 0, 0, 0, 9, NULL);
+      INSERT INTO session_model_usage VALUES ('recent', 'DeepSeek-V4-Pro', 'custom', 100, 100000, 5000, 0, 0, 0, 2, 0);
+      INSERT INTO session_model_usage VALUES ('old', 'Oldmodel', 'custom', 100, 900000, 9000, 0, 0, 0, 9, 0);
+    `);
+    db.close();
+    const collector = new HermesCollector(dbPath, 90);
+    const result = await collector.collect(new AbortController().signal);
+    const byWindow = result.data!.usage!.byModelByWindow!;
+    expect(Object.keys(byWindow).sort()).toEqual(["30", "7", "90"]);
+
+    const week = byWindow[7]!;
+    const weekModels = week.map((m) => m.model);
+    expect(weekModels).toContain("DeepSeek-V4-Pro");
+    expect(weekModels).not.toContain("Oldmodel");
+
+    const ninety = byWindow[90]!;
+    expect(ninety.map((m) => m.model).sort()).toEqual(["DeepSeek-V4-Pro", "Oldmodel"]);
+    expect(ninety.find((m) => m.model === "Oldmodel")!.cost).toBeCloseTo(9, 5);
+  });
 });
 
 describe("opencode collector", () => {

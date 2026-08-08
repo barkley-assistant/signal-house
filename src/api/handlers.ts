@@ -12,6 +12,7 @@ import { buildDiagnostics } from "../diagnostics/sources";
 import { setRefreshMeta } from "../db/refresh-meta";
 import { queryDailyTrend } from "../db/daily-metrics";
 import { utcDay, utcDaysAgo } from "../shared/dates";
+import { parseWindowDays } from "../shared/window";
 
 export interface ApiDeps {
   db: Database;
@@ -21,9 +22,10 @@ export interface ApiDeps {
   lock: RefreshLock;
 }
 
-/** GET /api/state */
+/** GET /api/state — optional `?days=7|30|90` scopes every windowed metric. */
 export function stateHandler(deps: ApiDeps, req: Request): Response {
-  return json(req, buildState(deps.db, deps.config, deps.collectors));
+  const days = parseWindowDays(new URL(req.url).searchParams.get("days"));
+  return json(req, buildState(deps.db, deps.config, deps.collectors, Date.now(), days));
 }
 
 /** GET /api/diagnostics — lazy; the UI only fetches when the panel opens. */
@@ -42,12 +44,14 @@ export function healthHandler(_deps: ApiDeps, req: Request): Response {
   });
 }
 
-/** GET /api/daily/spend — per-day cost+tokens trend for the Agent Spend chart. */
+/** GET /api/daily/spend — per-day cost+tokens trend for the Agent Spend chart.
+ *  `?days=7|30|90` picks the window (default 30). */
 export function dailyTrendHandler(deps: ApiDeps, req: Request): Response {
   const url = new URL(req.url);
+  const days = parseWindowDays(url.searchParams.get("days"));
   const to = url.searchParams.get("to") ?? utcDay();
-  const from = url.searchParams.get("from") ?? utcDaysAgo(30);
-  return json(req, { from, to, points: queryDailyTrend(deps.db, from, to) });
+  const from = url.searchParams.get("from") ?? utcDaysAgo(days);
+  return json(req, { from, to, days, points: queryDailyTrend(deps.db, from, to) });
 }
 
 /** POST /api/refresh — manual refresh through the SAME runner as the poller. */
