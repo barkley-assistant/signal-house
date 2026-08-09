@@ -424,6 +424,7 @@
 }
 
 .time-filter {
+  position: relative; /* containing block for the sliding thumb */
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -433,8 +434,28 @@
   border-radius: 10px;
 }
 
+/* Sliding thumb — the active option's tint, gliding between buttons. */
+.time-filter__thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  background: var(--subtle);
+  border-radius: 7px;
+  pointer-events: none;
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1), width 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+/* First paint (restored window): snap, don't slide. */
+.time-filter__thumb--no-anim {
+  transition: none;
+}
+
 .time-filter__btn {
   appearance: none;
+  position: relative; /* keep label text above the thumb */
+  z-index: 1;
   border: 0;
   background: transparent;
   color: var(--text-secondary);
@@ -445,7 +466,7 @@
   padding: 7px 14px;
   border-radius: 7px;
   cursor: pointer;
-  transition: color 120ms ease, background-color 120ms ease;
+  transition: color 120ms ease;
 }
 
 .time-filter__btn:hover {
@@ -457,9 +478,10 @@
   outline-offset: 1px;
 }
 
+/* The active window's tint comes from the sliding thumb behind the label;
+   the button itself only switches to the accent text colour. */
 .time-filter__btn.is-active {
   color: var(--primary);
-  background: var(--subtle);
 }
 
 /* Mobile: bigger tap targets (WCAG 2.5.8 floor is 24px; thumb-reach comfort

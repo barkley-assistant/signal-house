@@ -339,11 +339,12 @@ table.data td.num, table.data th.num {
   color: var(--text-secondary);
 }
 
-/* Reduced motion: kill the entrance animation. */
+/* Reduced motion: kill the entrance animation and the sliding thumb. */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
   body::before {
     animation: none;

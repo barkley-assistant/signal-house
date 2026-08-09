@@ -105,6 +105,16 @@ test.describe("dashboard (desktop)", () => {
     await page.getByRole("button", { name: "90 days" }).click();
     await expect(page.getByRole("button", { name: "90 days" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", { name: "30 days" })).toHaveAttribute("aria-pressed", "false");
+    // The sliding thumb settles exactly over the newly active button.
+    await expect(page.locator(".time-filter__thumb")).toBeVisible();
+    const thumbX = await page.locator(".time-filter__thumb").evaluate((el) => {
+      const m = getComputedStyle(el).transform.match(/matrix\(([^)]+)\)/);
+      return m ? Math.round(parseFloat(m[1].split(",")[4])) : null;
+    });
+    const btnX = await page
+      .locator(".time-filter__btn.is-active")
+      .evaluate((el) => Math.round(el.getBoundingClientRect().left - el.parentElement!.getBoundingClientRect().left - 1));
+    expect(thumbX).toBe(btnX);
     // The window survives a reload (localStorage).
     await page.reload();
     await expect(page.getByRole("button", { name: "90 days" })).toHaveAttribute("aria-pressed", "true");
