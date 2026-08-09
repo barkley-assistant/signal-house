@@ -373,6 +373,9 @@ function ModelTable() {
   const arrow = (key: Exclude<SortKey, null>) =>
     sortKey === key ? <span className="sort-arrow">{asc ? "↑" : "↓"}</span> : null;
 
+  const sortBtnClass = (key: Exclude<SortKey, null>) =>
+    `sort-btn${sortKey === key ? " is-active" : ""}`;
+
   return (
     <div className="model-table" style={{ marginTop: 16 }}>
       <div className="kpi-tile__label" style={{ marginBottom: 8 }}>By model</div>
@@ -382,10 +385,10 @@ function ModelTable() {
         <table className="data">
           <thead>
             <tr>
-              <th><button type="button" className="sort-btn" onClick={() => cycle("model")}>Model{arrow("model")}</button></th>
-              <th className="num"><button type="button" className="sort-btn" onClick={() => cycle("sessions")}>Sessions{arrow("sessions")}</button></th>
-              <th className="num"><button type="button" className="sort-btn" onClick={() => cycle("tokens")}>Tokens{arrow("tokens")}</button></th>
-              <th className="num"><button type="button" className="sort-btn" onClick={() => cycle("cost")}>Cost{arrow("cost")}</button></th>
+              <th><button type="button" className={sortBtnClass("model")} onClick={() => cycle("model")}>Model{arrow("model")}</button></th>
+              <th className="num"><button type="button" className={sortBtnClass("sessions")} onClick={() => cycle("sessions")}>Sessions{arrow("sessions")}</button></th>
+              <th className="num"><button type="button" className={sortBtnClass("tokens")} onClick={() => cycle("tokens")}>Tokens{arrow("tokens")}</button></th>
+              <th className="num"><button type="button" className={sortBtnClass("cost")} onClick={() => cycle("cost")}>Cost{arrow("cost")}</button></th>
             </tr>
           </thead>
           <tbody>
@@ -395,9 +398,9 @@ function ModelTable() {
                   <span className="model-name">{m.model}</span>
                   {m.family && m.family !== m.model && <span className="model-family">{m.family}</span>}
                 </td>
-                <td className="num">{formatNumber(m.sessions)}</td>
-                <td className="num">{formatCompact(m.tokens ?? 0)}</td>
-                <td className="num">{formatCost(m.cost)}</td>
+                <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
+                <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
+                <td className="num" data-label="Cost">{formatCost(m.cost)}</td>
               </tr>
             ))}
           </tbody>

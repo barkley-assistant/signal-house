@@ -69,6 +69,33 @@ test.describe("dashboard (desktop)", () => {
     expect(overflow).toBe(false);
   });
 
+  test("by-model table becomes stacked cards on mobile with all stats visible", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(page.getByText("By model")).toBeVisible();
+    await page.waitForTimeout(800);
+
+    // Rows render as cards (not the 480px scroll table), so every stat is
+    // on-screen without horizontal scrolling.
+    const rowDisplay = await page.locator(".model-table tbody tr").first().evaluate((el) => getComputedStyle(el).display);
+    expect(rowDisplay).toBe("grid");
+    const wrapperScrolls = await page.locator(".model-table").evaluate((el) => el.scrollWidth > el.clientWidth);
+    expect(wrapperScrolls).toBe(false);
+
+    // Every stat cell carries its label (Sessions / Tokens / Cost) and none
+    // pokes out of the card bounds.
+    const labels = await page.locator(".model-table tbody tr").first().evaluate((tr) =>
+      [...tr.querySelectorAll("td.num")].map((td) => getComputedStyle(td, "::before").content),
+    );
+    expect(labels.join(",")).toContain("Sessions");
+    expect(labels.join(",")).toContain("Tokens");
+    expect(labels.join(",")).toContain("Cost");
+
+    // Sorting survives the card reflow: tap the Cost pill.
+    await page.locator(".model-table .sort-btn", { hasText: "Cost" }).click();
+    await expect(page.locator(".model-table .sort-btn.is-active")).toContainText("Cost");
+  });
+
   test("time-range filter switches the whole dashboard window", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("group", { name: "Time range" })).toBeVisible();
