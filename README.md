@@ -99,6 +99,17 @@ bunx eslint .          # zero warnings
 
 The API contract tests boot the *real* `createApp()` against a temp database on a random port — not a mock server. What passes in tests is what runs in production.
 
+### Running tests
+
+There are two test suites, run separately. The unit suite is what CI runs (fast, hermetic); the e2e suite is slower and excluded from CI.
+
+```bash
+bun test tests/         # CI-recommended: unit + integration + API-contract, ~seconds
+bun run test:e2e        # Playwright e2e across desktop Chromium, Pixel 7, iPhone 13
+```
+
+`bun test tests/` only walks the `tests/` directory and never touches `e2e/`. To run the e2e suite explicitly, use `bun run test:e2e` (equivalent to `bunx playwright test`); it is not part of `bun run check`.
+
 ## Deployment
 
 Signal House ships as a single Bun process, so "deploy" is boring in the best way:
