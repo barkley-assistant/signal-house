@@ -108,8 +108,12 @@ describe("computeAggregates windowing", () => {
       totalMessages: null,
       totalTokens: 1000,
       totalCost: 42,
-      bySource: { opencode: { sessions: 999, cost: 42, tokens: 1000 } },
-      byModel: [{ model: "Weekmodel", family: null, sessions: 2, cost: 2, tokens: 2 }],
+      totalCacheReadTokens: null,
+      totalCacheWriteTokens: null,
+      totalCacheSavingsUsd: null,
+      cacheHitRate: null,
+      bySource: { opencode: { sessions: 999, cost: 42, tokens: 1000, cacheReadTokens: null, cacheSavingsUsd: null } },
+      byModel: [{ model: "Weekmodel", family: null, sessions: 2, cost: 2, tokens: 2, cacheReadTokens: null, cacheHitRate: null, cacheSavingsUsd: null }],
     };
     const a = computeAggregates([s], config, 7, override);
     expect(a.usage!.totalSessions).toBe(999);
@@ -169,5 +173,66 @@ describe("computeAggregates windowing", () => {
     expect(a90.throughput!.issuesClosed).toBe(2);
     expect(a90.ci!.totalRuns).toBe(2);
     expect(a90.ci!.passRate).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe("mergeModelRows cache fields", () => {
+  test("preserves cacheReadTokens and computes cacheHitRate per model", () => {
+    const s = usageDays(1);
+    s.data!.usage!.byModel = [
+      {
+        model: "DeepSeek-V4-Pro",
+        provider: null,
+        sessions: 5,
+        messages: 10,
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 200, // 200/(200+100) = 0.6667
+        cacheWriteTokens: null,
+        reasoningTokens: null,
+        cost: 5,
+      },
+    ];
+    const a = computeAggregates([s], config, 7);
+    const row = a.usage!.byModel[0];
+    expect(row.cacheReadTokens).toBe(200);
+    expect(row.cacheHitRate).toBeCloseTo(200 / 300, 5);
+    // DeepSeek-V4-Pro has costInput=2.0 in model-map.json → 200 × 2 / 1e6 = $0.0004
+    expect(row.cacheSavingsUsd).toBeCloseTo(0.0004, 6);
+  });
+
+  test("sums cacheReadTokens across sources for the same model", () => {
+    const s1 = usageDays(1);
+    s1.data!.usage!.byModel = [
+      { model: "Claude-Opus-4.5", provider: null, sessions: 3, messages: null, inputTokens: 50, outputTokens: 25, cacheReadTokens: 100, cacheWriteTokens: null, reasoningTokens: null, cost: 3 },
+    ];
+    const s2 = usageDays(1);
+    s2.source = "opencode" as PersistedState["source"];
+    s2.data!.usage!.byModel = [
+      { model: "claude-opus-4.5", provider: null, sessions: 2, messages: null, inputTokens: 50, outputTokens: 25, cacheReadTokens: 50, cacheWriteTokens: null, reasoningTokens: null, cost: 2 },
+    ];
+    const a = computeAggregates([s1, s2], config, 7);
+    const row = a.usage!.byModel.find((m) => m.model === "Claude Opus 4.5")!;
+    expect(row.cacheReadTokens).toBe(150);
+    // 150 / (150 + 100) = 0.6
+    expect(row.cacheHitRate).toBeCloseTo(0.6, 5);
+  });
+
+  test("cacheHitRate stays null when cacheReadTokens and inputTokens are both zero", () => {
+    const s = usageDays(1);
+    s.data!.usage!.byModel = [
+      { model: "MiniMax-M3", provider: null, sessions: 1, messages: null, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: null, reasoningTokens: null, cost: null },
+    ];
+    const a = computeAggregates([s], config, 7);
+    expect(a.usage!.byModel[0].cacheHitRate).toBeNull();
+  });
+
+  test("cacheSavingsUsd is null for a model without a costInput in model-map.json", () => {
+    const s = usageDays(1);
+    s.data!.usage!.byModel = [
+      { model: "definitely-not-in-the-map-v9999", provider: null, sessions: 1, messages: null, inputTokens: 10, outputTokens: 5, cacheReadTokens: 1000, cacheWriteTokens: null, reasoningTokens: null, cost: 1 },
+    ];
+    const a = computeAggregates([s], config, 7);
+    expect(a.usage!.byModel[0].cacheSavingsUsd).toBeNull();
   });
 });

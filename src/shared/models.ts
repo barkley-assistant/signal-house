@@ -16,7 +16,7 @@
 
 import modelMap from "./model-map.json";
 
-type ModelEntry = { machine: string; label: string; family?: string };
+type ModelEntry = { machine: string; label: string; family?: string; costInput?: number };
 type FamilyPrefix = { prefix: string; family: string };
 
 const MODELS = modelMap.models as ModelEntry[];
@@ -24,6 +24,28 @@ const FAMILY_PREFIXES = modelMap.familyPrefixes as FamilyPrefix[];
 
 // Build lookups once at import time (the map is small, this is negligible).
 const BY_MACHINE = new Map<string, ModelEntry>(MODELS.map((m) => [m.machine, m]));
+
+/**
+ * Cache savings convention (issue #352):
+ * The operator deliberately sets `cost.cache.read = 0` for every model in
+ * their pricing, so the dashboard cannot compute "savings" by multiplying
+ * cache reads by a cache-read rate. Instead, savings are estimated as
+ * `cache_read × cost.input / 1e6` — i.e. the input-equivalent cost the
+ * cached reads would have incurred had they been billed at the full input
+ * rate. The `costInput` field in model-map.json supplies the per-million
+ * input USD rate for each model. Models without a `costInput` (or with a
+ * zero rate) render "—" for $ saved — the documented fallback when the
+ * operator hasn't populated the rate yet.
+ */
+export function costInputForModel(raw: string): number | null {
+  const key = machineKey(raw);
+  if (!key) return null;
+  const entry = BY_MACHINE.get(key);
+  if (!entry) return null;
+  const rate = entry.costInput;
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) return null;
+  return rate;
+}
 
 /** Normalise a raw model name → stable machine key for grouping & lookup.
  *  Strips vendor prefixes ("openrouter/deepseek/…" → "…"), lowercases,

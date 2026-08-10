@@ -108,7 +108,11 @@ describe("HealthStrip", () => {
         totalMessages: 2000,
         totalTokens: 5_000_000,
         totalCost: 123.45,
-        bySource: { hermes: { sessions: 40, cost: 23.45, tokens: 2_000_000 } },
+        totalCacheReadTokens: null,
+        totalCacheWriteTokens: null,
+        totalCacheSavingsUsd: null,
+        cacheHitRate: null,
+        bySource: { hermes: { sessions: 40, cost: 23.45, tokens: 2_000_000, cacheReadTokens: null, cacheSavingsUsd: null } },
         byModel: [],
       },
     });
@@ -220,9 +224,13 @@ describe("AgentSpend", () => {
         totalMessages: 1000,
         totalTokens: 5420000000,
         totalCost: 515.95,
+        totalCacheReadTokens: null,
+        totalCacheWriteTokens: null,
+        totalCacheSavingsUsd: null,
+        cacheHitRate: null,
         bySource: {
-          opencode: { sessions: 900, cost: 300, tokens: 3000000000 },
-          hermes: { sessions: 697, cost: 215.95, tokens: 2420000000 },
+          opencode: { sessions: 900, cost: 300, tokens: 3000000000, cacheReadTokens: null, cacheSavingsUsd: null },
+          hermes: { sessions: 697, cost: 215.95, tokens: 2420000000, cacheReadTokens: null, cacheSavingsUsd: null },
         },
         byModel: [],
         ...overrides,
@@ -278,8 +286,8 @@ describe("AgentSpend", () => {
     useDash.setState({
       state: usageState({
         bySource: {
-          opencode: { sessions: 0, cost: null, tokens: null },
-          hermes: { sessions: 0, cost: null, tokens: null },
+          opencode: { sessions: 0, cost: null, tokens: null, cacheReadTokens: null, cacheSavingsUsd: null },
+          hermes: { sessions: 0, cost: null, tokens: null, cacheReadTokens: null, cacheSavingsUsd: null },
         },
       }),
     });
@@ -291,6 +299,48 @@ describe("AgentSpend", () => {
     useDash.setState({ state: emptyState() });
     render(<AgentSpend />);
     expect(screen.getByText(/no usage telemetry yet/i)).toBeTruthy();
+  });
+
+  test("by-model table renders the Cache % column with formatted values", () => {
+    useDash.setState({
+      state: usageState({
+        byModel: [
+          { model: "DeepSeek V4 Pro", family: "DeepSeek", sessions: 10, cost: 5, tokens: 1000, cacheReadTokens: 500, cacheHitRate: 0.5, cacheSavingsUsd: null },
+          { model: "Claude Opus 4.5", family: "Anthropic", sessions: 5, cost: 3, tokens: 500, cacheReadTokens: 0, cacheHitRate: null, cacheSavingsUsd: 0 },
+        ],
+      }),
+    });
+    render(<AgentSpend />);
+    // The new column header is in the sort strip.
+    expect(screen.getByRole("button", { name: /^Cache %/ })).toBeTruthy();
+    // DeepSeek V4 Pro hit rate 50% → "50%" in its row.
+    expect(screen.getByText("50%")).toBeTruthy();
+    // Unknown hit rate renders as em-dash.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  test("clicking the Cache % header cycles the sort (desc → asc → default)", () => {
+    useDash.setState({
+      state: usageState({
+        byModel: [
+          { model: "Model A", family: null, sessions: 5, cost: 1, tokens: 100, cacheReadTokens: 200, cacheHitRate: 0.8, cacheSavingsUsd: null },
+          { model: "Model B", family: null, sessions: 5, cost: 1, tokens: 100, cacheReadTokens: 50, cacheHitRate: 0.25, cacheSavingsUsd: null },
+        ],
+      }),
+    });
+    render(<AgentSpend />);
+    const cacheBtn = screen.getByRole("button", { name: /^Cache %/ });
+    // First click → desc, Model A (80%) above Model B (25%).
+    fireEvent.click(cacheBtn);
+    const rowsDesc = screen.getAllByText(/Model [AB]/).map((n) => n.textContent);
+    expect(rowsDesc.indexOf("Model A")).toBeLessThan(rowsDesc.indexOf("Model B"));
+    // Second click → asc, Model B above Model A.
+    fireEvent.click(cacheBtn);
+    const rowsAsc = screen.getAllByText(/Model [AB]/).map((n) => n.textContent);
+    expect(rowsAsc.indexOf("Model B")).toBeLessThan(rowsAsc.indexOf("Model A"));
+    // Third click → cleared, default order (sessions desc → same order as before).
+    fireEvent.click(cacheBtn);
+    expect(cacheBtn.className.includes("is-active")).toBe(false);
   });
 });
 

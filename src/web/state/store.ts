@@ -154,6 +154,7 @@ export interface TrendPoint {
   date: string;
   cost: number | null;
   tokens: number | null;
+  cacheRead: number | null;
 }
 
 /** Load the daily spend trend for the Agent Spend chart, windowed. */

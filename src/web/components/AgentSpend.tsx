@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
-import { formatNumber, formatCost, formatCompact } from "../../shared/format";
+import { formatNumber, formatCost, formatCompact, formatPercent } from "../../shared/format";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
  *  Plain requestAnimationFrame loop (no framer motion-value indirection) so
@@ -175,6 +175,10 @@ function DailyUsageChart() {
       }
       const yMaxCost = peaksRef.current.cost;
       const yMaxTokens = peaksRef.current.tokens;
+      // The right y-axis is shared by Tokens + Cache read (both are token
+      // counts). cache_read ⊆ tokens, so max(tokens) already covers the
+      // cache_read peak — no extra widening needed, keeping the existing
+      // range contract intact.
       // On legend toggle, keep both axes visible and re-anchor their [min,max]
       // to the full-dataset peak so the surviving series has its full context
       // — no auto-rescale to the remaining (smaller) data.
@@ -245,7 +249,7 @@ function DailyUsageChart() {
           },
         ],
         legend: {
-          data: ["Cost ($)", "Tokens"],
+          data: ["Cost ($)", "Tokens", "Cache read"],
           orient: "horizontal",
           top: 0,
           right: 8,
@@ -287,6 +291,23 @@ function DailyUsageChart() {
             lineStyle: { color: "#facc15", width: 2 },
             areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
           },
+          // Cache read lives on the tokens y-axis too (both are token counts).
+          // Distinct palette: --success green (#4ade80), semantically aligned
+          // with "savings". connectNulls: false so a day with no cache
+          // telemetry shows a gap rather than dipping to zero — the input/
+          // output/reasoning tokens keep the line continuous via the Tokens
+          // series, so a cache-read gap is meaningful, not noise.
+          {
+            name: "Cache read",
+            type: "line",
+            yAxisIndex: 1,
+            data: points.map((p) => p.cacheRead),
+            smooth: 0.3,
+            showSymbol: false,
+            connectNulls: false,
+            lineStyle: { color: "#4ade80", width: 2 },
+            areaStyle: { color: "rgba(74, 222, 128, 0.08)" },
+          },
         ],
       };
       chartRef.current?.setOption(series, true);
@@ -307,7 +328,7 @@ function DailyUsageChart() {
   );
 }
 
-type SortKey = "model" | "sessions" | "tokens" | "cost" | null;
+type SortKey = "model" | "sessions" | "tokens" | "cost" | "cache" | null;
 type SortState = { key: SortKey; asc: boolean };
 
 const SORT_STORAGE_KEY = "signal-house:model-sort";
@@ -317,7 +338,7 @@ function readSortState(): SortState {
     const raw = localStorage.getItem(SORT_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as SortState;
-      if (parsed && (parsed.key === null || ["model", "sessions", "tokens", "cost"].includes(parsed.key)) && typeof parsed.asc === "boolean") {
+      if (parsed && (parsed.key === null || ["model", "sessions", "tokens", "cost", "cache"].includes(parsed.key)) && typeof parsed.asc === "boolean") {
         return { key: parsed.key, asc: parsed.asc };
       }
     }
@@ -328,7 +349,7 @@ function readSortState(): SortState {
 }
 
 /** By-model table spanning all sources; unknown cost renders "—".
- *  Click a column header to sort: sessions/tokens/cost sort descending,
+ *  Click a column header to sort: sessions/tokens/cost/cache sort descending,
  *  model sorts alphabetically. Clicking the active column again cycles
  *  (desc → asc → back to default session order). Sort state persists
  *  across page loads via localStorage. */
@@ -353,6 +374,12 @@ function ModelTable() {
     sorted.sort((a, b) => {
       if (sortKey === "model") {
         return asc ? b.model.localeCompare(a.model) : a.model.localeCompare(b.model);
+      }
+      if (sortKey === "cache") {
+        // null hit rates drop to the bottom in desc, top in asc; never fabricated as 0.
+        const av = a.cacheHitRate ?? -1;
+        const bv = b.cacheHitRate ?? -1;
+        return asc ? av - bv : bv - av;
       }
       const av = a[sortKey] ?? -1;
       const bv = b[sortKey] ?? -1;
@@ -389,6 +416,7 @@ function ModelTable() {
               <th className="num"><button type="button" className={sortBtnClass("sessions")} onClick={() => cycle("sessions")}>Sessions{arrow("sessions")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("tokens")} onClick={() => cycle("tokens")}>Tokens{arrow("tokens")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("cost")} onClick={() => cycle("cost")}>Cost{arrow("cost")}</button></th>
+              <th className="num"><button type="button" className={sortBtnClass("cache")} onClick={() => cycle("cache")}>Cache %{arrow("cache")}</button></th>
             </tr>
           </thead>
           <tbody>
@@ -401,6 +429,7 @@ function ModelTable() {
                 <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
                 <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
                 <td className="num" data-label="Cost">{formatCost(m.cost)}</td>
+                <td className="num" data-label="Cache">{formatPercent(m.cacheHitRate)}</td>
               </tr>
             ))}
           </tbody>

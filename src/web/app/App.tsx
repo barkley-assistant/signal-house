@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { useDash, startPolling } from "../state/store";
 import pkg from "../../../package.json";
 import { HealthStrip } from "../components/HealthStrip";
+import { CacheSavings } from "../components/CacheSavingsCard";
 import { AttentionQueue } from "../components/AttentionQueue";
 import { AgentSpend } from "../components/AgentSpend";
 import { TimeRangeFilter } from "../components/TimeRangeFilter";
@@ -49,6 +50,8 @@ export function App() {
         </div>
 
         <HealthStrip state={state} />
+
+        <CacheSavings />
 
         <AgentSpend />
         <AttentionQueue attention={state?.attention ?? []} />

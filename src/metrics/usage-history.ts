@@ -15,8 +15,7 @@
  */
 
 import type { Database } from "bun:sqlite";
-import type { UsageAggregate } from "../orchestrator/aggregates";
-import { mergeModelRows } from "../orchestrator/aggregates";
+import { mergeModelRows, splitSavingsBySource, type UsageAggregate } from "../orchestrator/aggregates";
 
 const DAY_METRICS = [
   "sessions.total",
@@ -63,35 +62,66 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
   }
 
   const bySource: UsageAggregate["bySource"] = {};
-  let totalSessions = 0;
-  let totalMessages: number | null = null;
-  let totalTokens: number | null = null;
-  let totalCost: number | null = null;
-
   const merge = (a: number | null, b: number | null): number | null => {
     if (a === null && b === null) return null;
     return (a ?? 0) + (b ?? 0);
   };
+  let totalSessions = 0;
+  let totalMessages: number | null = null;
+  let totalTokens: number | null = null;
+  let totalCost: number | null = null;
+  let totalCacheReadTokens: number | null = null;
+  let totalCacheWriteTokens: number | null = null;
+  let totalInputTokens: number | null = null;
 
   for (const [source, metrics] of perSource) {
     const sessions = metrics.get("sessions.total") ?? 0;
     const messages = metrics.get("messages.total") ?? null;
-    const tokens = knownSum(TOKEN_METRICS.map((k) => metrics.get(k) ?? null));
     const cost = metrics.get("cost.total") ?? null;
-    bySource[source] = { sessions, cost, tokens };
+    const cacheRead = metrics.get("tokens.cache_read") ?? null;
+    const cacheWrite = metrics.get("tokens.cache_write") ?? null;
+    const inputTokens = metrics.get("tokens.input") ?? null;
+    const tokens = knownSum(TOKEN_METRICS.map((k) => metrics.get(k) ?? null));
+    bySource[source] = { sessions, cost, tokens, cacheReadTokens: cacheRead, cacheSavingsUsd: null };
     totalSessions += sessions;
     totalMessages = merge(totalMessages, messages);
     totalTokens = merge(totalTokens, tokens);
     totalCost = merge(totalCost, cost);
+    totalCacheReadTokens = merge(totalCacheReadTokens, cacheRead);
+    totalCacheWriteTokens = merge(totalCacheWriteTokens, cacheWrite);
+    totalInputTokens = merge(totalInputTokens, inputTokens);
   }
+
+  const byModel = queryModelRows(db, from, to);
+
+  // Per-source $ saved: split the merged byModel savings proportionally by
+  // each source's share of each model's cache reads.
+  const savingsBySource = splitSavingsBySource(bySource, byModel);
+  for (const [src, savings] of Object.entries(savingsBySource)) {
+    const row = bySource[src];
+    if (row) row.cacheSavingsUsd = savings;
+  }
+
+  // Aggregate savings = sum over byModel rows where a rate is available.
+  let totalCacheSavingsUsd: number | null = null;
+  for (const m of byModel) {
+    if (m.cacheSavingsUsd === null) continue;
+    totalCacheSavingsUsd = merge(totalCacheSavingsUsd, m.cacheSavingsUsd);
+  }
+
+  const cacheHitRate = computeHitRate(totalCacheReadTokens, totalInputTokens);
 
   return {
     totalSessions,
     totalMessages,
     totalTokens,
     totalCost,
+    totalCacheReadTokens,
+    totalCacheWriteTokens,
+    totalCacheSavingsUsd,
+    cacheHitRate,
     bySource,
-    byModel: queryModelRows(db, from, to),
+    byModel,
   };
 }
 
@@ -172,4 +202,14 @@ function queryModelRows(db: Database, from: string, to: string): UsageAggregate[
       cost: r.cost,
     })),
   );
+}
+
+/** Clamped cache hit rate: `cacheRead / (cacheRead + input)`. null when
+ *  both sides are zero (no signal — never 0, never NaN). */
+function computeHitRate(cacheRead: number | null, input: number | null): number | null {
+  const cr = cacheRead ?? 0;
+  const inT = input ?? 0;
+  if (cr === 0 && inT === 0) return null;
+  if (inT === 0) return 1;
+  return Math.max(0, Math.min(1, cr / (cr + inT)));
 }

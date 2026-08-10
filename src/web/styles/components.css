@@ -212,10 +212,10 @@
   overflow-x: auto;
 }
 .model-table table.data {
-  /* On narrow screens the 4 columns + sort buttons + mono numbers need
+  /* On narrow screens the 5 columns + sort buttons + mono numbers need
      more than ~330px; pin a minimum so the wrapper scrolls instead of
      the cells poking out of the card. */
-  min-width: 480px;
+  min-width: 560px;
 }
 
 /* Mobile (≤640px): the by-model table becomes stacked cards so every stat
@@ -268,7 +268,7 @@
   .model-table table.data tbody tr:nth-child(odd),
   .model-table table.data tbody tr {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 2px 10px;
     padding: 10px 12px;
     background: var(--card-bg);
@@ -411,6 +411,49 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+  }
+}
+
+/* Cache savings card — three tiles across the top + compact by-provider
+   breakdown below. Same ≤640px reflow breakpoint as Agent Spend so the
+   whole middle of the dashboard collapses the same way on phones. */
+.cache-savings__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.cache-savings__providers {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+.cache-savings__provider-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.cache-savings__provider-row + .cache-savings__provider-row {
+  border-top: 1px solid var(--card-border);
+}
+.cache-savings__provider-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.cache-savings__provider-meta {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .cache-savings__tiles {
+    grid-template-columns: 1fr;
+  }
+  .cache-savings__provider-row {
+    flex-wrap: wrap;
+    gap: 4px 12px;
   }
 }
 

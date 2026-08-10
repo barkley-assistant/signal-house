@@ -7,7 +7,7 @@ import type { PersistedState } from "../config/types";
 import type { RuntimeConfig } from "../config/types";
 import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
-import { machineKey, modelFamily, modelLabel } from "../shared/models";
+import { machineKey, modelFamily, modelLabel, costInputForModel } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
 import type { ModelUsageRow, UsageDay } from "../shared/types";
 
@@ -16,8 +16,12 @@ export interface UsageAggregate {
   totalMessages: number | null;
   totalTokens: number | null;
   totalCost: number | null;
-  bySource: Record<string, { sessions: number; cost: number | null; tokens: number | null }>;
-  byModel: Array<{ model: string; family: string | null; sessions: number; cost: number | null; tokens: number | null }>;
+  totalCacheReadTokens: number | null;
+  totalCacheWriteTokens: number | null;
+  totalCacheSavingsUsd: number | null;
+  cacheHitRate: number | null;
+  bySource: Record<string, { sessions: number; cost: number | null; tokens: number | null; cacheReadTokens: number | null; cacheSavingsUsd: number | null }>;
+  byModel: Array<{ model: string; family: string | null; sessions: number; cost: number | null; tokens: number | null; cacheReadTokens: number | null; cacheHitRate: number | null; cacheSavingsUsd: number | null }>;
 }
 
 export interface Aggregates {
@@ -91,29 +95,7 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
   // (it accumulates 90 days independent of upstream retention); the snapshot
   // derivation below is the fallback for a fresh DB before the first refresh.
   const usage = usageOverride ?? (usageStates.length > 0
-      ? {
-          totalSessions: sum(usageStates.map((s) => s.data?.usage?.byDay.filter(inWindowDay).reduce((a, d) => a + d.sessions, 0) ?? null)) ?? 0,
-          totalMessages: sum(usageStates.map((s) => sum(s.data?.usage?.byDay.filter(inWindowDay).map((d) => d.messages) ?? []))),
-          totalTokens: sum(
-            usageStates.map((s) =>
-              sum(s.data?.usage?.byDay.filter(inWindowDay).flatMap((d) => [d.tokensInput, d.tokensOutput, d.tokensCacheRead, d.tokensCacheWrite, d.tokensReasoning]) ?? []),
-            ),
-          ),
-          totalCost: sum(usageStates.map((s) => sum(s.data?.usage?.byDay.filter(inWindowDay).map((d) => d.cost) ?? []))),
-          bySource: Object.fromEntries(
-            usageStates.map((s) => [
-              s.source,
-              {
-                sessions: s.data!.usage!.byDay.filter(inWindowDay).reduce((a, d) => a + d.sessions, 0),
-                cost: sum(s.data!.usage!.byDay.filter(inWindowDay).map((d) => d.cost)),
-                tokens: sum(
-                  s.data!.usage!.byDay.filter(inWindowDay).flatMap((d) => [d.tokensInput, d.tokensOutput, d.tokensCacheRead, d.tokensCacheWrite, d.tokensReasoning]),
-                ),
-              },
-            ]),
-          ),
-          byModel: combineModels(usageStates),
-        }
+      ? buildSnapshotUsage(usageStates, inWindowDay)
       : null);
 
   return { window, throughput, cycleTime, ci, staleWork, usage };
@@ -126,6 +108,64 @@ function windowCommits(git: NonNullable<PersistedState["data"]> | null, start: s
     if (day >= start && day <= end) total += count;
   }
   return total;
+}
+
+/** Build a UsageAggregate from the snapshot path (persisted latest_state).
+ *  Mirrors the daily_metrics path's field set so the dashboard doesn't have
+ *  to branch on which source fed the aggregate. */
+function buildSnapshotUsage(states: PersistedState[], inWindowDay: (d: UsageDay) => boolean): UsageAggregate {
+  const bySource: UsageAggregate["bySource"] = {};
+  let totalSessions = 0;
+  let totalMessages: number | null = null;
+  let totalTokens: number | null = null;
+  let totalCost: number | null = null;
+  let totalCacheReadTokens: number | null = null;
+  let totalCacheWriteTokens: number | null = null;
+  let totalInputTokens: number | null = null;
+
+  for (const s of states) {
+    const days = s.data!.usage!.byDay.filter(inWindowDay);
+    const srcSessions = days.reduce((a, d) => a + d.sessions, 0);
+    const srcMessages = sum(days.map((d) => d.messages));
+    const srcTokens = sum(days.flatMap((d) => [d.tokensInput, d.tokensOutput, d.tokensCacheRead, d.tokensCacheWrite, d.tokensReasoning]));
+    const srcCost = sum(days.map((d) => d.cost));
+    const srcCacheRead = sum(days.map((d) => d.tokensCacheRead));
+    const srcCacheWrite = sum(days.map((d) => d.tokensCacheWrite));
+    const srcInput = sum(days.map((d) => d.tokensInput));
+    bySource[s.source] = {
+      sessions: srcSessions,
+      cost: srcCost,
+      tokens: srcTokens,
+      cacheReadTokens: srcCacheRead,
+      cacheSavingsUsd: null,
+    };
+    totalSessions += srcSessions;
+    totalMessages = mergeNullSum(totalMessages, srcMessages);
+    totalTokens = mergeNullSum(totalTokens, srcTokens);
+    totalCost = mergeNullSum(totalCost, srcCost);
+    totalCacheReadTokens = mergeNullSum(totalCacheReadTokens, srcCacheRead);
+    totalCacheWriteTokens = mergeNullSum(totalCacheWriteTokens, srcCacheWrite);
+    totalInputTokens = mergeNullSum(totalInputTokens, srcInput);
+  }
+
+  const byModel = combineModels(states);
+  const savingsBySource = splitSavingsBySource(bySource, byModel);
+  for (const [src, savings] of Object.entries(savingsBySource)) {
+    if (bySource[src]) bySource[src].cacheSavingsUsd = savings;
+  }
+
+  return {
+    totalSessions,
+    totalMessages,
+    totalTokens,
+    totalCost,
+    totalCacheReadTokens,
+    totalCacheWriteTokens,
+    totalCacheSavingsUsd: sum(byModel.map((m) => m.cacheSavingsUsd)),
+    cacheHitRate: computeHitRate(totalCacheReadTokens, totalInputTokens),
+    bySource,
+    byModel,
+  };
 }
 
 /**
@@ -147,7 +187,16 @@ function combineModels(states: PersistedState[]): UsageAggregate["byModel"] {
 export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"] {
   const map = new Map<
     string,
-    { model: string; family: string | null; sessions: number; cost: number | null; tokens: number | null; best: number }
+    {
+      model: string;
+      family: string | null;
+      sessions: number;
+      cost: number | null;
+      tokens: number | null;
+      inputTokens: number | null;
+      cacheReadTokens: number | null;
+      best: number;
+    }
   >();
   for (const row of rows) {
     const key = machineKey(row.model);
@@ -159,6 +208,8 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
       existing.sessions += row.sessions;
       existing.cost = mergeNullSum(existing.cost, row.cost);
       existing.tokens = mergeNullSum(existing.tokens, rowTokens(row));
+      existing.inputTokens = mergeNullSum(existing.inputTokens, row.inputTokens);
+      existing.cacheReadTokens = mergeNullSum(existing.cacheReadTokens, row.cacheReadTokens);
       if (row.sessions > existing.best) {
         existing.best = row.sessions;
         existing.model = modelLabel(row.model);
@@ -171,12 +222,19 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
         sessions: row.sessions,
         cost: row.cost,
         tokens: rowTokens(row),
+        inputTokens: row.inputTokens,
+        cacheReadTokens: row.cacheReadTokens,
         best: row.sessions,
       });
     }
   }
   return [...map.values()]
-    .map(({ best: _best, ...m }) => m)
+    .map(({ best: _best, inputTokens: _input, ...m }) => {
+      const rate = computeHitRate(m.cacheReadTokens, _input);
+      const cost = costInputForModel(m.model);
+      const savings = m.cacheReadTokens !== null && cost !== null ? (m.cacheReadTokens * cost) / 1_000_000 : null;
+      return { ...m, cacheHitRate: rate, cacheSavingsUsd: savings };
+    })
     .sort((a, b) => b.sessions - a.sessions || (b.cost ?? 0) - (a.cost ?? 0));
 }
 
@@ -187,4 +245,51 @@ function rowTokens(row: { inputTokens: number | null; outputTokens: number | nul
 function mergeNullSum(a: number | null, b: number | null): number | null {
   if (a === null && b === null) return null;
   return (a ?? 0) + (b ?? 0);
+}
+
+/** Clamped cache hit rate: `cacheRead / (cacheRead + input)`. Returns null
+ *  when both sides are zero/unknown (no signal — never 0, never NaN). When
+ *  input is null but cache_read > 0 the read is treated as 100% cached. */
+function computeHitRate(cacheRead: number | null, input: number | null): number | null {
+  const cr = cacheRead ?? 0;
+  const inT = input ?? 0;
+  if (cr === 0 && inT === 0) return null;
+  if (inT === 0) return 1;
+  return Math.max(0, Math.min(1, cr / (cr + inT)));
+}
+
+/** Per-source $ saved = sum of byModel savings for models that originated
+ *  from this source. The byModel table is the merged cross-source view, so
+ *  the per-source split is approximated proportionally by each source's
+ *  share of the model's cache reads. Returns a map keyed by source id.
+ *  Exported so usage-history can call the same routine (avoiding drift). */
+export function splitSavingsBySource(
+  bySource: UsageAggregate["bySource"],
+  byModel: UsageAggregate["byModel"]
+): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  // For each source, sum (source_cache_read / model_cache_read) × model_savings.
+  // When the model's cache reads are unknown, we can't split, so we leave
+  // the source's savings as null.
+  for (const [src, row] of Object.entries(bySource)) {
+    if (row.cacheReadTokens === null || row.cacheReadTokens === 0) {
+      out[src] = null;
+      continue;
+    }
+    let total = 0;
+    let contribute = false;
+    for (const m of byModel) {
+      if (m.cacheReadTokens === null || m.cacheReadTokens === 0 || m.cacheSavingsUsd === null) continue;
+      // Approximate: this source's share of the model's cache reads is the
+      // source's cache read total / the model's cache read total. The
+      // byModel row is the merged view across sources; we don't track
+      // per-source-per-model breakdowns in the byModel table, so this is
+      // the best split we can do without changing the persisted shape.
+      const share = m.cacheReadTokens > 0 ? row.cacheReadTokens / m.cacheReadTokens : 0;
+      total += share * m.cacheSavingsUsd;
+      contribute = true;
+    }
+    out[src] = contribute ? total : null;
+  }
+  return out;
 }

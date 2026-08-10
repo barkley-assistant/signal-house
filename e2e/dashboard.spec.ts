@@ -54,6 +54,18 @@ test.describe("dashboard (desktop)", () => {
     await expect(page.getByText("Local Git")).toBeVisible();
   });
 
+  test("cache savings card renders (and never blocks the page)", async ({ page }) => {
+    await page.goto("/");
+    // The card always renders, even when there's no cache activity.
+    // Soft assertion: either the card shows a real value or the empty
+    // state ("—" for hit rate, "$0.00" for $ saved). The dev server's
+    // data shape varies so we don't pin a specific number.
+    await expect(page.getByText("Cache savings").first()).toBeVisible();
+    // Either a percentage tile (50%, 100%, …) or the em-dash placeholder.
+    const hasHitRate = await page.getByText(/\d+%|—/).first().isVisible();
+    expect(hasHitRate).toBe(true);
+  });
+
   test("attention queue renders (or shows clear state)", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText(/attention queue/i)).toBeVisible();
