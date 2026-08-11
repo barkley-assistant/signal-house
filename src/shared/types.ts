@@ -127,6 +127,10 @@ export interface ModelUsageRow {
   cacheWriteTokens: number | null;
   reasoningTokens: number | null;
   cost: number | null;
+  /** Pre-computed cache-savings (USD). Optional because not every source
+   *  populates it; the byModel aggregator falls back to on-demand computation
+   *  via `cacheSavingsUsdForModel` when this is absent. */
+  cacheSavingsUsd?: number | null;
 }
 
 export interface UsageSummary {

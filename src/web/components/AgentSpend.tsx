@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
-import { formatNumber, formatCost, formatCompact } from "../../shared/format";
+import { formatNumber, formatCost, formatCompact, formatPercent } from "../../shared/format";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
  *  Plain requestAnimationFrame loop (no framer motion-value indirection) so
@@ -110,6 +110,15 @@ function SpendSource({ label, source, usage }: { label: string; source: string; 
  *  X-axis shows day+date; the tooltip carries the full date and both metrics.
  */
 function DailyUsageChart() {
+  // Round up to a "nice" number with 20% headroom so the top label and the
+  // top of the line don't collide.
+  const niceCeil = (v: number): number => {
+    if (v <= 0) return 1;
+    const withHead = v * 1.2;
+    const mag = Math.pow(10, Math.floor(Math.log10(withHead)));
+    return Math.ceil(withHead / mag) * mag;
+  };
+
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,7 +127,7 @@ function DailyUsageChart() {
   // define the chart's y-scale. A deliberate window change rescales to fit
   // the new data; the 30s poll within a window must not (recomputing on
   // every refresh would make the axes jump around).
-  const peaksRef = useRef<{ cost: number; tokens: number } | null>(null);
+  const peaksRef = useRef<{ cost: number; tokens: number; cacheRead: number } | null>(null);
   // Latest requested window — lets a slow response for an older window be
   // discarded when the user switches 30 → 7 → 90 quickly.
   const requestedDaysRef = useRef(days);
@@ -160,21 +169,16 @@ function DailyUsageChart() {
       if (peaksRef.current === null) {
         const costPeak = points.reduce((m, p) => Math.max(m, p.cost ?? 0), 0);
         const tokensPeak = points.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0);
-        // Round up to a "nice" number with 20% headroom so the top label
-        // and the top of the line don't collide.
-        const niceCeil = (v: number) => {
-          if (v <= 0) return 1;
-          const withHead = v * 1.2;
-          const mag = Math.pow(10, Math.floor(Math.log10(withHead)));
-          return Math.ceil(withHead / mag) * mag;
-        };
+        const cacheReadPeak = points.reduce((m, p) => Math.max(m, p.cacheRead ?? 0), 0);
         peaksRef.current = {
           cost: Math.max(1, niceCeil(costPeak)),
           tokens: Math.max(1, niceCeil(tokensPeak)),
+          cacheRead: Math.max(1, niceCeil(cacheReadPeak)),
         };
       }
       const yMaxCost = peaksRef.current.cost;
       const yMaxTokens = peaksRef.current.tokens;
+      const yMaxCacheRead = peaksRef.current.cacheRead;
       // On legend toggle, keep both axes visible and re-anchor their [min,max]
       // to the full-dataset peak so the surviving series has its full context
       // — no auto-rescale to the remaining (smaller) data.
@@ -243,9 +247,16 @@ function DailyUsageChart() {
             },
             splitLine: { show: false },
           },
+          {
+            type: "value",
+            min: 0,
+            max: yMaxCacheRead,
+            show: false, // hide a 3rd axis — same numbers as the token axis
+            splitLine: { show: false },
+          },
         ],
         legend: {
-          data: ["Cost ($)", "Tokens"],
+          data: ["Cost ($)", "Tokens", "Cache read"],
           orient: "horizontal",
           top: 0,
           right: 8,
@@ -287,6 +298,22 @@ function DailyUsageChart() {
             lineStyle: { color: "#facc15", width: 2 },
             areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
           },
+          {
+            // Cache-read tokens — muted neutral overlay so it sits below the
+            // Tokens series in visual hierarchy. Same right axis (index 2,
+            // hidden but scoped). connectNulls:false + isGap→0 keeps the line
+            // honest on days with no cache activity (PR #322 rule).
+            name: "Cache read",
+            type: "line",
+            yAxisIndex: 2,
+            data: points.map((p) => p.cacheRead ?? 0),
+            smooth: 0.3,
+            showSymbol: false,
+            connectNulls: false,
+            lineStyle: { color: "#64748b", width: 1.5, opacity: 0.6 },
+            areaStyle: { color: "rgba(100, 116, 139, 0.06)" },
+            itemStyle: { color: "#64748b", opacity: 0.6 },
+          },
         ],
       };
       chartRef.current?.setOption(series, true);
@@ -307,7 +334,7 @@ function DailyUsageChart() {
   );
 }
 
-type SortKey = "model" | "sessions" | "tokens" | "cost" | null;
+type SortKey = "model" | "sessions" | "tokens" | "cost" | "cache" | null;
 type SortState = { key: SortKey; asc: boolean };
 
 const SORT_STORAGE_KEY = "signal-house:model-sort";
@@ -317,7 +344,7 @@ function readSortState(): SortState {
     const raw = localStorage.getItem(SORT_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as SortState;
-      if (parsed && (parsed.key === null || ["model", "sessions", "tokens", "cost"].includes(parsed.key)) && typeof parsed.asc === "boolean") {
+      if (parsed && (parsed.key === null || ["model", "sessions", "tokens", "cost", "cache"].includes(parsed.key)) && typeof parsed.asc === "boolean") {
         return { key: parsed.key, asc: parsed.asc };
       }
     }
@@ -354,6 +381,17 @@ function ModelTable() {
       if (sortKey === "model") {
         return asc ? b.model.localeCompare(a.model) : a.model.localeCompare(b.model);
       }
+      if (sortKey === "cache") {
+        // Cache hit rate is null for unpriced models with no cache activity;
+        // null always goes to the bottom regardless of direction so the
+        // operator never sees an "—" row at the top of a sorted list.
+        const an = a.cacheHitRate;
+        const bn = b.cacheHitRate;
+        if (an === null && bn === null) return 0;
+        if (an === null) return 1;
+        if (bn === null) return -1;
+        return asc ? an - bn : bn - an;
+      }
       const av = a[sortKey] ?? -1;
       const bv = b[sortKey] ?? -1;
       return asc ? av - bv : bv - av;
@@ -389,6 +427,7 @@ function ModelTable() {
               <th className="num"><button type="button" className={sortBtnClass("sessions")} onClick={() => cycle("sessions")}>Sessions{arrow("sessions")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("tokens")} onClick={() => cycle("tokens")}>Tokens{arrow("tokens")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("cost")} onClick={() => cycle("cost")}>Cost{arrow("cost")}</button></th>
+              <th className="num"><button type="button" className={sortBtnClass("cache")} onClick={() => cycle("cache")}>Cache %{arrow("cache")}</button></th>
             </tr>
           </thead>
           <tbody>
@@ -401,6 +440,7 @@ function ModelTable() {
                 <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
                 <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
                 <td className="num" data-label="Cost">{formatCost(m.cost)}</td>
+                <td className="num" data-label="Cache %">{formatPercent(m.cacheHitRate)}</td>
               </tr>
             ))}
           </tbody>

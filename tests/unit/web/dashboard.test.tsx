@@ -16,6 +16,7 @@ import { HealthStrip } from "../../../src/web/components/HealthStrip";
 import { AttentionQueue } from "../../../src/web/components/AttentionQueue";
 import { HeaderRefreshChip, RefreshDetail } from "../../../src/web/components/RefreshStatus";
 import { AgentSpend } from "../../../src/web/components/AgentSpend";
+import { CacheSavingsCard } from "../../../src/web/components/CacheSavingsCard";
 import { formatNumber, formatCompact, formatCost } from "../../../src/shared/format";
 // Globals are installed by tests/happy-dom.ts (bunfig [test] preload).
 
@@ -108,7 +109,10 @@ describe("HealthStrip", () => {
         totalMessages: 2000,
         totalTokens: 5_000_000,
         totalCost: 123.45,
-        bySource: { hermes: { sessions: 40, cost: 23.45, tokens: 2_000_000 } },
+        cacheHitRate: 0.1,
+        totalCacheReadTokens: 500_000,
+        totalCacheSavingsUsd: 1.5,
+        bySource: { hermes: { sessions: 40, cost: 23.45, tokens: 2_000_000, cacheReadTokens: 500_000, cacheSavingsUsd: 1.5 } },
         byModel: [],
       },
     });
@@ -220,9 +224,12 @@ describe("AgentSpend", () => {
         totalMessages: 1000,
         totalTokens: 5420000000,
         totalCost: 515.95,
+        cacheHitRate: 0.265,
+        totalCacheReadTokens: 1_580_000_000,
+        totalCacheSavingsUsd: 1500,
         bySource: {
-          opencode: { sessions: 900, cost: 300, tokens: 3000000000 },
-          hermes: { sessions: 697, cost: 215.95, tokens: 2420000000 },
+          opencode: { sessions: 900, cost: 300, tokens: 3000000000, cacheReadTokens: 800_000_000, cacheSavingsUsd: 800 },
+          hermes: { sessions: 697, cost: 215.95, tokens: 2420000000, cacheReadTokens: 780_000_000, cacheSavingsUsd: 700 },
         },
         byModel: [],
         ...overrides,
@@ -278,8 +285,8 @@ describe("AgentSpend", () => {
     useDash.setState({
       state: usageState({
         bySource: {
-          opencode: { sessions: 0, cost: null, tokens: null },
-          hermes: { sessions: 0, cost: null, tokens: null },
+          opencode: { sessions: 0, cost: null, tokens: null, cacheReadTokens: 0, cacheSavingsUsd: 0 },
+          hermes: { sessions: 0, cost: null, tokens: null, cacheReadTokens: 0, cacheSavingsUsd: 0 },
         },
       }),
     });
@@ -291,6 +298,135 @@ describe("AgentSpend", () => {
     useDash.setState({ state: emptyState() });
     render(<AgentSpend />);
     expect(screen.getByText(/no usage telemetry yet/i)).toBeTruthy();
+  });
+
+  test("renders cache-% column header on the by-model table", () => {
+    useDash.setState({
+      state: usageState({
+        byModel: [
+          { model: "DeepSeek V4 Pro", family: "DeepSeek", sessions: 10, cost: 5, tokens: 100, cacheReadTokens: 30, cacheSavingsUsd: 0.09, cacheHitRate: 0.3 },
+          { model: "Kimi K2.7 Code", family: "Moonshot", sessions: 5, cost: 1, tokens: 100, cacheReadTokens: 70, cacheSavingsUsd: null, cacheHitRate: 0.7 },
+        ],
+      }),
+    });
+    render(<AgentSpend />);
+    // The Cache % column header is rendered and is a sortable button.
+    expect(screen.getByRole("button", { name: /Cache %/ })).toBeTruthy();
+  });
+
+  test("click cache-% header sorts desc; click again sorts asc with nulls at the bottom; click third reverts", () => {
+    useDash.setState({
+      state: usageState({
+        byModel: [
+          { model: "A", family: null, sessions: 1, cost: 1, tokens: 100, cacheReadTokens: null, cacheSavingsUsd: null, cacheHitRate: null },
+          { model: "B", family: null, sessions: 1, cost: 1, tokens: 100, cacheReadTokens: 30, cacheSavingsUsd: 0.09, cacheHitRate: 0.3 },
+          { model: "C", family: null, sessions: 1, cost: 1, tokens: 100, cacheReadTokens: 70, cacheSavingsUsd: 0.21, cacheHitRate: 0.7 },
+        ],
+      }),
+    });
+    render(<AgentSpend />);
+    const btn = screen.getByRole("button", { name: /Cache %/ });
+
+    // Click 1 → desc by cacheHitRate
+    fireEvent.click(btn);
+    let rows = screen.getAllByRole("row").slice(1); // skip header
+    expect(rows.map((r) => r.querySelector(".model-name")?.textContent)).toEqual(["C", "B", "A"]);
+
+    // Click 2 → asc by cacheHitRate, nulls at the bottom
+    fireEvent.click(btn);
+    rows = screen.getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.querySelector(".model-name")?.textContent)).toEqual(["B", "C", "A"]);
+
+    // Click 3 → reverts to default session order (preserves insertion order)
+    fireEvent.click(btn);
+    rows = screen.getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.querySelector(".model-name")?.textContent)).toEqual(["A", "B", "C"]);
+  });
+
+  test("cache-% cell renders em-dash for null hit rate", () => {
+    useDash.setState({
+      state: usageState({
+        byModel: [
+          { model: "Unpriced", family: null, sessions: 1, cost: null, tokens: null, cacheReadTokens: 100, cacheSavingsUsd: null, cacheHitRate: null },
+        ],
+      }),
+    });
+    render(<AgentSpend />);
+    // The by-model row carries a data-label="Cache %" cell whose content is "—".
+    const cell = screen.getByText("—", { selector: 'td[data-label="Cache %"]' });
+    expect(cell).toBeTruthy();
+  });
+
+  test("cache-% cell carries the mobile data-label so the reflow can find it", () => {
+    useDash.setState({
+      state: usageState({
+        byModel: [
+          { model: "DeepSeek V4 Pro", family: "DeepSeek", sessions: 1, cost: 1, tokens: 100, cacheReadTokens: 30, cacheSavingsUsd: 0.09, cacheHitRate: 0.3 },
+        ],
+      }),
+    });
+    render(<AgentSpend />);
+    expect(screen.getByText("30%", { selector: 'td[data-label="Cache %"]' })).toBeTruthy();
+  });
+});
+
+describe("CacheSavingsCard", () => {
+  function usageState(overrides: Partial<NonNullable<StatePayload["usage"]>> = {}): StatePayload {
+    return emptyState({
+      usage: {
+        totalSessions: 100,
+        totalMessages: null,
+        totalTokens: 5_000_000,
+        totalCost: 50,
+        cacheHitRate: 0.4,
+        totalCacheReadTokens: 2_000_000,
+        totalCacheSavingsUsd: 6,
+        bySource: {
+          opencode: { sessions: 60, cost: 30, tokens: 3_000_000, cacheReadTokens: 1_200_000, cacheSavingsUsd: 3.6 },
+          hermes: { sessions: 40, cost: 20, tokens: 2_000_000, cacheReadTokens: 800_000, cacheSavingsUsd: 2.4 },
+        },
+        byModel: [],
+        ...overrides,
+      },
+    });
+  }
+
+  test("renders hit rate, tokens saved, and $ saved from usage", () => {
+    useDash.setState({ state: usageState() });
+    render(<CacheSavingsCard />);
+    expect(screen.getByText("40%")).toBeTruthy();
+    // formatCompact(2_000_000) → "2M" (Intl compact notation). The headline
+    // cell renders "2M cache-read tokens"; we anchor on the kpi-caption to
+    // avoid matching the per-source "1.2M" rows.
+    expect(screen.getByText(/^2M cache-read tokens$/)).toBeTruthy();
+    expect(screen.getByText("$6.00")).toBeTruthy();
+  });
+
+  test("empty state renders em-dash, zero tokens and $0.00 — never NaN/null", () => {
+    useDash.setState({
+      state: usageState({
+        cacheHitRate: null,
+        totalCacheReadTokens: 0,
+        totalCacheSavingsUsd: 0,
+        bySource: {
+          opencode: { sessions: 0, cost: null, tokens: null, cacheReadTokens: 0, cacheSavingsUsd: 0 },
+          hermes: { sessions: 0, cost: null, tokens: null, cacheReadTokens: 0, cacheSavingsUsd: 0 },
+        },
+      }),
+    });
+    render(<CacheSavingsCard />);
+    // hit rate shows — (rate unknown with no cache activity); tokens show 0
+    // (confident no activity, NOT em-dash); $ saved shows $0.00.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$0.00").length).toBeGreaterThan(0);
+  });
+
+  test("per-source row carries savings per source", () => {
+    useDash.setState({ state: usageState() });
+    render(<CacheSavingsCard />);
+    // OpenCode $3.60 and Hermes $2.40 both visible.
+    expect(screen.getAllByText("$3.60").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$2.40").length).toBeGreaterThan(0);
   });
 });
 

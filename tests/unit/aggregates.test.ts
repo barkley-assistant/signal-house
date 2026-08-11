@@ -108,13 +108,19 @@ describe("computeAggregates windowing", () => {
       totalMessages: null,
       totalTokens: 1000,
       totalCost: 42,
-      bySource: { opencode: { sessions: 999, cost: 42, tokens: 1000 } },
-      byModel: [{ model: "Weekmodel", family: null, sessions: 2, cost: 2, tokens: 2 }],
+      cacheHitRate: 0.25,
+      totalCacheReadTokens: 250,
+      totalCacheSavingsUsd: 5,
+      bySource: { opencode: { sessions: 999, cost: 42, tokens: 1000, cacheReadTokens: 250, cacheSavingsUsd: 5 } },
+      byModel: [{ model: "Weekmodel", family: null, sessions: 2, cost: 2, tokens: 2, cacheReadTokens: null, cacheSavingsUsd: null, cacheHitRate: null }],
     };
     const a = computeAggregates([s], config, 7, override);
     expect(a.usage!.totalSessions).toBe(999);
     expect(a.usage!.totalCost).toBeCloseTo(42, 5);
     expect(a.usage!.byModel[0].model).toBe("Weekmodel");
+    // New fields are passed through from the override unchanged.
+    expect(a.usage!.cacheHitRate).toBeCloseTo(0.25, 5);
+    expect(a.usage!.bySource.opencode.cacheReadTokens).toBe(250);
   });
 
   test("usage falls back to the snapshot when no history override is given", () => {

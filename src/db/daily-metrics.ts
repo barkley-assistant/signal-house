@@ -109,7 +109,7 @@ export function queryDailyMetrics(db: Database, q: DailyQuery): DailyMetricPoint
 }
 
 /** Aggregated per-day cost + token series for the Agent Spend trend chart. */
-export function queryDailyTrend(db: Database, from: string, to: string): Array<{ date: string; cost: number | null; tokens: number | null }> {
+export function queryDailyTrend(db: Database, from: string, to: string): Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }> {
   const rows = db
     .query(
       `SELECT date,
@@ -118,13 +118,14 @@ export function queryDailyTrend(db: Database, from: string, to: string): Array<{
               SUM(CASE WHEN metric = 'tokens.output' THEN value END) +
               SUM(CASE WHEN metric = 'tokens.cache_read' THEN value END) +
               SUM(CASE WHEN metric = 'tokens.cache_write' THEN value END) +
-              SUM(CASE WHEN metric = 'tokens.reasoning' THEN value END) AS tokens
+              SUM(CASE WHEN metric = 'tokens.reasoning' THEN value END) AS tokens,
+              SUM(CASE WHEN metric = 'tokens.cache_read' THEN value END) AS cache_read
        FROM daily_metrics
        WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
        GROUP BY date ORDER BY date`,
     )
-    .all(from, to) as Array<{ date: string; cost: number | null; tokens: number | null }>;
-  return rows;
+    .all(from, to) as Array<{ date: string; cost: number | null; tokens: number | null; cache_read: number | null }>;
+  return rows.map((r) => ({ date: r.date, cost: r.cost, tokens: r.tokens, cacheRead: r.cache_read }));
 }
 
 /** All distinct (date, source) pairs that have ANY rows in range. */

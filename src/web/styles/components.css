@@ -494,3 +494,77 @@
     padding: 10px 14px;
   }
 }
+
+/* Prompt Cache savings card — same grammar as Agent Spend's per-source ledger:
+   two macro stats side by side, then a per-source ledger underneath. Mobile
+   reflow stacks the stats (≤640px) so the headline stays the first thing the
+   operator reads. */
+.cache-savings-card {
+  margin-top: 16px;
+}
+.cache-savings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin: 16px 0 12px;
+}
+.cache-savings-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cache-savings-stat .big-number {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+.cache-savings-stat .kpi-caption {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.cache-savings-sources {
+  border-top: 1px solid var(--divider);
+  padding-top: 12px;
+}
+.cache-savings-sources__title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.cache-savings-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+.cache-savings-source-row + .cache-savings-source-row {
+  border-top: 1px solid var(--divider);
+}
+.cache-savings-source-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cache-savings-source-row__meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .cache-savings-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .cache-savings-stat .big-number {
+    font-size: 30px;
+  }
+}

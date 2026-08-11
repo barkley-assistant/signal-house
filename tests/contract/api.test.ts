@@ -114,11 +114,16 @@ describe("state contract", () => {
   test("/api/daily/spend?days=N maps to the matching from window", async () => {
     const res = await authed("/api/daily/spend?days=90");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { from: string; to: string; days: number; points: unknown[] };
+    const body = (await res.json()) as { from: string; to: string; days: number; points: Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }> };
     expect(body.days).toBe(90);
     expect(body.from).toBe(utcDaysAgo(90));
     expect(body.to).toBe(utcDaysAgo(0));
     expect(Array.isArray(body.points)).toBe(true);
+    // Each point carries the additive cacheRead field (null when no cache
+    // activity for that day — never undefined).
+    for (const p of body.points) {
+      expect(p).toHaveProperty("cacheRead");
+    }
 
     const fallback = (await (await authed("/api/daily/spend?days=13")).json()) as { days: number };
     expect(fallback.days).toBe(30);

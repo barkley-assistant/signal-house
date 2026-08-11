@@ -9,6 +9,7 @@ import pkg from "../../../package.json";
 import { HealthStrip } from "../components/HealthStrip";
 import { AttentionQueue } from "../components/AttentionQueue";
 import { AgentSpend } from "../components/AgentSpend";
+import { CacheSavingsCard } from "../components/CacheSavingsCard";
 import { TimeRangeFilter } from "../components/TimeRangeFilter";
 import { HeaderRefreshChip } from "../components/RefreshStatus";
 import { SourceDiagnostics } from "../components/SourceDiagnostics";
@@ -51,6 +52,7 @@ export function App() {
         <HealthStrip state={state} />
 
         <AgentSpend />
+        <CacheSavingsCard />
         <AttentionQueue attention={state?.attention ?? []} />
 
         {state && <SourceDiagnostics status={state.status} />}

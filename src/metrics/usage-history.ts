@@ -17,6 +17,7 @@
 import type { Database } from "bun:sqlite";
 import type { UsageAggregate } from "../orchestrator/aggregates";
 import { mergeModelRows } from "../orchestrator/aggregates";
+import { cacheSavingsUsdForModel } from "../shared/model-costs";
 
 const DAY_METRICS = [
   "sessions.total",
@@ -67,6 +68,15 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
   let totalMessages: number | null = null;
   let totalTokens: number | null = null;
   let totalCost: number | null = null;
+  let totalInputTokens: number | null = null;
+  // totalCacheReadTokens is a numeric token count (sum of observed values,
+  // default 0 when no source had any cache_read telemetry). Confident zero
+  // when no source has cache rows — the UI renders "0" (not "—").
+  let totalCacheReadTokens = 0;
+  // sawCacheReadTelemetry tracks whether ANY source had a cache_read row.
+  // null cacheHitRate when no source has any cache telemetry at all (the
+  // rate is genuinely unknown, not 0%).
+  let sawCacheReadTelemetry = false;
 
   const merge = (a: number | null, b: number | null): number | null => {
     if (a === null && b === null) return null;
@@ -78,21 +88,100 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
     const messages = metrics.get("messages.total") ?? null;
     const tokens = knownSum(TOKEN_METRICS.map((k) => metrics.get(k) ?? null));
     const cost = metrics.get("cost.total") ?? null;
-    bySource[source] = { sessions, cost, tokens };
+    const input = metrics.get("tokens.input") ?? null;
+    const cacheReadTokens = metrics.get("tokens.cache_read") ?? null;
+    // Per-source cache_read defaults to 0 when no telemetry row exists (the
+    // issue body's contract: "No cache activity → 0 for tokens saved"). The
+    // rate computation uses sawCacheReadTelemetry to distinguish "no
+    // activity" from "some activity but the formula gives 0".
+    const cacheReadValue: number = cacheReadTokens ?? 0;
+    if (cacheReadTokens !== null) sawCacheReadTelemetry = true;
+    bySource[source] = { sessions, cost, tokens, cacheReadTokens: cacheReadValue, cacheSavingsUsd: null };
+    totalCacheReadTokens += cacheReadValue;
     totalSessions += sessions;
     totalMessages = merge(totalMessages, messages);
     totalTokens = merge(totalTokens, tokens);
     totalCost = merge(totalCost, cost);
+    totalInputTokens = merge(totalInputTokens, input);
   }
+
+  const byModel = queryModelRows(db, from, to);
+
+  // Per-source cache savings: re-query the per-(source, model) breakdown so
+  // we attribute savings to each source without leaking the source into the
+  // model rows that the byModel table is built from. The map carries:
+  //   • source absent → source had no priced-model cache_read rows at all
+  //     (legitimate zero, UI shows $0.00).
+  //   • source present with a number → sum of per-model savings for that source.
+  //   • source present with null → at least one unpriced model poisoned it
+  //     (UI shows —, since "no price" is not the same as "no savings").
+  const sourceModelSavings = querySourceModelSavings(db, from, to);
+  for (const source of Object.keys(bySource)) {
+    if (sourceModelSavings.has(source)) {
+      bySource[source] = { ...bySource[source], cacheSavingsUsd: sourceModelSavings.get(source) ?? null };
+    } else {
+      bySource[source] = { ...bySource[source], cacheSavingsUsd: 0 };
+    }
+  }
+
+  // Window total: sum of per-model savings, ignoring nulls (unpriced models
+  // contribute nothing, but a priced model with cache_read still does). Only
+  // when ALL models are unpriced does the total become null.
+  let totalCacheSavingsUsd: number | null = null;
+  for (const m of byModel) {
+    if (m.cacheSavingsUsd === null) continue;
+    totalCacheSavingsUsd = (totalCacheSavingsUsd ?? 0) + m.cacheSavingsUsd;
+  }
+
+  // Cache hit rate: only meaningful when at least one source has cache_read
+  // telemetry. Otherwise the rate is genuinely unknown (UI → "—").
+  const cacheHitRate = sawCacheReadTelemetry ? totalCacheReadTokens / ((totalInputTokens ?? 0) + totalCacheReadTokens) : null;
 
   return {
     totalSessions,
     totalMessages,
     totalTokens,
     totalCost,
+    cacheHitRate,
+    totalCacheReadTokens,
+    totalCacheSavingsUsd,
     bySource,
-    byModel: queryModelRows(db, from, to),
+    byModel,
   };
+}
+
+/** Per-(source, model) cache_read sums so we can attribute savings to each
+ *  source without leaking the source into the merged byModel rows. Returns
+ *  null-poisoned savings: any unpriced model in a source → null savings. */
+function querySourceModelSavings(db: Database, from: string, to: string): Map<string, number | null> {
+  const rows = db
+    .query(
+      `SELECT source, json_extract(tags, '$.model') AS model,
+              SUM(CASE WHEN metric = 'model.tokens_cache_read' THEN value END) AS cache_read
+       FROM daily_metrics
+       WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+         AND metric = 'model.tokens_cache_read'
+       GROUP BY source, model`,
+    )
+    .all(from, to) as Array<{ source: string; model: string | null; cache_read: number | null }>;
+
+  const result = new Map<string, number | null>();
+  for (const r of rows) {
+    if (!r.model) continue;
+    const savings = cacheSavingsUsdForModel(r.model, r.cache_read);
+    const existing = result.get(r.source);
+    if (savings === null) {
+      result.set(r.source, null);
+    } else if (existing === null) {
+      // already poisoned — keep null
+    } else if (existing === undefined) {
+      result.set(r.source, savings);
+    } else {
+      result.set(r.source, existing + savings);
+    }
+  }
+  // Sources with no cache_read → confident 0 savings.
+  return result;
 }
 
 /** Per-model rows from the accumulated daily_metrics model history, merged
@@ -158,6 +247,10 @@ function queryModelRows(db: Database, from: string, to: string): UsageAggregate[
     }
   }
 
+  // Cache savings is computed per-model via cacheSavingsUsdForModel — no need
+  // to thread it through the daily_metrics schema; the daily_metrics writer
+  // already emits `model.tokens_cache_read` and `model.tokens_input`, which
+  // is all the formula needs. We compute the savings lazily in rowCacheSavings.
   return mergeModelRows(
     [...byKey.values()].map((r) => ({
       model: r.model,
@@ -170,6 +263,7 @@ function queryModelRows(db: Database, from: string, to: string): UsageAggregate[
       cacheWriteTokens: r.cacheWriteTokens,
       reasoningTokens: r.reasoningTokens,
       cost: r.cost,
+      cacheSavingsUsd: cacheSavingsUsdForModel(r.model, r.cacheReadTokens),
     })),
   );
 }

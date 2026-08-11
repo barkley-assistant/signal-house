@@ -39,8 +39,10 @@ function openDb(): Database {
 
 /** Write one day's worth of day-level + model rows for a source. With
  *  `modelOnly`, only the model rows are written (for seeding a second model
- *  on a day that already has day-level rows). */
-function seedDay(db: Database, source: string, date: string, opts: { sessions?: number; cost?: number | null; tokens?: number | null; model?: string; modelSessions?: number; modelCost?: number | null; modelTokens?: number | null; modelOnly?: boolean }): void {
+ *  on a day that already has day-level rows). `cacheRead` / `modelCacheRead`
+ *  write `tokens.cache_read` / `model.tokens_cache_read` so the cache
+ *  derivation has data to work with. */
+function seedDay(db: Database, source: string, date: string, opts: { sessions?: number; cost?: number | null; tokens?: number | null; cacheRead?: number | null; model?: string; modelSessions?: number; modelCost?: number | null; modelTokens?: number | null; modelCacheRead?: number | null; modelOnly?: boolean }): void {
   const t = Date.now();
   const put = (metric: string, value: number | null, tags = "{}") =>
     db.query("INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)").run(date, source, metric, value, tags, t);
@@ -49,12 +51,14 @@ function seedDay(db: Database, source: string, date: string, opts: { sessions?: 
     put("messages.total", opts.sessions ?? 1);
     put("cost.total", opts.cost ?? null);
     put("tokens.input", opts.tokens ?? null);
+    if (opts.cacheRead !== undefined) put("tokens.cache_read", opts.cacheRead);
   }
   if (opts.model) {
     const tags = JSON.stringify({ model: opts.model });
     put("model.sessions", opts.modelSessions ?? 1, tags);
     put("model.cost", opts.modelCost ?? opts.cost ?? null, tags);
     put("model.tokens_input", opts.modelTokens ?? opts.tokens ?? null, tags);
+    if (opts.modelCacheRead !== undefined) put("model.tokens_cache_read", opts.modelCacheRead, tags);
   }
 }
 
@@ -139,6 +143,64 @@ describe("queryUsageAggregate", () => {
     // total must still reflect the known $5.
     expect(agg.totalCost).toBeCloseTo(5, 5);
     expect(agg.totalSessions).toBe(2);
+    db.close();
+  });
+
+  test("cache hit rate is sum(cache_read) / sum(cache_read + input)", () => {
+    const db = openDb();
+    // Day 1: 30 cache reads, 70 input → 0.3 hit rate
+    // Day 2: 10 cache reads, 90 input → 0.1 hit rate
+    // Window total: 40 cache reads, 160 input → 40/(40+160) = 0.2
+    seedDay(db, "hermes", utcDaysAgo(2), { sessions: 1, cost: 1, tokens: 70, cacheRead: 30 });
+    seedDay(db, "hermes", utcDaysAgo(1), { sessions: 1, cost: 1, tokens: 90, cacheRead: 10 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    expect(agg.cacheHitRate).toBeCloseTo(0.2, 5);
+    expect(agg.totalCacheReadTokens).toBe(40);
+    db.close();
+  });
+
+  test("no cache activity → cacheHitRate=null, never NaN", () => {
+    const db = openDb();
+    seedDay(db, "hermes", utcDay(), { sessions: 2, cost: 1, tokens: 1000 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    // No cache activity → hit rate is unknown (not 0, not NaN). The UI
+    // renders —. Tokens are a confident 0 (this source never had cache).
+    expect(agg.cacheHitRate).toBeNull();
+    expect(agg.totalCacheReadTokens).toBe(0);
+    expect(agg.bySource.hermes.cacheReadTokens).toBe(0);
+    db.close();
+  });
+
+  test("per-source cache tokens and savings reflect the source split", () => {
+    const db = openDb();
+    // opencode: 1M cache_read on DeepSeek V4 Pro ($3/M) → $3
+    seedDay(db, "opencode", utcDay(), { sessions: 5, cost: 5, tokens: 100, cacheRead: 1_000_000, model: "DeepSeek-V4-Pro", modelSessions: 5, modelCost: 5, modelCacheRead: 1_000_000 });
+    // hermes: 2M cache_read on Kimi K2.7 Code (unpriced → null savings)
+    seedDay(db, "hermes", utcDay(), { sessions: 3, cost: 3, tokens: 100, cacheRead: 2_000_000, model: "Kimi-K2.7-Code", modelSessions: 3, modelCost: 3, modelCacheRead: 2_000_000 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    expect(agg.bySource.opencode.cacheReadTokens).toBe(1_000_000);
+    expect(agg.bySource.opencode.cacheSavingsUsd).toBeCloseTo(3, 5);
+    expect(agg.bySource.hermes.cacheReadTokens).toBe(2_000_000);
+    // unpriced model → savings is null, not 0 — the card renders — not $0.00
+    expect(agg.bySource.hermes.cacheSavingsUsd).toBeNull();
+    // top-level: $3 from opencode + null from hermes → 3 (the null source
+    // does not erase the priced one)
+    expect(agg.totalCacheSavingsUsd).toBeCloseTo(3, 5);
+    db.close();
+  });
+
+  test("per-model cache savings applies the cost formula", () => {
+    const db = openDb();
+    seedDay(db, "opencode", utcDay(), { sessions: 1, cost: 5, tokens: 100, cacheRead: 1_000_000, model: "DeepSeek-V4-Pro", modelSessions: 1, modelCost: 5, modelCacheRead: 1_000_000 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    expect(agg.byModel).toHaveLength(1);
+    expect(agg.byModel[0].cacheReadTokens).toBe(1_000_000);
+    expect(agg.byModel[0].cacheSavingsUsd).toBeCloseTo(3, 5);
+    expect(agg.byModel[0].cacheHitRate).toBeCloseTo(1_000_000 / (1_000_000 + 100), 5);
     db.close();
   });
 });
