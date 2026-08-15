@@ -302,3 +302,52 @@ describe("state store", () => {
     expect(useDash.getState().state).not.toBeNull();
   });
 });
+
+describe("ModelTable cache % sort", () => {
+  beforeEach(() => {
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+      cb(performance.now() + 1000);
+      return 0;
+    });
+    vi.spyOn(echarts, "init").mockImplementation(
+      // @ts-expect-error minimal echarts stub
+      () => ({ setOption() {}, resize() {}, dispose() {}, on() {} }),
+    );
+  });
+
+  function modelUsageState(): StatePayload {
+    return emptyState({
+      usage: {
+        totalSessions: 10,
+        totalMessages: 100,
+        totalTokens: 1000,
+        totalCost: 10,
+        bySource: { opencode: { sessions: 10, cost: 10, tokens: 1000 } },
+        byModel: [
+          { model: "Alpha", family: null, sessions: 5, cost: 5, tokens: 500, cacheReadTokens: 100, cacheHitRate: 0.25, cacheSavings: 0.0003 },
+          { model: "Beta", family: null, sessions: 3, cost: 3, tokens: 300, cacheReadTokens: 200, cacheHitRate: 0.67, cacheSavings: 0.0006 },
+          { model: "Gamma", family: null, sessions: 2, cost: 2, tokens: 200, cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 },
+        ],
+      },
+    });
+  }
+
+  test("sorts by cache % descending on first click", () => {
+    useDash.setState({ state: modelUsageState() });
+    render(<AgentSpend />);
+    const btn = screen.getByRole("button", { name: /cache %/i });
+    fireEvent.click(btn);
+    const names = screen.getAllByText(/^(Alpha|Beta|Gamma)$/).map((el) => el.textContent);
+    expect(names).toEqual(["Beta", "Alpha", "Gamma"]);
+  });
+
+  test("cache % sort persists in localStorage and restores on reload", () => {
+    useDash.setState({ state: modelUsageState() });
+    render(<AgentSpend />);
+    fireEvent.click(screen.getByRole("button", { name: /cache %/i }));
+    cleanup();
+    render(<AgentSpend />);
+    const btn = screen.getByRole("button", { name: /cache %/i });
+    expect(btn.querySelector(".sort-arrow")).toBeTruthy();
+  });
+});

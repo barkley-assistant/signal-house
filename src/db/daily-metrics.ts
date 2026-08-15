@@ -108,8 +108,10 @@ export function queryDailyMetrics(db: Database, q: DailyQuery): DailyMetricPoint
   }));
 }
 
-/** Aggregated per-day cost + token series for the Agent Spend trend chart. */
-export function queryDailyTrend(db: Database, from: string, to: string): Array<{ date: string; cost: number | null; tokens: number | null }> {
+/** Aggregated per-day cost + token series for the Agent Spend trend chart.
+ *  The `tokens` column keeps its original 5-term sum semantics; `cacheRead`
+ *  is an additive column for the cache-read chart series. */
+export function queryDailyTrend(db: Database, from: string, to: string): Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }> {
   const rows = db
     .query(
       `SELECT date,
@@ -118,12 +120,13 @@ export function queryDailyTrend(db: Database, from: string, to: string): Array<{
               SUM(CASE WHEN metric = 'tokens.output' THEN value END) +
               SUM(CASE WHEN metric = 'tokens.cache_read' THEN value END) +
               SUM(CASE WHEN metric = 'tokens.cache_write' THEN value END) +
-              SUM(CASE WHEN metric = 'tokens.reasoning' THEN value END) AS tokens
+              SUM(CASE WHEN metric = 'tokens.reasoning' THEN value END) AS tokens,
+              SUM(CASE WHEN metric = 'tokens.cache_read' THEN value END) AS cacheRead
        FROM daily_metrics
        WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
        GROUP BY date ORDER BY date`,
     )
-    .all(from, to) as Array<{ date: string; cost: number | null; tokens: number | null }>;
+    .all(from, to) as Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }>;
   return rows;
 }
 

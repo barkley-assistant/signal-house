@@ -1,0 +1,143 @@
+/**
+ * Cache metric derivation tests — hit-rate formula, zero-guard, and the
+ * server-side cost.input lookup that drives per-model savings.
+ */
+
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { queryUsageAggregate } from "../../src/metrics/usage-history";
+import { getInputCostPerMillion, resetCostConfigCache, setCostConfigPath } from "../../src/server/cost-input";
+import { utcDay, utcDaysAgo } from "../../src/shared/dates";
+
+let dir: string;
+beforeAll(() => {
+  dir = mkdtempSync(join(tmpdir(), "sh-cache-metrics-"));
+});
+afterAll(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
+
+function openDb(): Database {
+  const db = new Database(join(dir, `cache-${Math.random().toString(36).slice(2)}.db`));
+  db.exec(`
+    CREATE TABLE daily_metrics (
+      date TEXT NOT NULL, source TEXT NOT NULL, metric TEXT NOT NULL, value REAL,
+      tags TEXT NOT NULL DEFAULT '{}', observed_at INTEGER NOT NULL,
+      PRIMARY KEY (date, source, metric, tags)
+    );
+  `);
+  return db;
+}
+
+function put(db: Database, source: string, date: string, metric: string, value: number | null, tags = "{}"): void {
+  db.query("INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+    date, source, metric, value, tags, Date.now(),
+  );
+}
+
+function seedDay(db: Database, source: string, date: string, opts: { input?: number; cacheRead?: number; model?: string; modelInput?: number; modelCacheRead?: number }): void {
+  if (opts.input !== undefined) put(db, source, date, "tokens.input", opts.input);
+  if (opts.cacheRead !== undefined) put(db, source, date, "tokens.cache_read", opts.cacheRead);
+  if (opts.model) {
+    const tags = JSON.stringify({ model: opts.model });
+    put(db, source, date, "model.sessions", 1, tags);
+    if (opts.modelInput !== undefined) put(db, source, date, "model.tokens_input", opts.modelInput, tags);
+    if (opts.modelCacheRead !== undefined) put(db, source, date, "model.tokens_cache_read", opts.modelCacheRead, tags);
+  }
+}
+
+describe("queryUsageAggregate cache metrics", () => {
+  test("all cached window has hit rate 1.0", () => {
+    const db = openDb();
+    seedDay(db, "opencode", utcDay(), { input: 0, cacheRead: 1000, model: "kimi-k27-code", modelInput: 0, modelCacheRead: 1000 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    expect(agg.cacheHitRate).toBeCloseTo(1, 5);
+    expect(agg.bySource.opencode.cacheHitRate).toBeCloseTo(1, 5);
+    expect(agg.cacheReadTokens).toBe(1000);
+    db.close();
+  });
+
+  test("no-cache window has hit rate 0.0", () => {
+    const db = openDb();
+    seedDay(db, "opencode", utcDay(), { input: 1000, cacheRead: 0, model: "kimi-k27-code", modelInput: 1000, modelCacheRead: 0 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    expect(agg.cacheHitRate).toBeCloseTo(0, 5);
+    expect(agg.bySource.opencode.cacheHitRate).toBeCloseTo(0, 5);
+    expect(agg.cacheReadTokens).toBe(0);
+    db.close();
+  });
+
+  test("empty window zero-guard returns 0, not NaN", () => {
+    const db = openDb();
+    seedDay(db, "opencode", utcDay(), { input: 0, cacheRead: 0, model: "kimi-k27-code", modelInput: 0, modelCacheRead: 0 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    expect(agg.cacheHitRate).toBe(0);
+    expect(agg.cacheHitRate).not.toBeNaN();
+    expect(agg.cacheHitRate).not.toBeNull();
+    expect(agg.bySource.opencode.cacheHitRate).toBe(0);
+    db.close();
+  });
+
+  test("mixed window computes weighted rate across sources", () => {
+    const db = openDb();
+    // opencode: 300 cache read / 1000 input + 300 cache read = 300/1300
+    seedDay(db, "opencode", utcDay(), { input: 1000, cacheRead: 300, model: "kimi-k27-code", modelInput: 1000, modelCacheRead: 300 });
+    // hermes: 100 cache read / 200 input + 100 cache read = 100/300
+    seedDay(db, "hermes", utcDay(), { input: 200, cacheRead: 100, model: "kimi-k27-code", modelInput: 200, modelCacheRead: 100 });
+
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    // window total: 400 / (400 + 1200) = 0.25
+    expect(agg.cacheHitRate).toBeCloseTo(0.25, 5);
+    expect(agg.bySource.opencode.cacheHitRate).toBeCloseTo(300 / 1300, 5);
+    expect(agg.bySource.hermes.cacheHitRate).toBeCloseTo(100 / 300, 5);
+    db.close();
+  });
+});
+
+describe("cost-input lookup", () => {
+  function fixture(cfg: unknown): string {
+    const path = join(dir, `opencode-${Math.random().toString(36).slice(2)}.jsonc`);
+    writeFileSync(path, JSON.stringify(cfg, null, 2));
+    setCostConfigPath(path);
+    resetCostConfigCache();
+    return path;
+  }
+
+  test("known model returns cost.input rate", () => {
+    fixture({ models: { "kimi-k27-code": { cost: { input: 3.0 } } } });
+    expect(getInputCostPerMillion("kimi-k27-code")).toBeCloseTo(3.0, 5);
+    expect(getInputCostPerMillion("Kimi K2.7 Code")).toBeCloseTo(3.0, 5); // normalised label
+  });
+
+  test("raw model name fallback when machine key misses", () => {
+    fixture({ models: { "custom-model-v1": { cost: { input: 1.5 } } } });
+    expect(getInputCostPerMillion("custom-model-v1")).toBeCloseTo(1.5, 5);
+  });
+
+  test("missing rate returns 0, not NaN or null", () => {
+    fixture({ models: { "other-model": { cost: { input: 1.0 } } } });
+    expect(getInputCostPerMillion("unknown-model")).toBe(0);
+  });
+
+  test("savings formula produces expected USD", () => {
+    // 1000 tokens * $3 / 1M = $0.003
+    fixture({ models: { "kimi-k27-code": { cost: { input: 3.0 } } } });
+    const rate = getInputCostPerMillion("kimi-k27-code");
+    expect(rate).toBeCloseTo(3.0, 5);
+    expect((1000 * rate) / 1_000_000).toBeCloseTo(0.003, 5);
+  });
+
+  test("JSONC comments are stripped before parsing", () => {
+    const path = join(dir, `opencode-comments.jsonc`);
+    writeFileSync(path, `// top comment\n{\n  "models": {\n    /* block */\n    "kimi-k27-code": {\n      "cost": {\n        // per 1M\n        "input": 2.5\n      }\n    }\n  }\n}`);
+    setCostConfigPath(path);
+    resetCostConfigCache();
+    expect(getInputCostPerMillion("kimi-k27-code")).toBeCloseTo(2.5, 5);
+  });
+});

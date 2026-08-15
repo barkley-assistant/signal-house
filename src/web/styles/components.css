@@ -212,17 +212,17 @@
   overflow-x: auto;
 }
 .model-table table.data {
-  /* On narrow screens the 4 columns + sort buttons + mono numbers need
+/* On narrow screens the 5 columns + sort buttons + mono numbers need
      more than ~330px; pin a minimum so the wrapper scrolls instead of
      the cells poking out of the card. */
-  min-width: 480px;
+  min-width: 540px;
 }
 
 /* Mobile (≤640px): the by-model table becomes stacked cards so every stat
-   is visible without horizontal scrolling — the header reflows into a
-   tappable sort strip (sorting must survive the reflow), and each row is
-   a card: model name + family chip on top, Sessions/Tokens/Cost as a
-   three-up mini-kpi grid beneath, echoing the health-strip grammar. */
+    is visible without horizontal scrolling — the header reflows into a
+    tappable sort strip (sorting must survive the reflow), and each row is
+    a card: model name + family chip on top, Sessions/Tokens/Cache %/Cost
+    as a four-up mini-kpi grid beneath, echoing the health-strip grammar. */
 @media (max-width: 640px) {
   .model-table {
     overflow-x: visible;
@@ -268,8 +268,8 @@
   .model-table table.data tbody tr:nth-child(odd),
   .model-table table.data tbody tr {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2px 10px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 10px;
     padding: 10px 12px;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -328,6 +328,67 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-muted);
+  }
+}
+
+/* Cache savings card — mirrors HealthStrip / AgentSpend grammar. */
+.cache-card__overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 16px 0 0;
+}
+.cache-card__providers {
+  margin-top: 12px;
+}
+.cache-card__toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cache-card__toggle:hover {
+  color: var(--text-primary);
+}
+.cache-card__provider-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cache-card__provider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-control);
+  font-size: 13px;
+}
+.cache-card__provider-row--empty {
+  color: var(--text-muted);
+  justify-content: flex-start;
+}
+.cache-card__provider-name {
+  text-transform: capitalize;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cache-card__provider-stat {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .cache-card__overview {
+    grid-template-columns: 1fr;
   }
 }
 

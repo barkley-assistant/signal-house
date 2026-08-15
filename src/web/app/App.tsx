@@ -13,6 +13,7 @@ import { TimeRangeFilter } from "../components/TimeRangeFilter";
 import { HeaderRefreshChip } from "../components/RefreshStatus";
 import { SourceDiagnostics } from "../components/SourceDiagnostics";
 import { Logo } from "../components/Logo";
+import { CacheSavingsCard } from "../components/CacheSavingsCard";
 import { formatRelative } from "../../shared/format";
 
 export function App() {
@@ -50,6 +51,7 @@ export function App() {
 
         <HealthStrip state={state} />
 
+        <CacheSavingsCard state={state} />
         <AgentSpend />
         <AttentionQueue attention={state?.attention ?? []} />
 
