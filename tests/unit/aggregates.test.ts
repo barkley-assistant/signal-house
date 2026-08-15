@@ -10,7 +10,7 @@ import { describe, expect, test } from "bun:test";
 import type { PersistedState } from "../../src/config/types";
 import type { RuntimeConfig } from "../../src/config/types";
 import type { SourceData } from "../../src/shared/types";
-import { computeAggregates, type UsageAggregate } from "../../src/orchestrator/aggregates";
+import { computeAggregates, mergeModelRows, type UsageAggregate } from "../../src/orchestrator/aggregates";
 import { emptySourceData } from "../../src/shared/types";
 import { utcDay, utcDaysAgo } from "../../src/shared/dates";
 
@@ -127,8 +127,10 @@ describe("computeAggregates windowing", () => {
   test("cycle time counts only PRs merged inside the window", () => {
     const data = emptySourceData();
     const iso = (daysAgo: number, hour = 10): string => {
-      const d = new Date(Date.UTC(2026, 7, 8 - daysAgo, hour));
-      return d.toISOString();
+      // Anchor the fixture to the current UTC day so the test stays valid
+      // regardless of the calendar date the suite runs on.
+      const [y, m, d] = utcDaysAgo(daysAgo).split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, d, hour)).toISOString();
     };
     data.pullRequests = [
       // merged 40 days ago — inside a 90-day window, outside a 7-day one
@@ -169,5 +171,35 @@ describe("computeAggregates windowing", () => {
     expect(a90.throughput!.issuesClosed).toBe(2);
     expect(a90.ci!.totalRuns).toBe(2);
     expect(a90.ci!.passRate).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe("mergeModelRows cache preservation", () => {
+  test("preserves cacheReadTokens and source discrimination", () => {
+    const rows = [
+      { model: "deepseek-v4-pro", provider: null, source: "hermes", sessions: 2, messages: null, inputTokens: 700, outputTokens: 0, cacheReadTokens: 300, cacheWriteTokens: 0, reasoningTokens: 0, cost: 1 },
+      { model: "DeepSeek-V4-Pro", provider: null, source: "opencode", sessions: 1, messages: null, inputTokens: 0, outputTokens: 0, cacheReadTokens: 1000, cacheWriteTokens: 0, reasoningTokens: 0, cost: 2 },
+    ];
+    const merged = mergeModelRows(rows);
+    expect(merged).toHaveLength(1);
+    const m = merged[0];
+    expect(m.model).toBe("DeepSeek V4 Pro");
+    expect(m.sessions).toBe(3);
+    expect(m.cacheReadTokens).toBe(1300);
+    // (1300 / (1300 + 700)) = 0.65
+    expect(m.cacheHitRate).toBeCloseTo(1300 / 2000, 5);
+    expect(Object.keys(m.bySource ?? {})).toContain("hermes");
+    expect(Object.keys(m.bySource ?? {})).toContain("opencode");
+    expect((m.bySource ?? {}).hermes.cacheReadTokens).toBe(300);
+    expect((m.bySource ?? {}).opencode.cacheReadTokens).toBe(1000);
+  });
+
+  test("handles rows without source using provider fallback", () => {
+    const rows = [
+      { model: "kimi-k27-code", provider: "opencode", source: undefined, sessions: 1, messages: null, inputTokens: 100, outputTokens: 0, cacheReadTokens: 100, cacheWriteTokens: 0, reasoningTokens: 0, cost: 1 },
+    ];
+    const merged = mergeModelRows(rows);
+    expect(merged[0].cacheReadTokens).toBe(100);
+    expect(Object.keys(merged[0].bySource ?? {})).toContain("opencode");
   });
 });

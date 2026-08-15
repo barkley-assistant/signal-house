@@ -40,7 +40,16 @@ export interface StatePayload {
     cycleTime: { avgSeconds: number | null; medianSeconds: number | null; p95Seconds: number | null; sampleSize: number } | null;
     ci: { totalRuns: number; passCount: number; failCount: number; passRate: number | null } | null;
     staleWork: { staleIssues: number; stalePrs: number; thresholdDays: number } | null;
-    costAndTokens: { cost: number | null; tokens: number | null; costPerHour: number | null; tokensPerHour: number | null } | null;
+    costAndTokens: {
+      cost: number | null;
+      tokens: number | null;
+      costPerHour: number | null;
+      tokensPerHour: number | null;
+      /** Additive cache metrics — always populated by build-state. */
+      cacheReadTokens?: number | null;
+      cacheHitRate?: number | null;
+      cacheSavings?: number | null;
+    } | null;
   };
   usage: UsageAggregate | null;
   attention: AttentionItem[];
@@ -172,6 +181,9 @@ export function buildState(db: Database, config: RuntimeConfig, collectors: Coll
             tokens: usage.totalTokens,
             costPerHour: usage.totalCost !== null && hours > 0 ? usage.totalCost / hours : null,
             tokensPerHour: usage.totalTokens !== null && hours > 0 ? usage.totalTokens / hours : null,
+            cacheReadTokens: usage.cacheReadTokens ?? 0,
+            cacheHitRate: usage.cacheHitRate ?? 0,
+            cacheSavings: usage.cacheSavings ?? 0,
           }
         : null,
     },

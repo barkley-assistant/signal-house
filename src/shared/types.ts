@@ -119,6 +119,10 @@ export interface UsageDay {
 export interface ModelUsageRow {
   model: string;
   provider: string | null;
+  /** Source discriminator when the row is fed into a cross-source merge
+   *  (opencode / hermes). Collector-emitted rows do not set this; it is
+   *  applied server-side before mergeModelRows. */
+  source?: string;
   sessions: number;
   messages: number | null;
   inputTokens: number | null;

@@ -67,6 +67,8 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
   let totalMessages: number | null = null;
   let totalTokens: number | null = null;
   let totalCost: number | null = null;
+  let windowCacheRead = 0;
+  let windowInput = 0;
 
   const merge = (a: number | null, b: number | null): number | null => {
     if (a === null && b === null) return null;
@@ -78,11 +80,28 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
     const messages = metrics.get("messages.total") ?? null;
     const tokens = knownSum(TOKEN_METRICS.map((k) => metrics.get(k) ?? null));
     const cost = metrics.get("cost.total") ?? null;
-    bySource[source] = { sessions, cost, tokens };
+    const inputTokens = metrics.get("tokens.input") ?? 0;
+    const cacheReadTokens = metrics.get("tokens.cache_read") ?? 0;
+    const cacheHitRate = cacheReadTokens + inputTokens > 0 ? cacheReadTokens / (cacheReadTokens + inputTokens) : 0;
+    bySource[source] = { sessions, cost, tokens, cacheReadTokens, cacheHitRate, cacheSavings: 0 };
     totalSessions += sessions;
     totalMessages = merge(totalMessages, messages);
     totalTokens = merge(totalTokens, tokens);
     totalCost = merge(totalCost, cost);
+    windowCacheRead += cacheReadTokens;
+    windowInput += inputTokens;
+  }
+
+  const byModel = queryModelRows(db, from, to);
+  let windowSavings = 0;
+  for (const m of byModel) {
+    windowSavings += m.cacheSavings ?? 0;
+    for (const [source, data] of Object.entries(m.bySource ?? {})) {
+      const src = bySource[source];
+      if (src) {
+        src.cacheSavings = (src.cacheSavings ?? 0) + data.cacheSavings;
+      }
+    }
   }
 
   return {
@@ -90,8 +109,11 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
     totalMessages,
     totalTokens,
     totalCost,
+    cacheReadTokens: windowCacheRead,
+    cacheHitRate: windowCacheRead + windowInput > 0 ? windowCacheRead / (windowCacheRead + windowInput) : 0,
+    cacheSavings: windowSavings,
     bySource,
-    byModel: queryModelRows(db, from, to),
+    byModel,
   };
 }
 
@@ -111,6 +133,7 @@ function queryModelRows(db: Database, from: string, to: string): UsageAggregate[
 
   const byKey = new Map<string, {
     model: string;
+    source: string;
     sessions: number;
     cost: number | null;
     inputTokens: number | null;
@@ -130,7 +153,7 @@ function queryModelRows(db: Database, from: string, to: string): UsageAggregate[
     const key = `${r.source}\u0000${r.model}`;
     let row = byKey.get(key);
     if (!row) {
-      row = { model: r.model, sessions: 0, cost: null, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, reasoningTokens: null };
+      row = { model: r.model, source: r.source, sessions: 0, cost: null, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, reasoningTokens: null };
       byKey.set(key, row);
     }
     switch (r.metric) {
@@ -162,6 +185,7 @@ function queryModelRows(db: Database, from: string, to: string): UsageAggregate[
     [...byKey.values()].map((r) => ({
       model: r.model,
       provider: null,
+      source: r.source,
       sessions: r.sessions,
       messages: null,
       inputTokens: r.inputTokens,

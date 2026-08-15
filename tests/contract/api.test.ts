@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { startServer, type TestServer } from "./test-server";
 import { runRefresh } from "../../src/orchestrator/refresh";
 import { createCollectors } from "../../src/collectors";
-import { utcDaysAgo } from "../../src/shared/dates";
+import { utcDay, utcDaysAgo } from "../../src/shared/dates";
 
 let dir: string;
 let server: TestServer;
@@ -209,6 +209,43 @@ describe("no secret leakage", () => {
     for (const text of [state, diag, health]) {
       expect(text).not.toContain("s3cret!");
       expect(text).not.toContain("admin:");
+    }
+  });
+});
+
+describe("cache savings API shape", () => {
+  test("state payload includes additive cache fields", async () => {
+    const today = utcDay();
+    const db = server.app.owner.db;
+    db.query(
+      "INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(today, "opencode", "tokens.input", 700, "{}", Date.now());
+    db.query(
+      "INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(today, "opencode", "tokens.cache_read", 300, "{}", Date.now());
+    db.query(
+      "INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(today, "opencode", "sessions.total", 1, "{}", Date.now());
+
+    const res = await authed("/api/state");
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toHaveProperty("usage");
+    const usage = body.usage as Record<string, unknown> | null;
+    expect(usage).not.toBeNull();
+    expect(usage).toHaveProperty("cacheReadTokens", 300);
+    expect(usage).toHaveProperty("cacheHitRate", 0.3);
+    expect(usage).toHaveProperty("cacheSavings", 0);
+    expect(usage).toHaveProperty("bySource");
+    expect(usage).toHaveProperty("byModel");
+    expect(Array.isArray(usage!.byModel)).toBe(true);
+  });
+
+  test("daily trend includes additive cacheRead series", async () => {
+    const res = await authed("/api/daily/spend?days=30");
+    const body = (await res.json()) as { points: Array<Record<string, unknown>> };
+    expect(Array.isArray(body.points)).toBe(true);
+    if (body.points.length > 0) {
+      expect(body.points[0]).toHaveProperty("cacheRead");
     }
   });
 });
