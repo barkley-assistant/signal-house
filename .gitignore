@@ -17,3 +17,8 @@ test-results/
 
 # Caduceus worktrees (daemon-managed)
 .worktrees/
+
+# Caduceus worker bridge artifacts (rendered in every worktree at
+# the start of a run, never project files)
+worker-prompt.md
+worker-result.json
