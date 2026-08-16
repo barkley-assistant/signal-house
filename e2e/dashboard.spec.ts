@@ -128,15 +128,9 @@ test.describe("dashboard (desktop)", () => {
     await expect(page.getByRole("button", { name: "30 days" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("cache savings card renders with hit rate and savings tiles", async ({ page }) => {
+  test("cache savings card is temporarily hidden from dashboard", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Cache Savings" })).toBeVisible();
-    // Labels are sentence-case in the DOM and uppercased via CSS; target the
-    // label element directly so we don't collide with the "tokens saved" caption.
-    await expect(page.locator(".cache-card__overview .kpi-tile__label").filter({ hasText: /^Hit rate$/ })).toBeVisible();
-    await expect(page.locator(".cache-card__overview .kpi-tile__label").filter({ hasText: /^Saved$/ })).toBeVisible();
-    // Provider breakdown toggle is present.
-    await expect(page.getByRole("button", { name: /provider breakdown/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Cache Savings" })).toHaveCount(0);
   });
 
   test("cache savings API surfaces additive cache fields", async ({ request }) => {

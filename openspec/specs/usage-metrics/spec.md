@@ -48,34 +48,6 @@ The dashboard SHALL surface per-model estimated cache savings in USD, computed a
 - **WHEN** the cost-input lookup is performed for any model
 - **THEN** neither `src/collectors/opencode/collector.ts` nor `src/collectors/hermes/collector.ts` is modified; the lookup runs only at the server layer
 
-### Requirement: Empty-state rendering
-
-The cache savings card SHALL render `—` for the hit rate, `0` for tokens saved, and `$0.00` for $ saved when there is no cache activity in the window. The card SHALL never render `NaN`, `null`, or `—` for the $ saved figure.
-
-#### Scenario: No cache activity in window
-
-- **WHEN** the window has zero cache activity across all sources
-- **THEN** the card shows hit rate `—`, tokens saved `0`, and $ saved `$0.00`
-
-#### Scenario: $ saved never renders null or NaN
-
-- **WHEN** the window has cache activity but the resolved `cost.input` rate is missing or zero
-- **THEN** $ saved renders `$0.00`, never `null`, `NaN`, or `—`
-
-### Requirement: Window rescaling of savings
-
-When the operator changes the window, cache savings SHALL rescale proportionally to the new window, matching the existing Agent Spend chart's peak-reset-on-window-change behavior. Partial-window days SHALL be within 1% tolerance of the proportional rescale.
-
-#### Scenario: Window narrows
-
-- **WHEN** the operator narrows the window from 30d to 7d
-- **THEN** the savings figure rescales to the 7d sum, resetting peaks like the Agent Spend chart
-
-#### Scenario: Partial-window day tolerance
-
-- **WHEN** the window boundary cuts a partial day
-- **THEN** the rescaled savings for that day is within 1% of the proportional share for that day
-
 ### Requirement: By-model table cache % column and sort
 
 The by-model table SHALL show a cache-% column. The table SHALL be sortable by cache %, and that sort order SHALL compose with the existing cost, sessions, and tokens sort orders. Sort state SHALL persist under the existing `signal-house:*` localStorage keys.
@@ -90,20 +62,6 @@ The by-model table SHALL show a cache-% column. The table SHALL be sortable by c
 - **WHEN** the operator reloads the page after sorting by cache %
 - **THEN** the cache-% sort is restored from the existing `signal-house:*` localStorage keys
 
-### Requirement: Per-provider breakdown and source discrimination
-
-The cache savings card SHALL surface a "by provider" line or expand toggle so the operator can see whether a provider change helped cache utilization. Source discrimination SHALL be preserved: opencode's `cache_read_tokens` and hermes's `cache_read_tokens` SHALL be summed at the windowed aggregate layer only; the per-source cache-hit-rate layer SHALL keep them separate (same separation principle as the pre-v15 `byModelBySource`).
-
-#### Scenario: Expand provider breakdown
-
-- **WHEN** the operator expands the "by provider" line
-- **THEN** per-provider cache hit rate and savings are shown, each computed from that provider's own `cache_read` and `input` only
-
-#### Scenario: Source discrimination at the hit-rate layer
-
-- **WHEN** the cache hit rate is computed per provider
-- **THEN** opencode's `cache_read_tokens` and hermes's `cache_read_tokens` are NOT blended together before the rate is computed; each provider's rate uses only that provider's own numerator and denominator
-
 ### Requirement: Daily chart cache_read series
 
 The daily usage chart SHALL add a 4th series for `cache_read`. The new series SHALL NOT change the data, visible range, or axis scaling of the existing input/output/cost series. The chart axes SHALL freeze on the first dataset (existing convention).
@@ -117,15 +75,6 @@ The daily usage chart SHALL add a 4th series for `cache_read`. The new series SH
 
 - **WHEN** a window contains cache activity
 - **THEN** the `cache_read` series is plotted using the existing `--token-*` palette, with no new colors introduced
-
-### Requirement: Mobile reflow
-
-The cache savings card SHALL reflow on the same breakpoints the Agent Spend card uses: a stacked layout at viewport width ≤ 640px. No new breakpoints SHALL be introduced.
-
-#### Scenario: Mobile stacked layout
-
-- **WHEN** the viewport width is ≤ 640px
-- **THEN** the cache savings card stacks vertically, matching the Agent Spend card's mobile layout
 
 ### Requirement: Additive API state shape
 
