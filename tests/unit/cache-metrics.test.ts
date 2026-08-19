@@ -152,6 +152,14 @@ describe("cost-input lookup", () => {
     expect(getCacheReadCostPerMillion("deepseek-v4-pro")).toBeCloseTo(0.003625, 5);
   });
 
+  test("dated snapshot variants fall back to the base model rate", () => {
+    // "DeepSeek-V4-Flash-0731" has no config entry; it should resolve to the
+    // base "DeepSeek-V4-Flash" rate rather than reporting $0 savings.
+    fixture({ models: { "DeepSeek-V4-Flash": { cost: { input: 0.44, cache_read: 0.0028 } } } });
+    expect(getInputCostPerMillion("DeepSeek-V4-Flash-0731")).toBeCloseTo(0.44, 5);
+    expect(getCacheReadCostPerMillion("deepseek-v4-flash-0731")).toBeCloseTo(0.0028, 5);
+  });
+
   test("cache_read rate is read when present, 0 when absent", () => {
     fixture({ models: { "GLM-5.2": { cost: { input: 1.4, cache_read: 0.26 } }, "Auto": { cost: { input: 0.3675 } } } });
     expect(getCacheReadCostPerMillion("GLM 5.2")).toBeCloseTo(0.26, 5);

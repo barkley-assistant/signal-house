@@ -60,8 +60,16 @@ function resolveModelCost(model: string): ResolvedCost {
   if (!key) return { input: 0, cacheRead: 0 };
 
   // Direct machine-key hit first (in case the config is ever keyed by
-  // machine key), then the display-name-normalised index.
-  const entry = models[key] ?? (modelIndex ?? buildModelIndex(models)).get(key);
+  // machine key), then the display-name-normalised index. If the exact key
+  // still misses, strip a trailing date-snapshot suffix ("deepseek-v4-flash-0731"
+  // → "deepseek-v4-flash") and retry — dated snapshot variants share their
+  // base model's pricing when the config has no explicit entry.
+  const idx = modelIndex ?? buildModelIndex(models);
+  let entry = models[key] ?? idx.get(key);
+  if (!entry) {
+    const base = key.replace(/-[0-9]{4,}$/, "");
+    if (base !== key) entry = models[base] ?? idx.get(base);
+  }
   if (!entry) return { input: 0, cacheRead: 0 };
 
   const input = typeof entry.cost?.input === "number" && Number.isFinite(entry.cost.input) ? entry.cost.input : 0;
