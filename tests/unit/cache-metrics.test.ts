@@ -143,6 +143,15 @@ describe("cost-input lookup", () => {
     expect(getInputCostPerMillion("openference/DeepSeek-V4-Pro")).toBeCloseTo(1.32, 5);
   });
 
+  test("models nested under provider.<id>.models resolve", () => {
+    // opencode v1.x nests the model cost table under provider.<id>.models.
+    // Reading only the top-level `models` key returned an empty map and $0
+    // savings — the primary cause of the broken card.
+    fixture({ provider: { openference: { models: { "DeepSeek-V4-Pro": { cost: { input: 1.32, cache_read: 0.003625 } } } } } });
+    expect(getInputCostPerMillion("DeepSeek V4 Pro")).toBeCloseTo(1.32, 5);
+    expect(getCacheReadCostPerMillion("deepseek-v4-pro")).toBeCloseTo(0.003625, 5);
+  });
+
   test("cache_read rate is read when present, 0 when absent", () => {
     fixture({ models: { "GLM-5.2": { cost: { input: 1.4, cache_read: 0.26 } }, "Auto": { cost: { input: 0.3675 } } } });
     expect(getCacheReadCostPerMillion("GLM 5.2")).toBeCloseTo(0.26, 5);

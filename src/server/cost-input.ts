@@ -55,7 +55,7 @@ function resolveModelCost(model: string): ResolvedCost {
   const config = loadConfig();
   if (!config) return { input: 0, cacheRead: 0 };
 
-  const models = (config.models as Record<string, ModelCostEntry> | undefined) ?? {};
+  const models = resolveModels(config);
   const key = machineKey(model);
   if (!key) return { input: 0, cacheRead: 0 };
 
@@ -68,6 +68,30 @@ function resolveModelCost(model: string): ResolvedCost {
   const cacheRead =
     typeof entry.cost?.cache_read === "number" && Number.isFinite(entry.cost.cache_read) ? entry.cost.cache_read : 0;
   return { input, cacheRead };
+}
+
+/**
+ * Locate the model cost table in an opencode config.
+ *
+ * opencode v1.x nests models under `provider.<id>.models` (e.g.
+ * `provider.openference.models`), while older configs kept a top-level
+ * `models` map. Support both, merging every provider's model table into one
+ * so a model defined by any provider resolves.
+ */
+function resolveModels(config: Record<string, unknown>): Record<string, ModelCostEntry> {
+  const top = config.models as Record<string, ModelCostEntry> | undefined;
+  if (top && typeof top === "object" && Object.keys(top).length > 0) return top;
+
+  const merged: Record<string, ModelCostEntry> = {};
+  const providers = (config.provider ?? config.providers) as Record<string, unknown> | undefined;
+  if (providers && typeof providers === "object") {
+    for (const entry of Object.values(providers)) {
+      if (!entry || typeof entry !== "object") continue;
+      const models = (entry as Record<string, unknown>).models as Record<string, ModelCostEntry> | undefined;
+      if (models && typeof models === "object") Object.assign(merged, models);
+    }
+  }
+  return merged;
 }
 
 function buildModelIndex(models: Record<string, ModelCostEntry>): Map<string, ModelCostEntry> {
