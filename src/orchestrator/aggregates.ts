@@ -10,7 +10,7 @@ import { utcDaysAgo, utcDay } from "../shared/dates";
 import { machineKey, modelFamily, modelLabel } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
 import type { ModelUsageRow, UsageDay } from "../shared/types";
-import { getInputCostPerMillion } from "../server/cost-input";
+import { getCacheReadCostPerMillion, getInputCostPerMillion } from "../server/cost-input";
 
 export interface SourceUsageMetrics {
   sessions: number;
@@ -262,7 +262,13 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
     const source = row.source ?? row.provider ?? "unknown";
     const inputTokens = row.inputTokens ?? 0;
     const cacheReadTokens = row.cacheReadTokens ?? 0;
-    const cacheSavings = (cacheReadTokens * getInputCostPerMillion(row.model)) / 1_000_000;
+    // Net savings = tokens read from cache × (input − cache_read) price delta.
+    // Cache reads are discounted, not free; subtracting the cache_read rate
+    // keeps the estimate honest. A missing cache_read rate falls back to the
+    // gross input cost (treated as free reads).
+    const inputRate = getInputCostPerMillion(row.model);
+    const cacheReadRate = getCacheReadCostPerMillion(row.model);
+    const cacheSavings = (cacheReadTokens * Math.max(0, inputRate - cacheReadRate)) / 1_000_000;
 
     const existing = map.get(key);
     if (existing) {

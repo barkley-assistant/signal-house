@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { queryUsageAggregate } from "../../src/metrics/usage-history";
-import { getInputCostPerMillion, resetCostConfigCache, setCostConfigPath } from "../../src/server/cost-input";
+import { getCacheReadCostPerMillion, getInputCostPerMillion, resetCostConfigCache, setCostConfigPath } from "../../src/server/cost-input";
 import { utcDay, utcDaysAgo } from "../../src/shared/dates";
 
 let dir: string;
@@ -131,6 +131,31 @@ describe("cost-input lookup", () => {
     const rate = getInputCostPerMillion("kimi-k27-code");
     expect(rate).toBeCloseTo(3.0, 5);
     expect((1000 * rate) / 1_000_000).toBeCloseTo(0.003, 5);
+  });
+
+  test("display-name config key resolves via machine-key index", () => {
+    // The real opencode.jsonc keys models by display name ("DeepSeek-V4-Pro"),
+    // not by machine key. A collector-supplied label ("DeepSeek V4 Pro") must
+    // still resolve — this is the bug that produced $0 savings everywhere.
+    fixture({ models: { "DeepSeek-V4-Pro": { cost: { input: 1.32, cache_read: 0.003625 } } } });
+    expect(getInputCostPerMillion("DeepSeek V4 Pro")).toBeCloseTo(1.32, 5);
+    expect(getInputCostPerMillion("deepseek-v4-pro")).toBeCloseTo(1.32, 5);
+    expect(getInputCostPerMillion("openference/DeepSeek-V4-Pro")).toBeCloseTo(1.32, 5);
+  });
+
+  test("cache_read rate is read when present, 0 when absent", () => {
+    fixture({ models: { "GLM-5.2": { cost: { input: 1.4, cache_read: 0.26 } }, "Auto": { cost: { input: 0.3675 } } } });
+    expect(getCacheReadCostPerMillion("GLM 5.2")).toBeCloseTo(0.26, 5);
+    expect(getCacheReadCostPerMillion("Auto")).toBe(0);
+    expect(getCacheReadCostPerMillion("unknown-model")).toBe(0);
+  });
+
+  test("net savings subtracts the cache_read rate", () => {
+    // 1M cache-read tokens × (1.40 − 0.26) / 1M = $1.14 net.
+    fixture({ models: { "GLM-5.2": { cost: { input: 1.4, cache_read: 0.26 } } } });
+    const input = getInputCostPerMillion("glm-52");
+    const cacheRead = getCacheReadCostPerMillion("glm-52");
+    expect((1_000_000 * (input - cacheRead)) / 1_000_000).toBeCloseTo(1.14, 5);
   });
 
   test("JSONC comments are stripped before parsing", () => {

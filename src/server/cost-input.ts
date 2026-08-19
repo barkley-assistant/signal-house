@@ -19,18 +19,64 @@ let cachedConfig: Record<string, unknown> | null | undefined;
 
 /**
  * Return the input cost per 1M tokens for `model` (or 0 if unavailable).
- * The lookup first tries the model's normalised machine key, then the raw
- * model name, in the operator's opencode.jsonc `models` map.
+ *
+ * The operator's opencode.jsonc `models` map is keyed by display name
+ * ("DeepSeek-V4-Pro", "MiniMax M3"), not by machine key. So the lookup
+ * normalises BOTH the query and the config keys through `machineKey` and
+ * resolves against a machine-key index — this is what makes a model like
+ * "DeepSeek V4 Pro" (from a collector) match "DeepSeek-V4-Pro" (config).
  */
 export function getInputCostPerMillion(model: string): number {
-  const config = loadConfig();
-  if (!config) return 0;
+  return resolveModelCost(model).input;
+}
 
-  const models = (config.models as Record<string, { cost?: { input?: number } }> | undefined) ?? {};
+/**
+ * Return the cache-read cost per 1M tokens for `model` (or 0 if the model
+ * has no `cache_read` rate). A missing rate means cache reads are treated
+ * as free in the savings estimate — gross avoided input, not net.
+ */
+export function getCacheReadCostPerMillion(model: string): number {
+  return resolveModelCost(model).cacheRead;
+}
+
+interface ModelCostEntry {
+  cost?: { input?: number; cache_read?: number };
+}
+
+interface ResolvedCost {
+  input: number;
+  cacheRead: number;
+}
+
+/** machine-key → model entry index, rebuilt per config load. */
+let modelIndex: Map<string, ModelCostEntry> | null = null;
+
+function resolveModelCost(model: string): ResolvedCost {
+  const config = loadConfig();
+  if (!config) return { input: 0, cacheRead: 0 };
+
+  const models = (config.models as Record<string, ModelCostEntry> | undefined) ?? {};
   const key = machineKey(model);
-  const entry = key ? models[key] ?? models[model] : models[model];
-  const rate = entry?.cost?.input;
-  return typeof rate === "number" && Number.isFinite(rate) ? rate : 0;
+  if (!key) return { input: 0, cacheRead: 0 };
+
+  // Direct machine-key hit first (in case the config is ever keyed by
+  // machine key), then the display-name-normalised index.
+  const entry = models[key] ?? (modelIndex ?? buildModelIndex(models)).get(key);
+  if (!entry) return { input: 0, cacheRead: 0 };
+
+  const input = typeof entry.cost?.input === "number" && Number.isFinite(entry.cost.input) ? entry.cost.input : 0;
+  const cacheRead =
+    typeof entry.cost?.cache_read === "number" && Number.isFinite(entry.cost.cache_read) ? entry.cost.cache_read : 0;
+  return { input, cacheRead };
+}
+
+function buildModelIndex(models: Record<string, ModelCostEntry>): Map<string, ModelCostEntry> {
+  modelIndex = new Map();
+  for (const [name, entry] of Object.entries(models)) {
+    const k = machineKey(name);
+    if (k && !modelIndex.has(k)) modelIndex.set(k, entry);
+  }
+  return modelIndex;
 }
 
 function loadConfig(): Record<string, unknown> | null {
@@ -48,12 +94,14 @@ function loadConfig(): Record<string, unknown> | null {
  *  `configPath` at a fixture file. */
 export function resetCostConfigCache(): void {
   cachedConfig = undefined;
+  modelIndex = null;
 }
 
 /** Override the opencode config path. Tests use this to load fixtures. */
 export function setCostConfigPath(path: string): void {
   configPath = path;
   cachedConfig = undefined;
+  modelIndex = null;
 }
 
 /** Minimal JSONC parser: strips line comments and C-style block comments
