@@ -292,6 +292,41 @@ describe("AgentSpend", () => {
     render(<AgentSpend />);
     expect(screen.getByText(/no usage telemetry yet/i)).toBeTruthy();
   });
+
+  test("uses each series line color for its legend palette entry", async () => {
+    const options: echarts.EChartsOption[] = [];
+    chartSpy.mockImplementation(
+      () => ({
+        setOption(option: echarts.EChartsOption) {
+          options.push(option);
+        },
+        resize() {},
+        dispose() {},
+        on() {},
+      }),
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        points: [
+          { date: "2026-07-01", cost: 1.25, tokens: 100, cacheRead: 25 },
+        ],
+      }),
+    } as Response);
+    useDash.setState({ state: usageState() });
+
+    render(<AgentSpend />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const option = options.find((candidate) => Array.isArray(candidate.series));
+    expect(option).toBeTruthy();
+    const colors = option && Array.isArray(option.color) ? option.color : [];
+    const series = option?.series;
+    expect(colors).toEqual(["#38bdf8", "#facc15", "#4ade80"]);
+    expect(Array.isArray(series) ? series.map((entry) => ("lineStyle" in entry ? entry.lineStyle?.color : undefined)) : []).toEqual(colors);
+  });
 });
 
 describe("state store", () => {

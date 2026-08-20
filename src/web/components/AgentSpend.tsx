@@ -191,11 +191,15 @@ function DailyUsageChart() {
           { lazyUpdate: true }
         );
       };
+      // ECharts 5 indexes the top-level palette (not series.lineStyle.color)
+      // for legend swatches, so this order MUST match the series array order.
+      const SERIES_COLORS = ["#38bdf8", "#facc15", "#4ade80"] as const;
       const series: echarts.EChartsOption = {
         animation: true,
         animationDuration: 700,
         animationEasing: "cubicOut",
         backgroundColor: "transparent",
+        color: [...SERIES_COLORS],
         grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
         tooltip: {
           trigger: "axis",
@@ -276,7 +280,7 @@ function DailyUsageChart() {
             data: points.map((p) => (p.cost === null ? null : Number(p.cost.toFixed(2)))),
             smooth: 0.3,
             showSymbol: false,
-            lineStyle: { color: "#38bdf8", width: 2 },
+            lineStyle: { color: SERIES_COLORS[0], width: 2 },
             areaStyle: { color: "rgba(56, 189, 248, 0.12)" },
           },
           {
@@ -286,7 +290,7 @@ function DailyUsageChart() {
             data: points.map((p) => p.tokens),
             smooth: 0.3,
             showSymbol: false,
-            lineStyle: { color: "#facc15", width: 2 },
+            lineStyle: { color: SERIES_COLORS[1], width: 2 },
             areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
           },
           {
@@ -296,7 +300,7 @@ function DailyUsageChart() {
             data: points.map((p) => p.cacheRead),
             smooth: 0.3,
             showSymbol: false,
-            lineStyle: { color: "#4ade80", width: 2 },
+            lineStyle: { color: SERIES_COLORS[2], width: 2 },
             areaStyle: { color: "rgba(74, 222, 128, 0.08)" },
           },
         ],
