@@ -259,9 +259,68 @@ describe("AgentSpend", () => {
 
   test("hero meta lists sessions and tokens beneath the cost", () => {
     useDash.setState({ state: usageState() });
-    render(<AgentSpend />);
-    expect(screen.getByText("1,597 Sessions")).toBeTruthy();
-    expect(screen.getByText("5.42B Tokens")).toBeTruthy();
+    const { container } = render(<AgentSpend />);
+    const meta = container.querySelector(".spend-hero__meta");
+    expect(meta).toBeTruthy();
+    expect(meta?.textContent).toContain("1,597 Sessions");
+    expect(meta?.textContent).toContain("5.42B Tokens");
+  });
+
+  test("hero shows cache hit rate and saved as smaller stats", () => {
+    useDash.setState({
+      state: usageState({
+        cacheReadTokens: 1000000,
+        cacheHitRate: 0.65,
+        cacheSavings: 4.2,
+      }),
+    });
+    const { container } = render(<AgentSpend />);
+    const cacheStats = container.querySelector(".spend-hero__cache");
+    expect(cacheStats).toBeTruthy();
+    expect(cacheStats?.textContent).toContain("Cache hit rate");
+    expect(cacheStats?.textContent).toContain("Saved");
+    expect(cacheStats?.textContent).toContain("65%");
+    expect(cacheStats?.textContent).toContain("$4.20");
+
+    cleanup();
+    useDash.setState({
+      state: usageState({ cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 }),
+    });
+    const { container: emptyContainer } = render(<AgentSpend />);
+    const emptyCacheStats = emptyContainer.querySelector(".spend-hero__cache");
+    expect(emptyCacheStats?.textContent).toContain("—");
+    expect(emptyCacheStats?.textContent).toContain("$0.00");
+    expect(emptyCacheStats?.textContent).not.toContain("NaN");
+    expect(emptyCacheStats?.textContent).not.toContain("null");
+  });
+
+  test("ledger rows show per-source cache_read substat", () => {
+    useDash.setState({
+      state: usageState({
+        bySource: {
+          opencode: { sessions: 900, cost: 300, tokens: 3000000000, cacheReadTokens: 1234567 },
+          hermes: { sessions: 697, cost: 215.95, tokens: 2420000000, cacheReadTokens: 0 },
+        },
+      }),
+    });
+    const { container } = render(<AgentSpend />);
+    const metas = container.querySelectorAll(".spend-sources .spend-source-row__meta");
+    expect(metas).toHaveLength(2);
+    expect(metas[0]?.textContent).toContain(`${formatCompact(1234567)} cache_read`);
+    expect(metas[1]?.textContent).toContain("0 cache_read");
+
+    cleanup();
+    useDash.setState({
+      state: usageState({
+        bySource: {
+          opencode: { sessions: 900, cost: 300, tokens: 3000000000, cacheReadTokens: 1234567 },
+        },
+      }),
+    });
+    const { container: missingSourceContainer } = render(<AgentSpend />);
+    const missingSourceMeta = missingSourceContainer.querySelectorAll(".spend-sources .spend-source-row__meta")[1];
+    expect(missingSourceMeta?.textContent).toBe("No data");
+    expect(missingSourceMeta?.textContent).not.toContain("cache_read");
   });
 
   test("renders both agent source rows", () => {

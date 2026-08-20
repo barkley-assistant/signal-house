@@ -128,14 +128,17 @@ test.describe("dashboard (desktop)", () => {
     await expect(page.getByRole("button", { name: "30 days" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("cache panel renders savings, hit rate, and read-volume tiles", async ({ page }) => {
+  test("agent spend integrates cache savings, hit rate, and source read totals", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Cache" })).toBeVisible();
-    // Labels are sentence-case in the DOM and uppercased via CSS; target the
-    // label element directly so we don't collide with the captions.
-    await expect(page.locator(".cache-card__overview .kpi-tile__label").filter({ hasText: /^Saved$/ })).toBeVisible();
-    await expect(page.locator(".cache-card__overview .kpi-tile__label").filter({ hasText: /^Hit rate$/ })).toBeVisible();
-    await expect(page.locator(".cache-card__overview .kpi-tile__label").filter({ hasText: /^Cache read$/ })).toBeVisible();
+    const hero = page.locator(".spend-hero");
+    const cacheStats = hero.locator(".spend-hero__cache");
+    await expect(cacheStats).toContainText("Cache hit rate");
+    await expect(cacheStats).toContainText("Saved");
+
+    const metas = page.locator(".spend-sources .spend-source-row__meta");
+    await expect(metas).toHaveCount(2);
+    await expect(metas.nth(0)).toContainText("cache_read");
+    await expect(metas.nth(1)).toContainText("cache_read");
   });
 
   test("cache savings API surfaces additive cache fields", async ({ request }) => {

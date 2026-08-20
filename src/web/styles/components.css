@@ -139,6 +139,17 @@
 .spend-hero__dot {
   color: var(--divider);
 }
+.spend-hero__cache {
+  display: flex;
+  gap: 24px;
+  margin-top: 4px;
+}
+.spend-hero__cache-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 /* Micro: per-source ledger on the right — agents separated by dividers,
    not more boxes. Cost up front, sessions·tokens muted underneath. */
 .spend-sources {
@@ -184,6 +195,17 @@
     flex-wrap: wrap;
     gap: 6px 10px;
     font-size: 13px;
+  }
+  .spend-hero__cache {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .spend-hero__cache .kpi-caption {
+    font-size: 11px;
+  }
+  .spend-source-row__meta {
+    white-space: normal;
+    max-width: none;
   }
   .spend-source-row {
     padding: 12px 0;
@@ -328,19 +350,6 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-muted);
-  }
-}
-
-/* Cache savings panel — mirrors HealthStrip kpi-tile grammar. */
-.cache-card__overview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin: 16px 0 0;
-}
-@media (max-width: 640px) {
-  .cache-card__overview {
-    grid-template-columns: 1fr;
   }
 }
 

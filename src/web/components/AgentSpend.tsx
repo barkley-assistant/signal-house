@@ -38,6 +38,9 @@ export function AgentSpend() {
   const { state } = useDash();
   const usage = state?.usage ?? null;
   const heroAmount = useCountUp(usage?.totalCost ?? null);
+  const hasCacheActivity = (usage?.cacheReadTokens ?? 0) > 0;
+  const savedAmount = useCountUp(hasCacheActivity && Number.isFinite(usage?.cacheSavings) ? usage?.cacheSavings ?? 0 : 0);
+  const hitRateDisplay = hasCacheActivity ? formatPercent(usage?.cacheHitRate) : "—";
 
   return (
     <section className="card" aria-label="Agent spend">
@@ -55,6 +58,23 @@ export function AgentSpend() {
                 <span className="spend-hero__dot" aria-hidden="true">·</span>
                 <span>{formatCompact(usage.totalTokens)} Tokens</span>
               </div>
+              <motion.div
+                className="spend-hero__cache"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.15 }}
+              >
+                <div className="spend-hero__cache-stat">
+                  <span className="kpi-tile__label">Cache hit rate</span>
+                  <span className="big-number small">{hitRateDisplay}</span>
+                  <span className="kpi-caption">cache_read ÷ (cache_read + input)</span>
+                </div>
+                <div className="spend-hero__cache-stat">
+                  <span className="kpi-tile__label">Saved</span>
+                  <span className="big-number small">{savedAmount}</span>
+                  <span className="kpi-caption">at model input rates</span>
+                </div>
+              </motion.div>
             </div>
             <motion.div
               className="spend-sources"
@@ -96,7 +116,9 @@ function SpendSource({ label, source, usage }: { label: string; source: string; 
       <div className="spend-source-row__info">
         <span className="kpi-tile__label heading">{label}</span>
         <span className="spend-source-row__meta">
-          {src ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens` : "No data"}
+          {src
+            ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens · ${formatCompact(src.cacheReadTokens)} cache_read`
+            : "No data"}
         </span>
       </div>
       <span className="big-number small">{src ? formatCost(src.cost) : "—"}</span>

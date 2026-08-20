@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-08-20
+goal: Redesign the top section of the Agent Spend panel so that the cache
+  metrics (currently shown as a separate `CacheSavingsCard` section above it)
+  live inside Agent Spend, presented once and cleanly. The new top section must
+  show cache metrics for both OpenCode and Hermes in a row near where
+  sessions/tokens currently appear, plus smaller stats (e.g. cache hit rate)
+  inside the big-number area next to Total cost. Remove the standalone Cache
+  card; keep the daily cache-read series in the trend chart and the cache-%
+  column in the by-model table. The result should look beautiful, avoid
+  repeating the same metric in multiple places, and reuse existing design tokens
+  (no new colors or typography).
