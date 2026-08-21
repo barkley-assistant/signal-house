@@ -16,6 +16,7 @@ import { HealthStrip } from "../../../src/web/components/HealthStrip";
 import { AttentionQueue } from "../../../src/web/components/AttentionQueue";
 import { HeaderRefreshChip, RefreshDetail } from "../../../src/web/components/RefreshStatus";
 import { AgentSpend } from "../../../src/web/components/AgentSpend";
+import { DeliveryTrend } from "../../../src/web/components/DeliveryTrend";
 import { formatNumber, formatCompact, formatCost } from "../../../src/shared/format";
 // Globals are installed by tests/happy-dom.ts (bunfig [test] preload).
 
@@ -479,5 +480,48 @@ describe("ModelTable cache % sort", () => {
     render(<AgentSpend />);
     const btn = screen.getByRole("button", { name: /cache %/i });
     expect(btn.querySelector(".sort-arrow")).toBeTruthy();
+  });
+});
+
+describe("DeliveryTrend", () => {
+  beforeEach(() => {
+    vi.spyOn(echarts, "init").mockImplementation(
+      // @ts-expect-error minimal echarts stub
+      () => ({ setOption() {}, resize() {}, dispose() {}, on() {} }),
+    );
+  });
+
+  function mockFetch(payload: { points: Array<{ date: string; ci: { totalRuns: number; passCount: number; failCount: number; passRate: number } | null; commits: number; prsMerged: number }> }) {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+  }
+
+  test("renders the section heading and subtitle", async () => {
+    mockFetch({
+      points: [
+        { date: "2026-08-20", ci: { totalRuns: 10, passCount: 9, failCount: 1, passRate: 0.9 }, commits: 4, prsMerged: 1 },
+        { date: "2026-08-21", ci: { totalRuns: 8, passCount: 8, failCount: 0, passRate: 1 }, commits: 6, prsMerged: 2 },
+      ],
+    });
+
+    render(<DeliveryTrend />);
+    expect(screen.getByRole("heading", { name: /delivery/i })).toBeTruthy();
+    expect(screen.getByText(/CI health and shipping activity/i)).toBeTruthy();
+    // Two chart containers mount.
+    expect(screen.getByLabelText("CI pass-rate trend")).toBeTruthy();
+    expect(screen.getByLabelText(/Throughput — commits and PRs merged per day/i)).toBeTruthy();
+  });
+
+  test("renders the empty-state message when the API returns no points", async () => {
+    mockFetch({ points: [] });
+
+    render(<DeliveryTrend />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByText(/No delivery data yet/i)).toBeTruthy();
   });
 });

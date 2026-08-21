@@ -167,4 +167,26 @@ export async function loadTrend(days: WindowDays): Promise<TrendPoint[]> {
   }
 }
 
+export interface DeliveryPoint {
+  date: string;
+  ci: {
+    totalRuns: number;
+    passCount: number;
+    failCount: number;
+    passRate: number | null;
+  } | null;
+  commits: number;
+  prsMerged: number;
+}
+
+/** Load the daily delivery trend for the Delivery panel, windowed. */
+export async function loadDeliveryTrend(days: WindowDays): Promise<DeliveryPoint[]> {
+  try {
+    const res = await fetchJson<{ points: DeliveryPoint[] }>(`/api/daily/delivery?days=${days}`);
+    return res.points;
+  } catch {
+    return [];
+  }
+}
+
 export { formatNumber, formatCompact };

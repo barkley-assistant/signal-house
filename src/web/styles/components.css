@@ -516,3 +516,55 @@
     padding: 10px 14px;
   }
 }
+
+/* Delivery panel — paired CI pass-rate line over a throughput stacked bar.
+   The two charts share a date x-axis: the line hides its axis labels, the
+   bar shows them; both grids use the same left/right paddings so dates line
+   up column-wise. */
+.delivery-card {
+  /* `.card` already provides the panel surface; we just stack the two charts
+     with zero inter-chart gap so dates align column-wise. */
+}
+.delivery-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.delivery-card__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.delivery-card__subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.delivery-chart {
+  /* Negative margin pulls the two charts together so dates line up column-
+     wise regardless of any default gap the ECharts grid adds. */
+  display: block;
+}
+.delivery-chart--ci {
+  margin-bottom: -8px;
+}
+.delivery-chart--bar {
+  margin-top: 0;
+}
+
+/* Phones: legend swaps to bottom of the chart, no horizontal real-estate. */
+@media (max-width: 700px) {
+  .delivery-card__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .delivery-card__subtitle {
+    font-size: 11px;
+  }
+}

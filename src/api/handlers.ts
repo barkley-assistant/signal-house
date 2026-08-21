@@ -12,6 +12,7 @@ import { buildDiagnostics } from "../diagnostics/sources";
 import { setRefreshMeta } from "../db/refresh-meta";
 import { queryDailyTrend } from "../db/daily-metrics";
 import { utcDay, utcDaysAgo } from "../shared/dates";
+import { buildDeliveryTrend } from "../metrics/delivery";
 import { parseWindowDays } from "../shared/window";
 
 export interface ApiDeps {
@@ -52,6 +53,16 @@ export function dailyTrendHandler(deps: ApiDeps, req: Request): Response {
   const to = url.searchParams.get("to") ?? utcDay();
   const from = url.searchParams.get("from") ?? utcDaysAgo(days);
   return json(req, { from, to, days, points: queryDailyTrend(deps.db, from, to) });
+}
+
+/** GET /api/daily/delivery — per-day CI pass-rate + commits + PRs-merged for the
+ *  Delivery panel. Mirrors /api/daily/spend window semantics. */
+export function deliveryTrendHandler(deps: ApiDeps, req: Request): Response {
+  const url = new URL(req.url);
+  const days = parseWindowDays(url.searchParams.get("days"));
+  const to = url.searchParams.get("to") ?? utcDay();
+  const from = url.searchParams.get("from") ?? utcDaysAgo(days);
+  return json(req, buildDeliveryTrend(deps.db, from, to));
 }
 
 /** POST /api/refresh — manual refresh through the SAME runner as the poller. */
