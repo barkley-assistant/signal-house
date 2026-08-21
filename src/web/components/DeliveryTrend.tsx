@@ -1,35 +1,34 @@
 /**
- * Delivery panel — CI pass-rate (filled line, 0–100%) stacked over a
- * Throughput bar (commits + PRs merged per day). Two ECharts instances share
- * one date x-axis: the line's x-axis labels are hidden, the bar shows them;
- * both grids are anchored to the same left/right paddings so dates line up
- * column-wise. Honors the 7/30/90-day window selector from the store and
- * `prefers-reduced-motion` (no entrance animation).
+ * Delivery panel — CI pass-rate (filled line, 0–100%) paired with a Throughput
+ * stacked bar (commits + PRs merged). Two ECharts instances sit side-by-side
+ * on tablet/desktop and stack vertically on phones (<=700px). Styling
+ * mirrors the Daily cost & tokens chart: same dark background, same muted
+ * split lines, same tooltip shell, same 11px legend.
+ *
+ * Missing-day treatment:
+ *  - CI null (no terminal runs) → line is broken (connectNulls: false). The
+ *    tooltip surfaces "No CI runs" for those days.
+ *  - Commits / PRs null (no telemetry that day) → ECharts bars with null
+ *    values render as a clean gap. The tooltip says "No telemetry" and
+ *    names which series is missing when only one is.
  */
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import { useDash, loadDeliveryTrend, type DeliveryPoint } from "../state/store";
 import { formatNumber } from "../../shared/format";
 
-const CI_COLOR = "#4ade80"; // var(--success)
-const COMMITS_COLOR = "#94a3b8"; // var(--text-secondary) — muted slate for the "background" stack
-const PR_COLOR = "#38bdf8"; // var(--info) — accent for the meaningful shipping signal
-const COMMITS_COLOR_Swatch = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COMMITS_COLOR};margin-right:4px"></span>`;
-const PR_COLOR_Swatch = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${PR_COLOR};margin-right:4px"></span>`;
+// Same accent palette as the Daily cost & tokens chart so the panels feel
+// like siblings, not strangers.
+const CI_COLOR = "#4ade80"; // var(--success) — green
+const COMMITS_COLOR = "#94a3b8"; // var(--text-secondary) — slate
+const PR_COLOR = "#38bdf8"; // var(--info) — blue
 
-<<<<<<< HEAD
-const TOP_HEIGHT = 320;
-const BOTTOM_HEIGHT = 320;
-const GRID_LEFT = 56;
-const GRID_RIGHT = 18;
-=======
 const TOP_HEIGHT = 220;
 const BOTTOM_HEIGHT = 220;
 const GRID_LEFT = 44;
 const GRID_RIGHT = 16;
->>>>>>> 02e5bfb (fix(web): match Delivery chart height to daily cost chart (220px))
 
-function fmtDay(d: string): string {
+function fmtDayShort(d: string): string {
   const [y, m, day] = d.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -54,6 +53,16 @@ function niceCeil(v: number): number {
   return Math.ceil(withHead / mag) * mag;
 }
 
+const COMMON_TOOLTIP = {
+  trigger: "axis" as const,
+  confine: true,
+  backgroundColor: "rgba(17, 19, 24, 0.96)",
+  borderColor: "#232732",
+  borderWidth: 1,
+  padding: [10, 12] as [number, number],
+  textStyle: { color: "#94a3b8", fontSize: 12 },
+};
+
 export function DeliveryTrend() {
   const ciRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -63,8 +72,6 @@ export function DeliveryTrend() {
   const [hasData, setHasData] = useState(true);
   const days = useDash((s) => s.days);
 
-  // Init both charts once. ResizeObserver beats window-resize: tracks the
-  // container even when the grid reflows (mobile column collapse, etc).
   useEffect(() => {
     if (!ciRef.current || !barRef.current) return;
     ciChartRef.current = echarts.init(ciRef.current, "dark");
@@ -105,61 +112,27 @@ export function DeliveryTrend() {
 
   return (
     <section className="card delivery-card" aria-label="Delivery — CI health and shipping activity">
-      <div className="delivery-card__head">
-        <h2 className="delivery-card__title">Delivery</h2>
-        <p className="delivery-card__subtitle">CI health and shipping activity</p>
-      </div>
+      <h2>Delivery</h2>
       {!hasData && !loading ? (
         <p className="state-label">No delivery data yet — GitHub collector unavailable or no runs in window</p>
       ) : (
-        <>
-          {loading && (
-            <div className="skeleton" style={{ height: TOP_HEIGHT, marginTop: 8 }} />
-          )}
-          <div
-            className="delivery-grid"
-            style={{ visibility: loading ? "hidden" : "visible", marginTop: loading ? -1 - TOP_HEIGHT : 0 }}
-          >
-            <div className="delivery-grid__col">
-              <div className="delivery-grid__col-label">CI pass-rate</div>
-              <div
-                ref={ciRef}
-                className="delivery-chart delivery-chart--ci"
-                style={{ height: TOP_HEIGHT }}
-                aria-label="CI pass-rate trend"
-              />
-            </div>
-            <div className="delivery-grid__col">
-              <div className="delivery-grid__col-label">Throughput</div>
-              <div
-                ref={barRef}
-                className="delivery-chart delivery-chart--bar"
-                style={{ height: BOTTOM_HEIGHT }}
-                aria-label="Throughput — commits and PRs merged per day"
-              />
-            </div>
-          </div>
-        </>
+        <div className="delivery-grid" style={{ visibility: loading ? "hidden" : "visible" }}>
+          <div ref={ciRef} className="delivery-chart" style={{ height: TOP_HEIGHT }} aria-label="CI pass-rate trend" />
+          <div ref={barRef} className="delivery-chart" style={{ height: BOTTOM_HEIGHT }} aria-label="Throughput — commits and PRs merged per day" />
+        </div>
       )}
+      {loading && <div className="skeleton" style={{ height: TOP_HEIGHT, marginTop: 8 }} />}
     </section>
   );
 }
 
 function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
   const dates = points.map((p) => p.date);
-  // CI peaks at 100% by definition; that's the y-axis ceiling.
-  // Days with no terminal runs become null (rendered as a gap in the line).
-  // We also lay a faint placeholder marker at the bottom of the gap so the
-  // "no data" segment reads as intentional rather than a sudden drop.
+  // Pass-rate as a percentage 0–100. null for days with no terminal runs so
+  // the line cleanly breaks (connectNulls: false below) and the area fill
+  // doesn't trail across the gap.
   const seriesData: Array<number | null> = points.map((p) =>
     p.ci ? Math.round((p.ci.passRate ?? 0) * 1000) / 10 : null,
-  );
-  // Tiny invisible marker at the very bottom for null days, so the gap
-  // visually anchors to the baseline instead of looking like the line was
-  // wiped. The marker symbol is empty so nothing renders, but it occupies
-  // the slot and prevents the surrounding bars/line from drifting.
-  const placeholderData: Array<number | null> = points.map((p) =>
-    p.ci === null ? 0.01 : null,
   );
   chart.setOption(
     {
@@ -167,15 +140,9 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 18, bottom: 4, containLabel: false },
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 18, bottom: 22, containLabel: false },
       tooltip: {
-        trigger: "axis",
-        confine: true,
-        backgroundColor: "rgba(17, 19, 24, 0.96)",
-        borderColor: "#232732",
-        borderWidth: 1,
-        padding: [10, 12],
-        textStyle: { color: "#94a3b8", fontSize: 12 },
+        ...COMMON_TOOLTIP,
         axisPointer: { type: "line", lineStyle: { color: "#2c3038" } },
         formatter: (params: unknown) => {
           const arr = params as Array<{ axisValue: string; value: number | null }>;
@@ -185,7 +152,7 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
             return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${fmtDayFull(arr[0].axisValue)}</div><div style="color:#64748b;font-style:italic">No CI runs</div>`;
           }
           return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${fmtDayFull(arr[0].axisValue)}</div>
-            <div><span style="color:${CI_COLOR}">●</span> <span style="color:#e2e8f0">CI pass-rate</span>: <b style="color:#e2e8f0">${(p.ci.passRate! * 100).toFixed(0)}%</b></div>
+            <div><span style="color:${CI_COLOR}">●</span> CI pass-rate: <b style="color:#e2e8f0">${(p.ci.passRate! * 100).toFixed(0)}%</b></div>
             <div style="color:#64748b">${formatNumber(p.ci.passCount)} pass · ${formatNumber(p.ci.failCount)} fail · ${formatNumber(p.ci.totalRuns)} total</div>`;
         },
       },
@@ -193,7 +160,7 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
         type: "category",
         boundaryGap: false,
         data: dates,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDay, interval: "auto", hideOverlap: true },
+        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
         axisLine: { lineStyle: { color: "#232732" } },
         axisTick: { show: false },
       },
@@ -201,12 +168,7 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
         type: "value",
         min: 0,
         max: 100,
-        axisLabel: {
-          color: "#64748b",
-          fontSize: 10,
-          formatter: (v: number) => `${v}%`,
-          interval: 49,
-        },
+        axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `${v}%`, interval: 24 },
         splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
         axisLine: { show: false },
         axisTick: { show: false },
@@ -220,21 +182,10 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
           connectNulls: false,
           lineStyle: { color: CI_COLOR, width: 2 },
           areaStyle: { color: "rgba(74, 222, 128, 0.16)" },
+          // Mark the worst-dip day in the window with a small red dot so a
+          // glance surfaces the day CI was the worst. Suppressed when every
+          // day is >= 95% so it doesn't shout at a green week.
           markPoint: computeWorstDip(seriesData, dates),
-          z: 2,
-        },
-        {
-          // Invisible baseline anchor for null days. Renders a 0.01%-tall
-          // bar at y=0 (the baseline) on no-data days only, so the gap
-          // visually has a floor instead of looking like the line vanished.
-          // Empty symbol + transparent color = effectively invisible.
-          type: "line",
-          data: placeholderData,
-          showSymbol: false,
-          lineStyle: { opacity: 0 },
-          areaStyle: { opacity: 0 },
-          silent: true,
-          z: 1,
         },
       ],
     },
@@ -257,7 +208,7 @@ function computeWorstDip(
   if (worstIdx === -1 || worstVal >= 95) return undefined;
   return {
     symbol: "circle",
-    symbolSize: 6,
+    symbolSize: 7,
     itemStyle: { color: "#f87171" },
     label: { show: false },
     data: [{ coord: [dates[worstIdx], worstVal] }],
@@ -266,22 +217,14 @@ function computeWorstDip(
 
 function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
   const dates = points.map((p) => p.date);
-  // For stacked bars: ECharts treats a single null in a stack as "skip this
-  // entire stack column" (one missing segment collapses the OTHER segment
-  // too), which reads as a bug. We instead emit a tiny invisible 0 for null
-  // segments so the surviving segment still renders — the gap is then read
-  // from the surviving series's height, not from a missing column.
-  const commits = points.map((p) => (p.commits === null ? 0 : p.commits));
-  const prs = points.map((p) => (p.prsMerged === null ? 0 : p.prsMerged));
-  // Track which days have any real data so the tooltip can label a
-  // fully-empty day as "No telemetry" (vs. a day with only one segment).
-  const hasAny = points.map(
-    (p) => (p.commits ?? 0) > 0 || (p.prsMerged ?? 0) > 0,
-  );
+  // ECharts: null in a bar series = no bar at that index. The legend still
+  // shows "Commits" + "PRs merged" and the tooltip handles the per-day case.
+  const commits = points.map((p) => p.commits);
+  const prs = points.map((p) => p.prsMerged);
   const barMax = Math.max(
     4,
-    ...commits.filter((_, i) => hasAny[i]),
-    ...prs.filter((_, i) => hasAny[i]),
+    ...commits.filter((v): v is number => v !== null),
+    ...prs.filter((v): v is number => v !== null),
   );
   const yMax = niceCeil(barMax);
   chart.setOption(
@@ -290,62 +233,29 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 8, bottom: 26, containLabel: false },
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 28, bottom: 22, containLabel: false },
       tooltip: {
-        trigger: "axis",
-        confine: true,
-        backgroundColor: "rgba(17, 19, 24, 0.96)",
-        borderColor: "#232732",
-        borderWidth: 1,
-        padding: [10, 12],
-        textStyle: { color: "#94a3b8", fontSize: 12 },
+        ...COMMON_TOOLTIP,
         axisPointer: { type: "shadow", shadowStyle: { color: "rgba(56, 189, 248, 0.06)" } },
         formatter: (params: unknown) => {
-          const arr = params as Array<{ axisValue: string; seriesName: string; value: number; marker: string; dataIndex: number }>;
+          const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
           if (!arr.length) return "";
-          const idx = arr[0].dataIndex;
-          const original = points[idx];
-          // Build the visible rows from the original point data, not the
-          // emitted zeros (we emit 0 for stack-membership reasons, but the
-          // tooltip should reflect the real null-or-number truth).
-          const rows: string[] = [];
-          if (original.commits !== null) {
-            rows.push(`${COMMITS_COLOR_Swatch} Commits: <b style="color:#e2e8f0">${formatNumber(original.commits)}</b>`);
-          }
-          if (original.prsMerged !== null) {
-            rows.push(`${PR_COLOR_Swatch} PRs merged: <b style="color:#e2e8f0">${formatNumber(original.prsMerged)}</b>`);
-          }
-          const missing: string[] = [];
-          if (original.commits === null) missing.push("Commits");
-          if (original.prsMerged === null) missing.push("PRs merged");
-          const rowsHtml = rows.length > 0
-            ? rows.join("<br/>")
-            : `<div style="color:#64748b;font-style:italic">No telemetry</div>`;
-          const extras = missing.length > 0 && rows.length > 0
-            ? `<div style="margin-top:4px;color:#64748b;font-size:11px">${missing.join(" · ")}: no telemetry</div>`
-            : "";
+          const p = points.find((q) => q.date === arr[0].axisValue);
+          if (!p) return "";
+          const visible = arr.filter((row) => row.value !== null);
+          const missing = arr
+            .filter((row) => row.value === null)
+            .map((row) => row.seriesName);
+          const rowsHtml =
+            visible.length > 0
+              ? visible.map((row) => `${row.marker} ${row.seriesName}: <b style="color:#e2e8f0">${formatNumber(row.value as number)}</b>`).join("<br/>")
+              : `<div style="color:#64748b;font-style:italic">No telemetry</div>`;
+          const extras =
+            visible.length > 0 && missing.length > 0
+              ? `<div style="margin-top:4px;color:#64748b;font-size:11px">${missing.join(" · ")}: no telemetry</div>`
+              : "";
           return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${fmtDayFull(arr[0].axisValue)}</div>${rowsHtml}${extras}`;
         },
-      },
-      xAxis: {
-        type: "category",
-        data: dates,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDay },
-        axisLine: { lineStyle: { color: "#232732" } },
-        axisTick: { show: false },
-      },
-      yAxis: {
-        type: "value",
-        min: 0,
-        max: yMax,
-        axisLabel: {
-          color: "#64748b",
-          fontSize: 10,
-          formatter: (v: number) => (v === 0 ? "0" : formatNumber(v)),
-        },
-        splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
-        axisLine: { show: false },
-        axisTick: { show: false },
       },
       legend: {
         data: ["Commits", "PRs merged"],
@@ -358,40 +268,38 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
         itemGap: 14,
         textStyle: { color: "#94a3b8", fontSize: 11 },
       },
+      xAxis: {
+        type: "category",
+        data: dates,
+        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
+        axisLine: { lineStyle: { color: "#232732" } },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: yMax,
+        axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => (v === 0 ? "0" : formatNumber(v)) },
+        splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+        axisLine: { show: false },
+        axisTick: { show: false },
+      },
       series: [
         {
           name: "Commits",
           type: "bar",
           stack: "throughput",
           data: commits,
-          itemStyle: (params: { dataIndex: number }): { color: string; borderRadius: number[] } => {
-            // Fully-empty day (no commits + no PRs): draw a faint dotted
-            // placeholder rect at the baseline so the gap reads as
-            // intentional rather than a missing render.
-            if (!hasAny[params.dataIndex]) {
-              return {
-                color: "rgba(100, 116, 139, 0.15)",
-                borderRadius: [2, 2, 0, 0],
-              };
-            }
-            return { color: COMMITS_COLOR, borderRadius: [0, 0, 0, 0] };
-          },
-          barMaxWidth: 18,
+          itemStyle: { color: COMMITS_COLOR, borderRadius: [0, 0, 0, 0] },
+          barMaxWidth: 16,
         },
         {
           name: "PRs merged",
           type: "bar",
           stack: "throughput",
           data: prs,
-          itemStyle: (params: { dataIndex: number }): { color: string; borderRadius: number[] } => {
-            if (!hasAny[params.dataIndex]) {
-              // Empty-day PR segment stays invisible — the Commits segment
-              // already draws the placeholder.
-              return { color: "transparent", borderRadius: [2, 2, 0, 0] };
-            }
-            return { color: PR_COLOR, borderRadius: [3, 3, 0, 0] };
-          },
-          barMaxWidth: 18,
+          itemStyle: { color: PR_COLOR, borderRadius: [3, 3, 0, 0] },
+          barMaxWidth: 16,
         },
       ],
     },

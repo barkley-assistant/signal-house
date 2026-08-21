@@ -509,7 +509,6 @@ describe("DeliveryTrend", () => {
 
     render(<DeliveryTrend />);
     expect(screen.getByRole("heading", { name: /delivery/i })).toBeTruthy();
-    expect(screen.getByText(/CI health and shipping activity/i)).toBeTruthy();
     // Two chart containers mount.
     expect(screen.getByLabelText("CI pass-rate trend")).toBeTruthy();
     expect(screen.getByLabelText(/Throughput — commits and PRs merged per day/i)).toBeTruthy();

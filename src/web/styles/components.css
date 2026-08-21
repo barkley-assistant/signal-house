@@ -518,73 +518,26 @@
 }
 
 /* Delivery panel — paired CI pass-rate line over a throughput stacked bar.
-   On tablet/desktop the two charts sit side-by-side; they stack vertically
-   on phones (<=700px). Side-by-side means they don't need to share an
-   x-axis anymore — each chart owns its dates. */
+   Side-by-side on tablet/desktop, stacked on phones (<=700px). The card
+   itself reuses the existing `.card` + `h2` styling so it reads as a
+   sibling of the other panels; only the grid layout is bespoke. */
 .delivery-card {
   /* `.card` already provides the panel surface. */
 }
-.delivery-card__head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-.delivery-card__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-primary);
-}
-.delivery-card__subtitle {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
 .delivery-grid {
   display: grid;
-  /* Equal halves — CI on the left, throughput on the right. minmax(0, 1fr)
-     so the chart math doesn't push the columns wider than the container. */
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
-}
-.delivery-grid__col {
-  /* Wraps the chart + its mini label so the two-column grid groups each
-     chart with a small caption header. */
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.delivery-grid__col-label {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: 500;
+  margin-top: 12px;
 }
 .delivery-chart {
   display: block;
   width: 100%;
 }
 
-/* Phones: stack the two charts vertically, restore the dense x-axis shared
-   alignment by hiding the top chart's date labels (the bottom chart shows
-   them). */
 @media (max-width: 700px) {
   .delivery-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
-  }
-  .delivery-card__head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-  }
-  .delivery-card__subtitle {
-    font-size: 11px;
+    gap: 12px;
   }
 }
