@@ -175,8 +175,10 @@ export interface DeliveryPoint {
     failCount: number;
     passRate: number | null;
   } | null;
-  commits: number;
-  prsMerged: number;
+  /** null = no commit telemetry for this day (renders as a gap, never 0). */
+  commits: number | null;
+  /** null = no PR-merge telemetry for this day (renders as a gap, never 0). */
+  prsMerged: number | null;
 }
 
 /** Load the daily delivery trend for the Delivery panel, windowed. */

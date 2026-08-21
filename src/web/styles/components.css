@@ -518,19 +518,18 @@
 }
 
 /* Delivery panel — paired CI pass-rate line over a throughput stacked bar.
-   The two charts share a date x-axis: the line hides its axis labels, the
-   bar shows them; both grids use the same left/right paddings so dates line
-   up column-wise. */
+   On tablet/desktop the two charts sit side-by-side; they stack vertically
+   on phones (<=700px). Side-by-side means they don't need to share an
+   x-axis anymore — each chart owns its dates. */
 .delivery-card {
-  /* `.card` already provides the panel surface; we just stack the two charts
-     with zero inter-chart gap so dates align column-wise. */
+  /* `.card` already provides the panel surface. */
 }
 .delivery-card__head {
   display: flex;
   align-items: baseline;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
 }
 .delivery-card__title {
   margin: 0;
@@ -545,20 +544,41 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+.delivery-grid {
+  display: grid;
+  /* Equal halves — CI on the left, throughput on the right. minmax(0, 1fr)
+     so the chart math doesn't push the columns wider than the container. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.delivery-grid__col {
+  /* Wraps the chart + its mini label so the two-column grid groups each
+     chart with a small caption header. */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.delivery-grid__col-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
 .delivery-chart {
-  /* Negative margin pulls the two charts together so dates line up column-
-     wise regardless of any default gap the ECharts grid adds. */
   display: block;
-}
-.delivery-chart--ci {
-  margin-bottom: -8px;
-}
-.delivery-chart--bar {
-  margin-top: 0;
+  width: 100%;
 }
 
-/* Phones: legend swaps to bottom of the chart, no horizontal real-estate. */
+/* Phones: stack the two charts vertically, restore the dense x-axis shared
+   alignment by hiding the top chart's date labels (the bottom chart shows
+   them). */
 @media (max-width: 700px) {
+  .delivery-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
   .delivery-card__head {
     flex-direction: column;
     align-items: flex-start;

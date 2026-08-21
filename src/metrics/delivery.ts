@@ -19,8 +19,10 @@ export interface DeliveryCiPoint {
 export interface DeliveryPoint {
   date: string; // YYYY-MM-DD
   ci: DeliveryCiPoint | null;
-  commits: number;
-  prsMerged: number;
+  /** null = no commit telemetry for this day (renders as a gap, never 0). */
+  commits: number | null;
+  /** null = no PR-merge telemetry for this day (renders as a gap, never 0). */
+  prsMerged: number | null;
 }
 
 export interface DeliveryTrend {
@@ -59,10 +61,16 @@ export function buildDeliveryTrend(db: Database, from: string, to: string): Deli
     prsByDay.set(day, (prsByDay.get(day) ?? 0) + 1);
   }
 
-  // Commits: git.commitsByDay is already keyed by YYYY-MM-DD.
+  // Commits: git.commitsByDay is already keyed by YYYY-MM-DD. Treat absence
+  // as "unknown" (null), never 0 — the chart should render a gap, not a zero
+  // bar. A missing day on `commitsByDay` means we have no commit telemetry
+  // for that day, not that there were zero commits.
   const commitsByDay: Record<string, number> = git?.commitsByDay ?? {};
 
   // Dense day list — every day in [from, to] gets a row, even if empty.
+  // CI uses null on days with no terminal runs (pass-rate is genuinely
+  // undefined when the denominator is zero). Commits + PRs use null when we
+  // have no signal that day so the chart shows a gap instead of a false zero.
   const points: DeliveryPoint[] = [];
   const startMs = Date.parse(`${from}T00:00:00Z`);
   const endMs = Date.parse(`${to}T00:00:00Z`);
@@ -78,11 +86,15 @@ export function buildDeliveryTrend(db: Database, from: string, to: string): Deli
           passRate: totalRuns > 0 ? ciSlot!.pass / totalRuns : null,
         }
       : null;
+    // Only surface commit/PR counts for days we actually have signal for.
+    // A day absent from commitsByDay is "no telemetry" — not zero activity.
+    const hasCommitSignal = Object.prototype.hasOwnProperty.call(commitsByDay, date);
+    const hasPrSignal = prsByDay.has(date);
     points.push({
       date,
       ci,
-      commits: commitsByDay[date] ?? 0,
-      prsMerged: prsByDay.get(date) ?? 0,
+      commits: hasCommitSignal ? (commitsByDay[date] ?? 0) : null,
+      prsMerged: hasPrSignal ? (prsByDay.get(date) ?? 0) : null,
     });
   }
 
