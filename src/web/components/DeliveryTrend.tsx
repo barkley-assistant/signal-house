@@ -211,7 +211,7 @@ function computeWorstDip(
     symbolSize: 7,
     itemStyle: { color: "#f87171" },
     label: { show: false },
-    data: [{ coord: [dates[worstIdx], worstVal] }],
+    data: [{ name: dates[worstIdx], coord: [dates[worstIdx], worstVal] }],
   };
 }
 
