@@ -51,8 +51,8 @@ export function App() {
 
         <HealthStrip state={state} />
 
-        <AgentSpend />
         <DeliveryTrend />
+        <AgentSpend />
         <AttentionQueue attention={state?.attention ?? []} />
 
         {state && <SourceDiagnostics status={state.status} />}
