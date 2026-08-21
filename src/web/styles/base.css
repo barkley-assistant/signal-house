@@ -325,13 +325,12 @@ table.data td.num, table.data th.num {
   }
 }
 
-@media (max-width: 700px) {
-  /* Single-column strip on phones — the 5th 'Cost & Tokens' tile gets
-     full container width and a hero layout: label + dollar value on the
-     left, the tok/hr rate prominently on the right. Desktop is untouched. */
-  .health-strip {
-    grid-template-columns: 1fr;
-  }
+@media (max-width: 1000px) {
+  /* The 5th 'Cost & Tokens' tile alone on the bottom row gets a hero
+     treatment: label on top, value + rate side-by-side below. Same rule
+     covers tablets (700-1000px) and mobile (<700px) — the strip collapses
+     to 2 columns at this breakpoint and the 5th tile is naturally alone.
+     Desktop is untouched. */
   .kpi-tile--cost-tokens {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -342,19 +341,25 @@ table.data td.num, table.data th.num {
     column-gap: 16px;
     row-gap: 6px;
   }
-  .kpi-tile--cost-tokens .kpi-tile__label {
-    grid-area: label;
-  }
-  .kpi-tile--cost-tokens .big-number {
-    grid-area: value;
-    /* Keep the dollar value as the primary KPI — do NOT shrink it. */
+  .kpi-tile--cost-tokens .kpi-tile__label { grid-area: label; }
+  .kpi-tile--cost-tokens .big-number { grid-area: value; }
+  .kpi-tile--cost-tokens .kpi-caption { grid-area: rate; font-size: 15px; color: var(--text-secondary); }
+}
+
+@media (max-width: 500px) {
+  /* Phones: value + rate side-by-side may overflow; stack everything
+     vertically and trim the rate. */
+  .kpi-tile--cost-tokens {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "label"
+      "value"
+      "rate";
+    row-gap: 4px;
   }
   .kpi-tile--cost-tokens .kpi-caption {
-    grid-area: rate;
-    font-size: 15px;
-    /* Drop the muted weight a touch and tint toward primary so it reads
-       at a glance instead of disappearing into the caption line. */
-    color: var(--text-secondary);
+    font-size: 13px;
+    max-width: 100%;
   }
 }
 .kpi-tile {
