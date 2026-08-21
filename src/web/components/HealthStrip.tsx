@@ -67,7 +67,7 @@ export function HealthStrip({ state }: { state: StatePayload | null }) {
         <div className="kpi-caption">{stale ? `${stale.staleIssues} issues · ${stale.stalePrs} PRs (${stale.thresholdDays}d)` : "No GitHub data"}</div>
       </motion.div>
 
-      <motion.div className="kpi-tile" variants={item}>
+      <motion.div className="kpi-tile kpi-tile--cost-tokens" variants={item}>
         <div className="kpi-tile__label">Cost &amp; Tokens</div>
         <div className="big-number">{none(ct?.costPerHour) ? "—" : formatCost(ct!.costPerHour!)}</div>
         <div className="kpi-caption">{none(ct?.tokensPerHour) ? "No usage telemetry" : `${formatCompact(ct!.tokensPerHour!)} tok/hr`}</div>
