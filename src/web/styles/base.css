@@ -341,30 +341,14 @@ table.data td.num, table.data th.num {
       "label   label"
       "value   rate";
     align-items: center;
-    column-gap: 16px;
+    column-gap: 12px;
     row-gap: 6px;
   }
   .kpi-tile--cost-tokens .kpi-tile__label { grid-area: label; }
   .kpi-tile--cost-tokens .big-number { grid-area: value; }
-  .kpi-tile--cost-tokens .kpi-caption { grid-area: rate; font-size: 15px; color: var(--text-secondary); }
+  .kpi-tile--cost-tokens .kpi-caption { grid-area: rate; font-size: 18px; color: var(--text-secondary); }
 }
 
-@media (max-width: 500px) {
-  /* Phones: value + rate side-by-side may overflow; stack everything
-     vertically and trim the rate. */
-  .kpi-tile--cost-tokens {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "label"
-      "value"
-      "rate";
-    row-gap: 4px;
-  }
-  .kpi-tile--cost-tokens .kpi-caption {
-    font-size: 13px;
-    max-width: 100%;
-  }
-}
 .kpi-tile {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
