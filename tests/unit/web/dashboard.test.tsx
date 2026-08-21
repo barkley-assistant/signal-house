@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, test, afterEach, vi } from "bun:test";
-import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act, waitFor } from "@testing-library/react";
 import * as echarts from "echarts";
 import type { StatePayload } from "../../../src/api/build-state";
 import { useDash } from "../../../src/web/state/store";
@@ -509,18 +509,21 @@ describe("DeliveryTrend", () => {
 
     render(<DeliveryTrend />);
     expect(screen.getByRole("heading", { name: /delivery/i })).toBeTruthy();
-    // Two chart containers mount.
-    expect(screen.getByLabelText("CI pass-rate trend")).toBeTruthy();
-    expect(screen.getByLabelText(/Throughput — commits and PRs merged per day/i)).toBeTruthy();
+    // Loading first — skeleton grid renders instead of the charts.
+    expect(document.querySelector(".delivery-grid .skeleton")).toBeTruthy();
+    // Charts mount after data arrives.
+    await waitFor(() => {
+      expect(screen.getByLabelText("CI pass-rate trend")).toBeTruthy();
+      expect(screen.getByLabelText(/Throughput — commits and PRs merged per day/i)).toBeTruthy();
+    });
   });
 
   test("renders the empty-state message when the API returns no points", async () => {
     mockFetch({ points: [] });
 
     render(<DeliveryTrend />);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => {
+      expect(screen.getByText(/No delivery data yet/i)).toBeTruthy();
     });
-    expect(screen.getByText(/No delivery data yet/i)).toBeTruthy();
   });
 });

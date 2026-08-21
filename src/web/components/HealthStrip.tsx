@@ -21,7 +21,7 @@ export function HealthStrip({ state }: { state: StatePayload | null }) {
     return (
       <div className="health-strip" aria-label="Loading health summary">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div className="kpi-tile" key={i}>
+          <div className={`kpi-tile${i === 4 ? " kpi-tile--cost-tokens" : ""}`} key={i}>
             <div className="skeleton" style={{ height: 14, width: "60%" }} />
             <div className="skeleton" style={{ height: 28, width: "80%", marginTop: 8 }} />
           </div>

@@ -116,12 +116,27 @@ export function DeliveryTrend() {
       {!hasData && !loading ? (
         <p className="state-label">No delivery data yet — GitHub collector unavailable or no runs in window</p>
       ) : (
-        <div className="delivery-grid" style={{ visibility: loading ? "hidden" : "visible" }}>
-          <div ref={ciRef} className="delivery-chart" style={{ height: TOP_HEIGHT }} aria-label="CI pass-rate trend" />
-          <div ref={barRef} className="delivery-chart" style={{ height: BOTTOM_HEIGHT }} aria-label="Throughput — commits and PRs merged per day" />
+        <div className="delivery-grid" aria-busy={loading || undefined}>
+          {loading ? (
+            <>
+              <div className="skeleton" style={{ height: TOP_HEIGHT }} />
+              <div className="skeleton" style={{ height: BOTTOM_HEIGHT }} />
+            </>
+          ) : null}
+          <div
+            ref={ciRef}
+            className="delivery-chart"
+            style={{ height: TOP_HEIGHT, display: loading ? "none" : "block" }}
+            aria-label="CI pass-rate trend"
+          />
+          <div
+            ref={barRef}
+            className="delivery-chart"
+            style={{ height: BOTTOM_HEIGHT, display: loading ? "none" : "block" }}
+            aria-label="Throughput — commits and PRs merged per day"
+          />
         </div>
       )}
-      {loading && <div className="skeleton" style={{ height: TOP_HEIGHT, marginTop: 8 }} />}
     </section>
   );
 }
