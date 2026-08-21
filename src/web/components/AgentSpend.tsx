@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
 import { formatNumber, formatCost, formatCompact, formatPercent } from "../../shared/format";
+import { touchAwareTooltip } from "./chart-tooltip";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
  *  Plain requestAnimationFrame loop (no framer motion-value indirection) so
@@ -225,6 +226,7 @@ function DailyUsageChart() {
         grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
         tooltip: {
           trigger: "axis",
+          ...touchAwareTooltip(),
           confine: true,
           backgroundColor: "rgba(17, 19, 24, 0.96)",
           borderColor: "#232732",

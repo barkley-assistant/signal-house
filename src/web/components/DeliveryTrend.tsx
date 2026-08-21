@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import { useDash, loadDeliveryTrend, type DeliveryPoint } from "../state/store";
 import { formatNumber } from "../../shared/format";
+import { touchAwareTooltip } from "./chart-tooltip";
 
 // Same accent palette as the Daily cost & tokens chart so the panels feel
 // like siblings, not strangers.
@@ -158,6 +159,7 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 18, bottom: 22, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
+        ...touchAwareTooltip(),
         axisPointer: { type: "line", lineStyle: { color: "#2c3038" } },
         formatter: (params: unknown) => {
           const arr = params as Array<{ axisValue: string; value: number | null }>;
@@ -251,6 +253,7 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 28, bottom: 22, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
+        ...touchAwareTooltip(),
         axisPointer: { type: "shadow", shadowStyle: { color: "rgba(56, 189, 248, 0.06)" } },
         formatter: (params: unknown) => {
           const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
