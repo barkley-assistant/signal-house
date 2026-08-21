@@ -226,7 +226,7 @@ function toIssue(i: { id: string; title: string; state: "open" | "closed"; creat
   };
 }
 
-function toPullRequest(pr: { id: string; title: string; state: "open" | "closed"; createdAt: string; updatedAt: string; mergedAt: string | null; closedAt: string | null; headSha: string | null; labels: string[]; userLogin: string; additions: number | null; deletions: number | null; changedFiles: number | null }, fullName: string, repoKey: string): PullRequestRecord {
+function toPullRequest(pr: { id: string; title: string; state: "open" | "closed"; createdAt: string; updatedAt: string; mergedAt: string | null; closedAt: string | null; headSha: string | null; labels: string[]; userLogin: string; additions: number | null; deletions: number | null; changedFiles: number | null; htmlUrl: string }, fullName: string, repoKey: string): PullRequestRecord {
   return {
     id: pr.id,
     title: pr.title,
@@ -243,7 +243,10 @@ function toPullRequest(pr: { id: string; title: string; state: "open" | "closed"
     additions: pr.additions,
     deletions: pr.deletions,
     changedFiles: pr.changedFiles,
-    url: `${fullName}#${pr.id}`,
+    // htmlUrl from the GitHub API is the canonical pulls URL
+    // (https://github.com/<owner>/<repo>/pull/<number>) — never rebuild it
+    // from the internal node id.
+    url: pr.htmlUrl,
     ciStatus: null,
   };
 }
