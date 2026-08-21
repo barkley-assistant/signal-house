@@ -352,17 +352,24 @@ function DailyUsageChart() {
   );
 }
 
-type SortKey = "model" | "sessions" | "tokens" | "cost" | "cachePct" | null;
+type SortKey = "model" | "sessions" | "tokens" | "cost" | "cachePct" | "eff" | null;
 type SortState = { key: SortKey; asc: boolean };
 
 const SORT_STORAGE_KEY = "signal-house:agent-spend-sort:cachePct";
+
+/** Format $ per 1M effective tokens: $0.03, $0.21, $1.08 style. */
+function formatEffPerM(v: number): string {
+  if (Number.isFinite(v) === false || v < 0) return "—";
+  const digits = v >= 1 ? 2 : 3;
+  return `$${v.toFixed(digits)}`;
+}
 
 function readSortState(): SortState {
   try {
     const raw = localStorage.getItem(SORT_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as SortState;
-      if (parsed && (parsed.key === null || ["model", "sessions", "tokens", "cost", "cachePct"].includes(parsed.key)) && typeof parsed.asc === "boolean") {
+      if (parsed && (parsed.key === null || ["model", "sessions", "tokens", "cost", "cachePct", "eff"].includes(parsed.key)) && typeof parsed.asc === "boolean") {
         return { key: parsed.key, asc: parsed.asc };
       }
     }
@@ -404,8 +411,19 @@ function ModelTable() {
         const bv = b.cacheHitRate ?? 0;
         return asc ? av - bv : bv - av;
       }
-      const av = a[sortKey] ?? -1;
-      const bv = b[sortKey] ?? -1;
+      if (sortKey === "eff") {
+        // Cheapest-first ascending; null ratios (no telemetry / free / tiny
+        // sample) always sink to the bottom regardless of direction.
+        const av = a.effPerM ?? null;
+        const bv = b.effPerM ?? null;
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        return asc ? av - bv : bv - av;
+      }
+      const genericKey = (["sessions", "tokens", "cost"].includes(sortKey) ? sortKey : "cost") as "sessions" | "tokens" | "cost";
+      const av = a[genericKey] ?? -1;
+      const bv = b[genericKey] ?? -1;
       return asc ? av - bv : bv - av;
     });
   }
@@ -440,6 +458,7 @@ function ModelTable() {
               <th className="num"><button type="button" className={sortBtnClass("tokens")} onClick={() => cycle("tokens")}>Tokens{arrow("tokens")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("cachePct")} onClick={() => cycle("cachePct")}>Cache %{arrow("cachePct")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("cost")} onClick={() => cycle("cost")}>Cost{arrow("cost")}</button></th>
+              <th className="num"><button type="button" className={sortBtnClass("eff")} onClick={() => cycle("eff")}>$/1M{arrow("eff")}</button></th>
             </tr>
           </thead>
           <tbody>
@@ -453,6 +472,7 @@ function ModelTable() {
                 <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
                 <td className="num" data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</td>
                 <td className="num" data-label="Cost">{formatCost(m.cost)}</td>
+                <td className="num eff-cell" data-label="Eff">{m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
               </tr>
             ))}
           </tbody>

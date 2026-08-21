@@ -37,6 +37,14 @@ export interface ModelUsageMetrics {
   cacheReadTokens?: number;
   cacheHitRate?: number;
   cacheSavings?: number;
+  /**
+   * Cost per 1M "effective" tokens. Effective tokens discount cache reads by
+   * the model's own cache-read-vs-input price ratio (a cached token costs
+   * less than a fresh one), so models with high cache hit rates aren't
+   * unfairly penalised next to cache-heavy ones. null when the ratio is not
+   * meaningful (no cost telemetry, free tier, or <3 sessions).
+   */
+  effPerM?: number | null;
   bySource?: Record<string, ModelSourceCacheMetrics>;
 }
 
@@ -246,6 +254,7 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
     cost: number | null;
     tokens: number | null;
     inputTokens: number;
+    outputTokens: number;
     cacheReadTokens: number;
     cacheSavings: number;
     bySource: Record<string, ModelSourceCacheMetrics>;
@@ -261,6 +270,7 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
 
     const source = row.source ?? row.provider ?? "unknown";
     const inputTokens = row.inputTokens ?? 0;
+    const outputTokens = row.outputTokens ?? 0;
     const cacheReadTokens = row.cacheReadTokens ?? 0;
     // Net savings = tokens read from cache × (input − cache_read) price delta.
     // Cache reads are discounted, not free; subtracting the cache_read rate
@@ -276,6 +286,7 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
       existing.cost = mergeNullSum(existing.cost, row.cost);
       existing.tokens = mergeNullSum(existing.tokens, rowTokens(row));
       existing.inputTokens += inputTokens;
+      existing.outputTokens += outputTokens;
       existing.cacheReadTokens += cacheReadTokens;
       existing.cacheSavings += cacheSavings;
       const src = existing.bySource[source] ?? { cacheReadTokens: 0, cacheSavings: 0 };
@@ -295,6 +306,7 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
         cost: row.cost,
         tokens: rowTokens(row),
         inputTokens,
+        outputTokens,
         cacheReadTokens,
         cacheSavings,
         bySource: { [source]: { cacheReadTokens, cacheSavings } },
@@ -304,11 +316,20 @@ export function mergeModelRows(rows: ModelUsageRow[]): UsageAggregate["byModel"]
   }
 
   return [...map.values()]
-    .map(({ best: _best, inputTokens, ...m }) => {
+    .map(({ best: _best, inputTokens, outputTokens, ...m }) => {
       const denom = m.cacheReadTokens + inputTokens;
+      // Effective cost per 1M tokens: output tokens count at face value,
+      // cache reads are discounted by the model's cache-read-vs-input price
+      // ratio (they're cheaper per token, so counting them full-price would
+      // unfairly punish high-cache-rate models).
+      const disc = getInputCostPerMillion(m.model) > 0 ? getCacheReadCostPerMillion(m.model) / getInputCostPerMillion(m.model) : 1;
+      const effTokens = inputTokens + outputTokens + m.cacheReadTokens * Math.min(1, Math.max(0, disc));
+      const effPerM =
+        m.cost !== null && m.cost > 0 && effTokens > 0 && m.sessions >= 3 ? (m.cost / (effTokens / 1_000_000)) : null;
       return {
         ...m,
         cacheHitRate: denom > 0 ? m.cacheReadTokens / denom : 0,
+        effPerM,
       };
     })
     .sort((a, b) => b.sessions - a.sessions || (b.cost ?? 0) - (a.cost ?? 0));
