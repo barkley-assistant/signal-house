@@ -67,7 +67,7 @@ export function AgentSpend() {
                 <div className="spend-hero__cache-stat">
                   <span className="kpi-tile__label">Cache hit rate</span>
                   <span className="big-number small">{hitRateDisplay}</span>
-                  <span className="kpi-caption">cache_read ÷ (cache_read + input)</span>
+                  <span className="kpi-caption">cache hit rate</span>
                 </div>
                 <div className="spend-hero__cache-stat">
                   <span className="kpi-tile__label">Saved</span>
