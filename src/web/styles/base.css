@@ -332,6 +332,9 @@ table.data td.num, table.data th.num {
      to 2 columns at this breakpoint and the 5th tile is naturally alone.
      Desktop is untouched. */
   .kpi-tile--cost-tokens {
+    /* Spans both columns of the 2-col strip — full container width even
+       though the other 4 tiles stay in the 2-col rows above. */
+    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: 1fr auto;
     grid-template-areas:
