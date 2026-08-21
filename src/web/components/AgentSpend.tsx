@@ -117,7 +117,7 @@ function SpendSource({ label, source, usage }: { label: string; source: string; 
         <span className="kpi-tile__label heading">{label}</span>
         <span className="spend-source-row__meta">
           {src
-            ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens · ${formatCompact(src.cacheReadTokens)} cache_read`
+            ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens · ${formatCompact(src.cacheReadTokens)} cached`
             : "No data"}
         </span>
       </div>

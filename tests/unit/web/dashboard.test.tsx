@@ -307,8 +307,8 @@ describe("AgentSpend", () => {
     const { container } = render(<AgentSpend />);
     const metas = container.querySelectorAll(".spend-sources .spend-source-row__meta");
     expect(metas).toHaveLength(2);
-    expect(metas[0]?.textContent).toContain(`${formatCompact(1234567)} cache_read`);
-    expect(metas[1]?.textContent).toContain("0 cache_read");
+    expect(metas[0]?.textContent).toContain(`${formatCompact(1234567)} cached`);
+    expect(metas[1]?.textContent).toContain("0 cached");
 
     cleanup();
     useDash.setState({
