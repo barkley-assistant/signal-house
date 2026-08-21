@@ -282,7 +282,10 @@
     background: var(--subtle);
   }
 
-  /* Rows → cards. */
+  /* Rows → cards. The four stats sit in a single 4-across row under the
+     model name so each card stays one compact block — two rows of stats
+     would double the vertical space for no readability gain at ~85px per
+     stat column. */
   .model-table tbody {
     display: grid;
     gap: 8px;
@@ -290,7 +293,7 @@
   .model-table table.data tbody tr:nth-child(odd),
   .model-table table.data tbody tr {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 6px 10px;
     padding: 10px 12px;
     background: var(--card-bg);
