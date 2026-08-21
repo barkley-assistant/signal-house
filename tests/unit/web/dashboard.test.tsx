@@ -386,6 +386,42 @@ describe("AgentSpend", () => {
     expect(colors).toEqual(["#38bdf8", "#facc15", "#4ade80"]);
     expect(Array.isArray(series) ? series.map((entry) => ("lineStyle" in entry ? entry.lineStyle?.color : undefined)) : []).toEqual(colors);
   });
+
+  test("line endpoints reach both plot edges (no boundary gap)", async () => {
+    const options: echarts.EChartsOption[] = [];
+    chartSpy.mockImplementation(
+      () => ({
+        setOption(option: echarts.EChartsOption) {
+          options.push(option);
+        },
+        resize() {},
+        dispose() {},
+        on() {},
+      }),
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        points: [
+          { date: "2026-07-01", cost: 1.25, tokens: 100, cacheRead: 25 },
+          { date: "2026-07-02", cost: 2.0, tokens: 200, cacheRead: 40 },
+          { date: "2026-07-03", cost: 0.5, tokens: 80, cacheRead: 10 },
+        ],
+      }),
+    } as Response);
+    useDash.setState({ state: usageState() });
+
+    render(<AgentSpend />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const option = options.find((candidate) => Array.isArray(candidate.series));
+    expect(option).toBeTruthy();
+    // boundaryGap: false puts the first/last points flush to the plot edges;
+    // the default (true) insets them by half a band, leaving the trailing gap.
+    expect((option?.xAxis as { boundaryGap?: boolean } | undefined)?.boundaryGap).toBe(false);
+  });
 });
 
 describe("state store", () => {

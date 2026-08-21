@@ -247,6 +247,11 @@ function DailyUsageChart() {
         },
         xAxis: {
           type: "category",
+          // boundaryGap defaults to true for category axes, which insets the
+          // first and last points by half a band on each side. That half-band
+          // slack is the trailing whitespace at the latest date — set it false
+          // so the line's first/last points sit flush to both plot edges.
+          boundaryGap: false,
           data: dates,
           axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDay },
           axisLine: { lineStyle: { color: "#232732" } },
