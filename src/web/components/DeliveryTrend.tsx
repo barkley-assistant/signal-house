@@ -17,10 +17,17 @@ const PR_COLOR = "#38bdf8"; // var(--info) — accent for the meaningful shippin
 const COMMITS_COLOR_Swatch = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COMMITS_COLOR};margin-right:4px"></span>`;
 const PR_COLOR_Swatch = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${PR_COLOR};margin-right:4px"></span>`;
 
+<<<<<<< HEAD
 const TOP_HEIGHT = 320;
 const BOTTOM_HEIGHT = 320;
 const GRID_LEFT = 56;
 const GRID_RIGHT = 18;
+=======
+const TOP_HEIGHT = 220;
+const BOTTOM_HEIGHT = 220;
+const GRID_LEFT = 44;
+const GRID_RIGHT = 16;
+>>>>>>> 02e5bfb (fix(web): match Delivery chart height to daily cost chart (220px))
 
 function fmtDay(d: string): string {
   const [y, m, day] = d.split("-").map(Number);
