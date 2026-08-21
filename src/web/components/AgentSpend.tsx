@@ -430,7 +430,9 @@ function ModelTable() {
 
   const cycle = (key: Exclude<SortKey, null>) => {
     if (sortKey !== key) {
-      setSort({ key, asc: false });
+      // Efficiency reads best cheapest-first: $0.02 Flash before $1.58 GLM.
+      // Other columns default to $/count descending; eff flips the default.
+      setSort({ key, asc: key === "eff" });
     } else if (!asc) {
       setSort({ key, asc: true });
     } else {
