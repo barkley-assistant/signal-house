@@ -5,6 +5,7 @@
     { "machine": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "family": "DeepSeek" },
     { "machine": "grok-45", "label": "Grok 4.5", "family": "xAI" },
     { "machine": "grok-build-01", "label": "Grok Build 0.1", "family": "xAI" },
+    { "machine": "ox-alpha", "label": "Ox Alpha", "family": "Stealth" },
     { "machine": "glm-52", "label": "GLM 5.2", "family": "z.ai" },
     { "machine": "glm-51", "label": "GLM 5.1", "family": "z.ai" },
     { "machine": "glm-5", "label": "GLM 5", "family": "z.ai" },
@@ -80,6 +81,7 @@
     { "prefix": "gemini", "family": "Google" },
     { "prefix": "google", "family": "Google" },
     { "prefix": "mistral", "family": "Mistral" },
+    { "prefix": "ox", "family": "Stealth" },
     { "prefix": "llama", "family": "Meta" },
     { "prefix": "grok", "family": "xAI" }
   ]
