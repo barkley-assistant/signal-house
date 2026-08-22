@@ -29,7 +29,7 @@ const PR_COLOR = "#38bdf8"; // var(--info) — blue
 // says "we have noise", red says "we're broken". Below the bars is a small
 // total-runs annotation so the user can tell apart "100% from 1 run" and
 // "100% from 50 runs" at a glance.
-const CI_BAR_GREEN = "#4ade80"; // pass-rate >= 95%
+const CI_BAR_GREEN = CI_COLOR; // pass-rate >= 95%
 const CI_BAR_AMBER = "#fbbf24"; // 70% <= pass-rate < 95%
 const CI_BAR_RED = "#f87171"; // pass-rate < 70%
 const CI_BAR_FAINT = "rgba(74, 222, 128, 0.18)"; // days with no CI data — quiet marker so the user can see "nothing today"

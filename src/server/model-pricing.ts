@@ -29,7 +29,7 @@ import {
   getInputCostPerMillion,
   getCacheReadCostPerMillion,
 } from "./cost-input";
-import { machineKey } from "../shared/models";
+import { machineKey, stripDateSnapshot } from "../shared/models";
 
 export interface ModelRates {
   input: number;
@@ -116,13 +116,6 @@ export async function getModelPricing(model: string): Promise<ModelRates> {
   // 3. empty result — signal-house renders cost as $0 (per locked decision
   // #3) and flags this row as costSource: "unknown" upstream.
   return zero();
-}
-
-/** Strip a trailing -YYYYMMDD or -YYYYMM date snapshot from a model key. */
-function stripDateSnapshot(key: string): string {
-  // Mirrors cost-input.ts: key.replace(/-[0-9]{4,}$/, "")
-  const base = key.replace(/-[0-9]{4,}$/, "");
-  return base;
 }
 
 function zero(): ModelRates {

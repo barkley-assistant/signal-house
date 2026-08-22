@@ -9,7 +9,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts, DailyWrite } from "../shared/types";
-import { machineKey } from "../shared/models";
+import { machineKey, stripDateSnapshot } from "../shared/models";
 import { fetchAllRates } from "../server/model-pricing";
 
 export interface DailyMetricRow {
@@ -198,7 +198,7 @@ export async function queryDailyTrend(
     // machineKey also strips dots — so 'gpt-5.6-luna' becomes 'gpt-56-luna'.
     const mk = machineKey(row.model);
     if (!mk) continue;
-    const lookupKey = mk.replace(/-[0-9]{4,}$/, "");
+    const lookupKey = stripDateSnapshot(mk);
     const r = rates.get(mk) ?? rates.get(lookupKey);
     if (!r || (r.input === 0 && r.output === 0)) continue;
     const input = row.inputTokens ?? 0;

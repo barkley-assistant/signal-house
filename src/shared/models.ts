@@ -38,6 +38,14 @@ export function machineKey(raw: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/** Strip a trailing date-snapshot suffix ("-0731", "-20250815", …) from an
+ *  already-machine-keyed model name, so a dated variant resolves against
+ *  the same rate/pricing entry as its base model. Callers pass the output
+ *  of machineKey(); the regex intentionally runs AFTER normalisation. */
+export function stripDateSnapshot(machine: string): string {
+  return machine.replace(/-[0-9]{4,}$/, "");
+}
+
 /** Friendly label for display: curated from model-map.json, title-case
  *  fallback if the model is not yet in the map. */
 export function modelLabel(raw: string): string {

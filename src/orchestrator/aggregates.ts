@@ -7,7 +7,7 @@ import type { PersistedState } from "../config/types";
 import type { RuntimeConfig } from "../config/types";
 import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
-import { machineKey, modelFamily, modelLabel } from "../shared/models";
+import { machineKey, modelFamily, modelLabel, stripDateSnapshot } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
 import type { CostEstimationOpts, CostSource, ModelUsageRow, UsageDay } from "../shared/types";
 import { getCacheReadCostPerMillion, getInputCostPerMillion } from "../server/cost-input";
@@ -353,7 +353,7 @@ export function mergeModelRows(
       // against the same rate entry as their base model. Mirrors the
       // resolver's own logic; necessary because the rates map keys are
       // already stripped at fetch time.
-      const lookupKey = key.replace(/-[0-9]{4,}$/, "");
+      const lookupKey = stripDateSnapshot(key);
       const rates = costOpts.rates.get(lookupKey);
       if (rates && (rates.input > 0 || rates.output > 0)) {
         rowCost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
@@ -404,7 +404,7 @@ export function mergeModelRows(
       // (so it lines up with the estimator's own number on the row); passthrough
       // distributes the row's upstream cost by per-source token share.
       if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-        const lookupKey = key.replace(/-[0-9]{4,}$/, "");
+        const lookupKey = stripDateSnapshot(key);
         const rates = costOpts.rates.get(lookupKey);
         if (rates && (rates.input > 0 || rates.output > 0)) {
           src.cost += (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
@@ -447,7 +447,7 @@ export function mergeModelRows(
             cost: 0,
           };
           if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-            const lookupKey = key.replace(/-[0-9]{4,}$/, "");
+            const lookupKey = stripDateSnapshot(key);
             const rates = costOpts.rates.get(lookupKey);
             if (rates && (rates.input > 0 || rates.output > 0)) {
               entry.cost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;

@@ -6,7 +6,7 @@ import type { RuntimeConfig } from "../config/types";
 import type { Collector } from "../collectors";
 import type { RefreshContext } from "../orchestrator/refresh";
 import type { RefreshLock } from "../orchestrator/lock";
-import type { CostEstimationOpts, ModelRates } from "../shared/types";
+import type { CostEstimationOpts } from "../shared/types";
 import { runRefresh } from "../orchestrator/refresh";
 import { json, jsonError } from "../shared/http";
 import { buildState } from "./build-state";
@@ -23,10 +23,6 @@ export interface ApiDeps {
   collectors: Collector[];
   refreshCtx: () => RefreshContext;
   lock: RefreshLock;
-  /** Pre-fetched per-machine-key rates map. Built once at app construction
-   *  time so daily-trend (and any future cost-aware endpoint) reads the
-   *  same map as the by-model rollup. Empty when estimation is disabled. */
-  costRates: Map<string, ModelRates>;
 }
 
 /** GET /api/state — optional `?days=7|30|90` scopes every windowed metric. */
@@ -60,16 +56,15 @@ export function healthHandler(_deps: ApiDeps, req: Request): Response {
  *  rollup in `/api/state`. When false, falls through to the upstream-reported
  *  `cost.total` per day (today's behavior).
  *
- *  The rates map is fetched fresh per-request via the resolver so a daily
- *  refresh that arrives between dashboard polls (every 24h for the litellm
- *  cache) is picked up immediately, with no stale-snapshot bugs. */
+ *  Rates are fetched fresh inside queryDailyTrend (via the resolver), so a
+ *  pricing refresh between dashboard polls is picked up immediately. */
 export async function dailyTrendHandler(deps: ApiDeps, req: Request): Promise<Response> {
   const url = new URL(req.url);
   const days = parseWindowDays(url.searchParams.get("days"));
   const to = url.searchParams.get("to") ?? utcDay();
   const from = url.searchParams.get("from") ?? utcDaysAgo(days);
   const costOpts: CostEstimationOpts = {
-    rates: deps.costRates,
+    rates: new Map(),
     enabled: deps.config.estimateCosts,
   };
   const points = await queryDailyTrend(deps.db, from, to, costOpts);
