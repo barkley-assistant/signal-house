@@ -32,6 +32,13 @@ export function formatCost(value: number | null | undefined): string {
   }).format(value);
 }
 
+/** Cost per 1M effective tokens: 0.1186 → "$0.119", 1.58 → "$1.58". null → "—". */
+export function formatEffPerM(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value) || value < 0) return "—";
+  const digits = value >= 1 ? 2 : 3;
+  return `$${value.toFixed(digits)}`;
+}
+
 /** Duration in seconds → "3m 12s" / "1h 05m" / "45s". null → "—". */
 export function formatDurationSeconds(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";

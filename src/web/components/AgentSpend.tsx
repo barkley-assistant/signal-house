@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
-import { formatNumber, formatCost, formatCompact, formatPercent } from "../../shared/format";
+import { formatNumber, formatCost, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { touchAwareTooltip } from "./chart-tooltip";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
@@ -356,13 +356,6 @@ type SortKey = "model" | "sessions" | "tokens" | "cost" | "cachePct" | "eff" | n
 type SortState = { key: SortKey; asc: boolean };
 
 const SORT_STORAGE_KEY = "signal-house:agent-spend-sort:cachePct";
-
-/** Format $ per 1M effective tokens: $0.03, $0.21, $1.08 style. */
-function formatEffPerM(v: number): string {
-  if (Number.isFinite(v) === false || v < 0) return "—";
-  const digits = v >= 1 ? 2 : 3;
-  return `$${v.toFixed(digits)}`;
-}
 
 function readSortState(): SortState {
   try {
