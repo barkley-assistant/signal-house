@@ -23,6 +23,7 @@ import { setRefreshMeta } from "../db/refresh-meta";
 import { replaceDayForSource, backfillDaysForSource } from "../db/daily-metrics";
 import { runRetention } from "../db/retention";
 import { deriveDailyRows } from "../metrics/daily";
+import { ensurePricingCacheFresh } from "../server/model-pricing-fetcher";
 import { resolvePrivacyMap, uncoveredRepos } from "../privacy/privacy";
 import { RefreshLock, type LockOwner } from "./lock";
 import { extractGithubTargets } from "../collectors/github/collector";
@@ -79,6 +80,10 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
   }
 
   try {
+    // Warm the pricing cache before collectors run. Best-effort: a fetch
+    // failure is logged inside the fetcher and never aborts the refresh.
+    await ensurePricingCacheFresh();
+
     const results = await runCollectors(ctx);
 
     const succeeded = results.filter((r) => r.ok && r.data !== null);
