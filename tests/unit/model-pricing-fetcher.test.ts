@@ -82,7 +82,7 @@ describe("model-pricing-fetcher", () => {
 
     const status = getPricingCacheStatus();
     expect(status.lastFetchStatus).toBe("ok");
-    expect(status.modelCount).toBe(2); // gpt-5 + gpt-5.6-luna; missing-output skipped
+    expect(status.modelCount).toBe(3); // gpt-5 + gpt-5.6-luna + claude-opus-4-7; missing-output skipped
     expect(existsSync(cacheFile)).toBe(true);
 
     const gpt5 = await getModelPricing("gpt-5");
@@ -139,10 +139,10 @@ describe("model-pricing-fetcher", () => {
 
     const status = getPricingCacheStatus();
     expect(status.lastFetchStatus).toBe("ok");
-    expect(status.modelCount).toBe(2);
+    expect(status.modelCount).toBe(3);
     // disk cache was rewritten
     const disk = JSON.parse(readFileSync(cacheFile, "utf-8"));
-    expect(disk.modelCount).toBe(2);
+    expect(disk.modelCount).toBe(3);
   });
 
   test("ensurePricingCacheFresh: TTL elapsed + network failure + disk exists → status is stale, disk unchanged", async () => {
@@ -312,7 +312,7 @@ describe("model-pricing-fetcher", () => {
 
     const status = getPricingCacheStatus();
     expect(status.lastFetchStatus).toBe("ok");
-    expect(status.modelCount).toBe(2);
+    expect(status.modelCount).toBe(3);
   });
 
   test("disk cache has wrong shape (missing models field) → ignored, falls through to network", async () => {
@@ -323,6 +323,6 @@ describe("model-pricing-fetcher", () => {
     await ensurePricingCacheFresh();
 
     const status = getPricingCacheStatus();
-    expect(status.modelCount).toBe(2);
+    expect(status.modelCount).toBe(3);
   });
 });

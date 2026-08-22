@@ -2,14 +2,18 @@ import { describe, test, expect } from "bun:test";
 import { parseLitellmPricing } from "../../src/shared/model-pricing-parser";
 
 describe("parseLitellmPricing", () => {
-  test("filters to openai entries only", () => {
+  test("accepts any provider with finite rates (openai, anthropic, gemini, …)", () => {
+    // The parser accepts all litellm entries with finite input/output rates
+    // regardless of `litellm_provider` — pricing is the same whether the
+    // request was routed through OpenAI, Anthropic, Gemini, etc. Provider
+    // matters for routing, not for the per-1M-token rate.
     const input = {
       "gpt-5": { litellm_provider: "openai", input_cost_per_token: 1.25e-6, output_cost_per_token: 1e-5 },
       "claude-opus-4-7": { litellm_provider: "anthropic", input_cost_per_token: 1e-5, output_cost_per_token: 5e-5 },
       "gemini-3-pro": { litellm_provider: "gemini", input_cost_per_token: 1e-6, output_cost_per_token: 4e-6 },
     };
     const out = parseLitellmPricing(input);
-    expect(Object.keys(out)).toEqual(["gpt-5"]);
+    expect(Object.keys(out).sort()).toEqual(["claude-opus-4-7", "gemini-3-pro", "gpt-5"]);
     expect(out["gpt-5"].input).toBe(1.25);
     expect(out["gpt-5"].output).toBe(10);
   });

@@ -48,7 +48,10 @@ export function parseLitellmPricing(json: unknown): PricingMap {
   const out: PricingMap = {};
   for (const [rawKey, value] of Object.entries(json)) {
     if (!isPlainObject(value)) continue;
-    if (value.litellm_provider !== "openai") continue;
+    // Accept any litellm entry with finite input/output rates regardless of
+    // provider. The original "openai-only" filter dropped non-OpenAI models
+    // (DeepSeek, GLM, Kimi, MiniMax, Gemini, …) — exactly the providers we
+    // actually use. Provider matters for routing; pricing does not.
 
     const inputPerToken = numberOr(value.input_cost_per_token, NaN);
     const outputPerToken = numberOr(value.output_cost_per_token, NaN);
