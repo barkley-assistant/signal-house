@@ -88,7 +88,18 @@ export function AgentSpend() {
           <hr className="spend-divider" />
           <DailyUsageChart />
           <ModelTable />
+          {usage?.anyUnknown && (
+            <p className="spend-disclosure" data-disclosure="coverage">
+              Some models use local rates (no public list entry found). Tap to view coverage.
+            </p>
+          )}
         </>
+      )}
+      {usage && (
+        <p className="spend-disclosure" data-disclosure="architectural">
+          Costs are estimated from public list pricing (litellm) and local rates.
+          Disable via <code>SIGNAL_HOUSE_ESTIMATE_COSTS=false</code> to use upstream-reported values.
+        </p>
       )}
     </section>
   );
@@ -463,8 +474,8 @@ function ModelTable() {
                 <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
                 <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
                 <td className="num" data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</td>
-                <td className="num" data-label="Cost">{formatCost(m.cost)}</td>
-                <td className="num eff-cell" data-label="Eff">{m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
+                <td className="num" data-label="Cost">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</td>
+                <td className="num eff-cell" data-label="Eff">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
               </tr>
             ))}
           </tbody>
