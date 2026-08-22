@@ -97,12 +97,21 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function loadState(): Promise<void> {
-  const { setState, setError, days } = useDash.getState();
+  const { setState, setError, days, state: current } = useDash.getState();
   try {
     const payload = await fetchJson<StatePayload>(`/api/state?days=${days}`);
     setState(payload);
   } catch (err) {
-    setError((err as Error).message);
+    // Transient network blips (background-tab throttling wake-up, wifi
+    // re-association, laptop sleep resume) surface as TypeError/NetworkError
+    // on the FIRST fetch after returning to the tab. When we still hold
+    // stale-but-renderable data, stay quiet — the visibility handler below
+    // refires immediately and the next success clears any lingering error.
+    // A hard failure with nothing on screen still gets the banner.
+    const transient = err instanceof TypeError;
+    if (!transient || !current) {
+      setError((err as Error).message);
+    }
   }
 }
 
@@ -142,11 +151,24 @@ export async function resetLock(): Promise<void> {
   }
 }
 
-/** Poll /api/state on an interval (~30s) while the page is open. */
+/** Poll /api/state on an interval (~30s) while the page is open.
+ *  Refetches immediately when the tab becomes visible again: browsers
+ *  throttle timers in background tabs (and the network stack may need a
+ *  moment after resume), so without this the first paint back on the tab
+ *  can show stale data or a spurious network error until the next tick. */
 export function startPolling(intervalMs = 30_000): () => void {
   void loadState();
-  const id = setInterval(() => void loadState(), intervalMs);
-  return () => clearInterval(id);
+  const id = setInterval(() => {
+    if (document.visibilityState === "visible") void loadState();
+  }, intervalMs);
+  const onVisible = () => {
+    if (document.visibilityState === "visible") void loadState();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  return () => {
+    clearInterval(id);
+    document.removeEventListener("visibilitychange", onVisible);
+  };
 }
 
 export interface TrendPoint {
