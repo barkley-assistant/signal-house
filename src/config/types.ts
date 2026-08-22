@@ -35,6 +35,12 @@ export interface RuntimeConfig {
   retention: { snapshotsDays: number; dailyMetricsDays: number };
   privacy: { showPrivateRepoItems: boolean };
   refresh: { lockStaleMs: number };
+  /**
+   * Estimate costs from litellm pricing + operator's local rates instead of
+   * trusting upstream-reported cost. Default `true`. When false, every row's
+   * `cost` is the upstream value (today's behavior).
+   */
+  estimateCosts: boolean;
 }
 
 export interface RefreshOutcome {

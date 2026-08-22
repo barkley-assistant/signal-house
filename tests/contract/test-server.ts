@@ -40,6 +40,7 @@ export async function startServer(opts: { dbPath: string; port?: number; auth?: 
     retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
     privacy: { showPrivateRepoItems: false },
     refresh: { lockStaleMs: 600_000 },
+    estimateCosts: false,
   };
 
   const app = await createApp(config);

@@ -27,6 +27,7 @@ const baseConfig: RuntimeConfig = {
   retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
   privacy: { showPrivateRepoItems: false },
   refresh: { lockStaleMs: 600_000 },
+    estimateCosts: false,
 };
 
 function stubCollector(id: string, opts: { ok?: boolean; data?: Partial<SourceData>; unavailable?: boolean; errors?: CollectorResult["errors"] } = {}): Collector {

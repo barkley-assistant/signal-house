@@ -32,6 +32,7 @@ const config: RuntimeConfig = {
   retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
   privacy: { showPrivateRepoItems: false },
   refresh: { lockStaleMs: 600_000 },
+    estimateCosts: false,
 };
 
 function state(source: string, data: SourceData): PersistedState {

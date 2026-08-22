@@ -31,6 +31,7 @@ const baseConfig: RuntimeConfig = {
   retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
   privacy: { showPrivateRepoItems: false },
   refresh: { lockStaleMs: 600_000 },
+    estimateCosts: false,
 };
 
 let dir: string;

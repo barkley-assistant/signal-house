@@ -98,6 +98,28 @@ describe("config", () => {
     expect(c.hermes.dbPath).toBe(`${process.env.HOME}/.hermes/state.db`);
     expect(c.opencode.dbPath).toBe(`${process.env.HOME}/.local/share/opencode/opencode.db`);
   });
+
+  test("estimateCosts defaults to true (env-var unset)", () => {
+    const c = readConfig({ env: envOf({}), cwd: "/tmp", dev: false });
+    expect(c.estimateCosts).toBe(true);
+  });
+
+  test("estimateCosts parses SIGNAL_HOUSE_ESTIMATE_COSTS from many boolean spellings", () => {
+    for (const v of ["true", "TRUE", "1", "yes", "on"]) {
+      const c = readConfig({ env: envOf({ SIGNAL_HOUSE_ESTIMATE_COSTS: v }), cwd: "/tmp", dev: false });
+      expect(c.estimateCosts).toBe(true);
+    }
+    for (const v of ["false", "FALSE", "0", "no", "off"]) {
+      const c = readConfig({ env: envOf({ SIGNAL_HOUSE_ESTIMATE_COSTS: v }), cwd: "/tmp", dev: false });
+      expect(c.estimateCosts).toBe(false);
+    }
+  });
+
+  test("estimateCosts rejects malformed values with ConfigError", () => {
+    expect(() =>
+      readConfig({ env: envOf({ SIGNAL_HOUSE_ESTIMATE_COSTS: "maybe" }), cwd: "/tmp", dev: false }),
+    ).toThrow(ConfigError);
+  });
 });
 
 describe("config redaction", () => {
