@@ -267,7 +267,7 @@ describe("AgentSpend", () => {
     expect(meta?.textContent).toContain("5.42B Tokens");
   });
 
-  test("hero shows cache hit rate and saved as smaller stats", () => {
+  test("hero shows cache hit rate and saved as smaller stat", () => {
     useDash.setState({
       state: usageState({
         cacheReadTokens: 1000000,
@@ -276,23 +276,23 @@ describe("AgentSpend", () => {
       }),
     });
     const { container } = render(<AgentSpend />);
-    const cacheStats = container.querySelector(".spend-hero__cache");
-    expect(cacheStats).toBeTruthy();
-    expect(cacheStats?.textContent).toContain("Cache hit rate");
-    expect(cacheStats?.textContent).toContain("Saved");
-    expect(cacheStats?.textContent).toContain("65%");
-    expect(cacheStats?.textContent).toContain("$4.20");
+    const cacheStat = container.querySelector(".spend-overview__cache");
+    expect(cacheStat).toBeTruthy();
+    expect(cacheStat?.textContent).toContain("Cache");
+    expect(cacheStat?.textContent).toContain("65%");
+    expect(cacheStat?.textContent).toContain("$4.20");
+    expect(cacheStat?.textContent).toContain("at model input rates");
 
     cleanup();
     useDash.setState({
       state: usageState({ cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 }),
     });
     const { container: emptyContainer } = render(<AgentSpend />);
-    const emptyCacheStats = emptyContainer.querySelector(".spend-hero__cache");
-    expect(emptyCacheStats?.textContent).toContain("—");
-    expect(emptyCacheStats?.textContent).toContain("$0.00");
-    expect(emptyCacheStats?.textContent).not.toContain("NaN");
-    expect(emptyCacheStats?.textContent).not.toContain("null");
+    const emptyCacheStat = emptyContainer.querySelector(".spend-overview__cache");
+    expect(emptyCacheStat?.textContent).toContain("—");
+    expect(emptyCacheStat?.textContent).toContain("$0.00");
+    expect(emptyCacheStat?.textContent).not.toContain("NaN");
+    expect(emptyCacheStat?.textContent).not.toContain("null");
   });
 
   test("ledger rows show per-source cache_read substat", () => {
