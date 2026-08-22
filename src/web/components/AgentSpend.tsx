@@ -51,29 +51,27 @@ export function AgentSpend() {
       ) : (
         <>
           <div className="spend-overview">
-            <div className="spend-overview__hero">
-              <div className="spend-overview__total">
-                <div className="kpi-tile__label">Total cost</div>
-                <div className="spend-hero__amount">{heroAmount}</div>
-                <div className="spend-hero__meta">
-                  <span>{formatNumber(usage.totalSessions)} Sessions</span>
-                  <span className="spend-hero__dot" aria-hidden="true">·</span>
-                  <span>{formatCompact(usage.totalTokens)} Tokens</span>
-                </div>
+            <div className="spend-overview__total">
+              <div className="kpi-tile__label">Total cost</div>
+              <div className="spend-hero__amount">{heroAmount}</div>
+              <div className="spend-hero__meta">
+                <span>{formatNumber(usage.totalSessions)} Sessions</span>
+                <span className="spend-hero__dot" aria-hidden="true">·</span>
+                <span>{formatCompact(usage.totalTokens)} Tokens</span>
               </div>
-              <motion.div
-                className="spend-overview__cache"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.15 }}
-              >
-                <span className="kpi-tile__label">Cache</span>
-                <span className="big-number small">{hitRateDisplay}</span>
-                <span className="kpi-caption">
-                  saved {savedAmount} at model input rates
-                </span>
-              </motion.div>
             </div>
+            <motion.div
+              className="spend-overview__cache"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.15 }}
+            >
+              <span className="kpi-tile__label">Cache</span>
+              <span className="big-number small">{hitRateDisplay}</span>
+              <span className="kpi-caption">
+                saved {savedAmount} at model input rates
+              </span>
+            </motion.div>
             <motion.div
               className="spend-sources"
               initial="hidden"
