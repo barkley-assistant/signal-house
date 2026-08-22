@@ -24,8 +24,8 @@ const CI_COLOR = "#4ade80"; // var(--success) — green
 const COMMITS_COLOR = "#94a3b8"; // var(--text-secondary) — slate
 const PR_COLOR = "#38bdf8"; // var(--info) — blue
 
-const TOP_HEIGHT = 220;
-const BOTTOM_HEIGHT = 220;
+const TOP_HEIGHT = 110;
+const BOTTOM_HEIGHT = 110;
 const GRID_LEFT = 44;
 const GRID_RIGHT = 16;
 
@@ -156,7 +156,7 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 48, bottom: 28, containLabel: false },
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 16, bottom: 18, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
@@ -250,7 +250,7 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 28, bottom: 22, containLabel: false },
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 22, bottom: 18, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
