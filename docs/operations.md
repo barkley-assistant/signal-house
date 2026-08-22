@@ -43,6 +43,7 @@ All keys are `SECRET_HOUSE_*`; a small set of backward-compatible aliases
 | `SECRET_HOUSE_OPENCODE_DB_PATH` | `~/.local/share/opencode/opencode.db` | OpenCode usage |
 | `SECRET_HOUSE_POLLER_ENABLED` | `false` | background refresh loop |
 | `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS` | `false` | privacy opt-in |
+| `SIGNAL_HOUSE_ESTIMATE_COSTS` | `true` | cost estimator — see [Cost estimation](#cost-estimation) |
 
 Missing sources degrade gracefully: the collector reports `unavailable`
 with a warning, the refresh still succeeds, and the dashboard shows the
@@ -93,6 +94,41 @@ Check the time-unit contract: Hermes stores epoch seconds, OpenCode stores
 epoch milliseconds. If a whole source reads empty for a day that had
 activity, suspect a unit mismatch — see `docs/architecture.md` §Time-unit
 contract.
+
+## Cost estimation
+
+By default (`SIGNAL_HOUSE_ESTIMATE_COSTS=true`), every cost number on
+the dashboard is computed at read time from `(tokens × model rate) / 1M`,
+where the rate comes from a priority chain:
+
+1. **Litellm cache** — `~/.local/share/signal-house-v2/runtime/.data/model-pricing.json`,
+   refreshed daily from
+   [`BerriAI/litellm`](https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json)
+   (filtered to `litellm_provider === "openai"`). Atomic write — a
+   crash mid-write preserves the previous-good cache.
+2. **Operator's local rates** — `~/.config/opencode/opencode.jsonc`'s
+   `cost.input` / `cost.cache_read` per model. Used when litellm
+   doesn't have the model. Output rate falls back to `input × 4`.
+3. **Empty** — model not in litellm and not in `opencode.jsonc`.
+   Renders as `$0.00` with a coverage footnote on the Agent Spend panel.
+
+The estimator is purely a read-time computation. Estimates never land
+in `metrics.db`, `latest_state`, or any persisted table — flipping
+`SIGNAL_HOUSE_ESTIMATE_COSTS=false` takes effect on the very next
+refresh, with no migration or recompute.
+
+When to disable:
+
+- You trust upstream-reported cost more than third-party pricing
+  (set the var to `false`; behavior reverts to today's pass-through).
+- A litellm rate change is causing incorrect estimates and you need
+  a few hours to investigate (set to `false`; the fetcher keeps
+  running, just its output is ignored).
+
+Diagnostics: `/api/diagnostics` exposes `pricingCache.lastFetchedAt`,
+`lastFetchStatus` (`ok` / `failed` / `stale` / `empty`), `modelCount`,
+and the source URL. If `modelCount === 0`, the fetcher never loaded
+litellm — check the network and the source URL.
 
 ## Troubleshooting loop
 
