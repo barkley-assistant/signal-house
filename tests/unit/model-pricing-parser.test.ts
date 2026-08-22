@@ -135,6 +135,23 @@ describe("parseLitellmPricing", () => {
     expect(out["deepseek-chat"].cacheRead).toBeCloseTo(0.014, 5);
   });
 
+  test("date-snapshot variants collapse into their base key at parse time", () => {
+    const input = {
+      "deepseek-v4-flash": { litellm_provider: "deepseek", input_cost_per_token: 4.4e-7, output_cost_per_token: 1.32e-6 },
+      // Dated variant listed by a reseller with different prices.
+      "perplexity/perplexity/deepseek-v4-flash-0731": {
+        litellm_provider: "perplexity",
+        input_cost_per_token: 1.3e-7,
+        output_cost_per_token: 2.6e-7,
+      },
+    };
+    const out = parseLitellmPricing(input);
+    // Both entries land under the base key; the variant is never a
+    // separate cache entry. The resolver queries base keys only, so a
+    // reseller-only dated sheet can't sit in the cache looking authoritative.
+    expect(Object.keys(out)).toEqual(["deepseek-v4-flash"]);
+  });
+
   test("handles malformed top-level inputs without throwing", () => {
     expect(parseLitellmPricing(null)).toEqual({});
     expect(parseLitellmPricing(undefined)).toEqual({});

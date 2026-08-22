@@ -38,7 +38,7 @@
  */
 
 import { log } from "../shared/logger";
-import { machineKey } from "../shared/models";
+import { machineKey, stripDateSnapshot } from "../shared/models";
 
 /** Per-1M-token rates for one model. All values are USD per 1M tokens. */
 export interface LitellmPricing {
@@ -96,7 +96,14 @@ export function parseLitellmPricing(json: unknown): PricingMap {
       cacheReadPerToken = deepseekStyle;
     }
 
-    const key = machineKey(rawKey);
+    // Collapse date-snapshot variants ("…-0731", "…-20250815") into their
+    // base key at parse time, matching the resolver's lookup key exactly.
+    // Without this the cache grows dead entries (a dated variant with no
+    // base listing keeps a reseller's sheet under a key nothing ever
+    // looks up) and the cache file misleads audits. A dated variant that
+    // is the ONLY listing still lands under its base key — which is the
+    // key the dashboard queries.
+    const key = stripDateSnapshot(machineKey(rawKey));
     if (!key) {
       skippedEmptyKey++;
       continue;

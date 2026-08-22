@@ -35,7 +35,12 @@ import { parseLitellmPricing, type PricingMap } from "../shared/model-pricing-pa
 const LITELLM_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 const CACHE_FILENAME = "model-pricing.json";
-const TTL_MS = 24 * 60 * 60 * 1000; // 24h
+/** Refresh at most hourly, aligned to the top of the hour: ensurePricingCacheFresh()
+ *  treats a cache as fresh only within the current clock hour (sameClockHour).
+ *  The poller calls it on its own cadence (every 2 min); this gate collapses
+ *  those calls into at most one network fetch per hour. Litellm's file is
+ *  community-updated and ETag-stable for days — hourly is generous; the
+ *  alignment just makes refresh timing predictable. */
 const SCHEMA_DRIFT_THRESHOLD = 0.3; // warn if model count drops > 30%
 
 export type FetchStatus = "ok" | "failed" | "stale" | "empty";
@@ -108,12 +113,22 @@ export async function ensurePricingCacheFresh(): Promise<void> {
     }
   }
 
-  // Decide whether to hit the network.
-  if (inMemory && Date.now() - new Date(inMemory.fetchedAt).getTime() < TTL_MS) {
+  // Decide whether to hit the network. Fresh = fetched within the current
+  // clock hour, so after a fetch at :58 the next one lands at :00 — the
+  // "refresh on the hour" behaviour without needing a scheduler.
+  if (inMemory && sameClockHour(new Date(inMemory.fetchedAt), new Date())) {
     return; // fresh enough
   }
 
   await refreshFromNetwork();
+}
+
+/** True when both instants fall inside the same wall-clock hour (UTC).
+ *  Deliberately hour-of-day + day granularity, not elapsed-3600s: an
+ *  11:59 fetch and a 12:00 fetch are different hours even though they're
+ *  60s apart, which is exactly the on-the-hour alignment we want. */
+function sameClockHour(a: Date, b: Date): boolean {
+  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate() && a.getUTCHours() === b.getUTCHours();
 }
 
 /** Force a network fetch regardless of TTL. Used by tests + the deploy-day

@@ -91,8 +91,8 @@ describe("model-pricing-fetcher", () => {
     expect(gpt5.cacheRead).toBe(0.125);
   });
 
-  test("cold start: in-memory empty + disk exists, disk age < 24h → fetcher reads disk only, no network", async () => {
-    const fetchedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h ago
+  test("cold start: in-memory empty + disk exists, fetched this clock hour → fetcher reads disk only, no network", async () => {
+    const fetchedAt = new Date().toISOString(); // this clock hour — "fresh" under the hourly gate
     const cached = {
       fetchedAt,
       source: "https://example.invalid/should-not-be-called",
@@ -120,7 +120,7 @@ describe("model-pricing-fetcher", () => {
     expect(gpt5.input).toBe(1.25);
   });
 
-  test("cold start: in-memory empty + disk exists, disk age > 24h → fetcher hits network", async () => {
+  test("cold start: in-memory empty + disk exists, stale (previous hour) → fetcher hits network", async () => {
     const fetchedAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(); // 48h ago
     writeFileSync(
       cacheFile,

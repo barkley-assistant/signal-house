@@ -102,10 +102,11 @@ the dashboard is computed at read time from `(tokens × model rate) / 1M`,
 where the rate comes from a priority chain:
 
 1. **Litellm cache** — `~/.local/share/signal-house-v2/runtime/.data/model-pricing.json`,
-   refreshed daily from
+   refreshed hourly on the hour from
    [`BerriAI/litellm`](https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json)
-   (filtered to `litellm_provider === "openai"`). Atomic write — a
-   crash mid-write preserves the previous-good cache.
+   (all providers, provider-native listings preferred on machine-key
+   collisions). Atomic write — a crash mid-write preserves the
+   previous-good cache.
 2. **Operator's local rates** — `~/.config/opencode/opencode.jsonc`'s
    `cost.input` / `cost.cache_read` per model. Used when litellm
    doesn't have the model. Output rate falls back to `input × 4`.
