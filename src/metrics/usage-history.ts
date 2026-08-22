@@ -18,6 +18,7 @@ import type { Database } from "bun:sqlite";
 import type { UsageAggregate } from "../orchestrator/aggregates";
 import type { CostEstimationOpts } from "../shared/types";
 import { mergeModelRows } from "../orchestrator/aggregates";
+import { sum } from "../shared/math";
 
 const DAY_METRICS = [
   "sessions.total",
@@ -105,11 +106,21 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
     }
   }
 
+  // totalCost: prefer the per-model rollup when costOpts.enabled is true
+  // (the estimator's number is internally consistent across days and sources).
+  // Fall back to the upstream per-day sum when estimation is off (today's
+  // behavior) or when byModel is empty (which happens in the tests'
+  // usageDays() fixture and in real usage when a source has data but the
+  // collector didn't break it down by model).
+  const estimatedTotalCost: number | null = costOpts.enabled && byModel.length > 0
+    ? sum(byModel.map((m) => m.cost ?? 0)) ?? 0
+    : totalCost;
+
   return {
     totalSessions,
     totalMessages,
     totalTokens,
-    totalCost,
+    totalCost: estimatedTotalCost,
     cacheReadTokens: windowCacheRead,
     cacheHitRate: windowCacheRead + windowInput > 0 ? windowCacheRead / (windowCacheRead + windowInput) : 0,
     cacheSavings: windowSavings,

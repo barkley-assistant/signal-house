@@ -185,14 +185,13 @@ function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: Usag
     }
   }
 
-  // totalCost: prefer the model-row totals (they carry the right value whether
-  // estimated or passthrough) when byModel is non-empty. Fall back to the
-  // upstream byDay sum when byModel is empty (which happens in the tests'
-  // usageDays() fixture, and in real usage when a source has data but the
-  // collector didn't break it down by model). The fallback ensures the
-  // passthrough path stays correct even without per-model detail.
+  // totalCost: prefer the model-row totals (they carry the right value
+  // whether estimated or passthrough) when estimation is enabled and
+  // byModel is non-empty. Fall back to windowCost (the upstream byDay sum)
+  // when estimation is off or when byModel is empty (tests' usageDays()
+  // fixture, or real usage where a source has data but no per-model detail).
   const totalCost =
-    mergedByModel.length > 0
+    costOpts.enabled && mergedByModel.length > 0
       ? sum(mergedByModel.map((m) => m.cost ?? 0)) ?? 0
       : windowCost;
 
