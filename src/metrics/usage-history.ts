@@ -16,7 +16,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { UsageAggregate } from "../orchestrator/aggregates";
-import type { ModelRates } from "../shared/types";
+import type { CostEstimationOpts } from "../shared/types";
 import { mergeModelRows } from "../orchestrator/aggregates";
 
 const DAY_METRICS = [
@@ -39,7 +39,7 @@ function knownSum(values: Array<number | null>): number | null {
   return known.length > 0 ? known.reduce((a, b) => a + b, 0) : null;
 }
 
-export function queryUsageAggregate(db: Database, from: string, to: string, costRates: Map<string, ModelRates>, estimateCosts: boolean): UsageAggregate | null {
+export function queryUsageAggregate(db: Database, from: string, to: string, costOpts: CostEstimationOpts): UsageAggregate | null {
   const placeholders = DAY_METRICS.map(() => "?").join(",");
   const rows = db
     .query(
@@ -93,7 +93,7 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
     windowInput += inputTokens;
   }
 
-  const byModel = queryModelRows(db, from, to, costRates, estimateCosts);
+  const byModel = queryModelRows(db, from, to, costOpts);
   let windowSavings = 0;
   for (const m of byModel) {
     windowSavings += m.cacheSavings ?? 0;
@@ -121,7 +121,7 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
 /** Per-model rows from the accumulated daily_metrics model history, merged
  *  across sources into one row per normalized model (labels/families from
  *  the curated map, "unknown" dropped, sessions desc). */
-function queryModelRows(db: Database, from: string, to: string, costRates: Map<string, ModelRates>, estimateCosts: boolean): UsageAggregate["byModel"] {
+function queryModelRows(db: Database, from: string, to: string, costOpts: CostEstimationOpts): UsageAggregate["byModel"] {
   const rows = db
     .query(
       `SELECT source, json_extract(tags, '$.model') AS model, metric, SUM(value) AS value
@@ -196,7 +196,6 @@ function queryModelRows(db: Database, from: string, to: string, costRates: Map<s
       reasoningTokens: r.reasoningTokens,
       cost: r.cost,
     })),
-    costRates,
-    estimateCosts,
+    costOpts,
   );
 }

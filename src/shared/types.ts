@@ -128,6 +128,20 @@ export interface ModelRates {
   cacheRead: number;
 }
 
+/** Options bundle for the cost estimation pipeline. Passed to the
+ *  aggregator's sync merge functions so they don't grow to five+
+ *  positional parameters (AGENTS.md "Types"). The resolver builds
+ *  `costRates`; the env-var / config produces `estimateCosts`. */
+export interface CostEstimationOpts {
+  /** Pre-fetched per-machine-key rates, deduped by the resolver. Empty map
+   *  is safe (means "no estimation ran yet"). */
+  rates: Map<string, ModelRates>;
+  /** When true, the aggregator recomputes per-row cost from tokens × rates
+   *  and sets `costSource` on each row. When false, upstream cost passes
+   *  through and `costSource` is "passthrough" or undefined. */
+  enabled: boolean;
+}
+
 /** Per-model usage across the collection window. */
 export interface ModelUsageRow {
   model: string;

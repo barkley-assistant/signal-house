@@ -13,7 +13,7 @@ import { parsedLatestStates } from "../db/latest-state";
 import { getRefreshMetaMany } from "../db/refresh-meta";
 import { computeAggregates, type UsageAggregate } from "../orchestrator/aggregates";
 import { fetchAllRates } from "../server/model-pricing";
-import type { ModelRates } from "../shared/types";
+import type { CostEstimationOpts, ModelRates } from "../shared/types";
 import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/privacy";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
@@ -97,13 +97,14 @@ export async function buildState(db: Database, config: RuntimeConfig, collectors
     (s.data?.usage?.byModel ?? []).map((m) => m.model),
   );
   const costRates: Map<string, ModelRates> = await fetchAllRates(allModelKeys);
+  const costOpts: CostEstimationOpts = { rates: costRates, enabled: config.estimateCosts };
 
   const aggregates = computeAggregates(
     states,
     config,
     days,
-    queryUsageAggregate(db, start, end, costRates, config.estimateCosts),
-    costRates,
+    queryUsageAggregate(db, start, end, costOpts),
+    costOpts,
   );
 
   const allRepos = states.flatMap((s) => s.data!.repositories);

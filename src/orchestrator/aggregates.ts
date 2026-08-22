@@ -9,7 +9,7 @@ import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { machineKey, modelFamily, modelLabel } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
-import type { CostSource, ModelRates, ModelUsageRow, UsageDay } from "../shared/types";
+import type { CostEstimationOpts, CostSource, ModelUsageRow, UsageDay } from "../shared/types";
 import { getCacheReadCostPerMillion, getInputCostPerMillion } from "../server/cost-input";
 
 export interface SourceUsageMetrics {
@@ -80,7 +80,7 @@ export interface Aggregates {
   usage: UsageAggregate | null;
 }
 
-export function computeAggregates(states: PersistedState[], config: RuntimeConfig, days: number = DEFAULT_WINDOW_DAYS, usageOverride: UsageAggregate | null = null, costRates: Map<string, ModelRates> = new Map()): Aggregates {
+export function computeAggregates(states: PersistedState[], config: RuntimeConfig, days: number = DEFAULT_WINDOW_DAYS, usageOverride: UsageAggregate | null = null, costOpts: CostEstimationOpts = { rates: new Map(), enabled: false }): Aggregates {
   const end = utcDay();
   const start = utcDaysAgo(days);
   const window = { start, end, days };
@@ -142,7 +142,7 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
     // (it accumulates 90 days independent of upstream retention); the snapshot
     // derivation below is the fallback for a fresh DB before the first refresh.
     const rawUsage: UsageAggregate | null = usageOverride ?? (usageStates.length > 0
-      ? buildSnapshotUsage(usageStates, inWindowDay, costRates, config.estimateCosts)
+      ? buildSnapshotUsage(usageStates, inWindowDay, costOpts)
       : null);
     const usage = rawUsage ? fillUsageDefaults(rawUsage) : null;
   // anyUnknown is computed post-fill so both data paths (snapshot derivation
@@ -154,7 +154,7 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
   return { window, throughput, cycleTime, ci, staleWork, usage };
 }
 
-function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: UsageDay) => boolean, costRates: Map<string, ModelRates>, estimateCosts: boolean): UsageAggregate {
+function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: UsageDay) => boolean, costOpts: CostEstimationOpts): UsageAggregate {
   const bySource: Record<string, SourceUsageMetrics> = {};
   let windowCacheRead = 0;
   let windowInput = 0;
@@ -170,7 +170,7 @@ function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: Usag
     // when estimation is on (the merged model rows carry the computed totals,
     // and we don't double-count here). The aggregator's per-row costSource
     // flag tells downstream code which path produced the value.
-    const sourceCost: number = estimateCosts ? 0 : sum(days.map((d) => d.cost)) ?? 0;
+    const sourceCost: number = costOpts.enabled ? 0 : sum(days.map((d) => d.cost)) ?? 0;
     windowCost += sourceCost;
     bySource[s.source] = {
       sessions: days.reduce((a, d) => a + d.sessions, 0),
@@ -182,7 +182,7 @@ function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: Usag
     };
   }
 
-  const mergedByModel = combineModels(usageStates, costRates, estimateCosts);
+  const mergedByModel = combineModels(usageStates, costOpts);
   let windowSavings = 0;
   for (const m of mergedByModel) {
     windowSavings += m.cacheSavings ?? 0;
@@ -272,13 +272,12 @@ function windowCommits(git: NonNullable<PersistedState["data"]> | null, start: s
  * most sessions; the family tag (DeepSeek, z.ai, Moonshot, …) replaces the
  * provider label. Sorted by sessions desc — "which model is seeing work".
  */
-function combineModels(states: PersistedState[], costRates: Map<string, ModelRates>, estimateCosts: boolean): UsageAggregate["byModel"] {
+function combineModels(states: PersistedState[], costOpts: CostEstimationOpts): UsageAggregate["byModel"] {
   // Stamp each snapshot row with its source so mergeModelRows can keep a
   // per-source cache breakdown (opencode vs hermes) instead of collapsing it.
   return mergeModelRows(
     states.flatMap((s) => s.data!.usage!.byModel.map((m) => ({ ...m, source: s.source }))),
-    costRates,
-    estimateCosts,
+    costOpts,
   );
 }
 
@@ -294,8 +293,7 @@ function combineModels(states: PersistedState[], costRates: Map<string, ModelRat
  */
 export function mergeModelRows(
   rows: ModelUsageRow[],
-  costRates: Map<string, ModelRates>,
-  estimateCosts: boolean,
+  costOpts: CostEstimationOpts,
 ): UsageAggregate["byModel"] {
   type Acc = {
     model: string;
@@ -335,8 +333,8 @@ export function mergeModelRows(
     //   - estimateCosts=false: passthrough — use the upstream cost as-is.
     let rowCost: number | null;
     let rowCostSource: CostSource | undefined;
-    if (estimateCosts) {
-      const rates = costRates.get(key);
+    if (costOpts.enabled) {
+      const rates = costOpts.rates.get(key);
       if (rates && (rates.input > 0 || rates.output > 0)) {
         rowCost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
         rowCostSource = "estimated";

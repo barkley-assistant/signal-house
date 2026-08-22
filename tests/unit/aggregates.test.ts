@@ -181,7 +181,7 @@ describe("mergeModelRows cache preservation", () => {
       { model: "deepseek-v4-pro", provider: null, source: "hermes", sessions: 2, messages: null, inputTokens: 700, outputTokens: 0, cacheReadTokens: 300, cacheWriteTokens: 0, reasoningTokens: 0, cost: 1 },
       { model: "DeepSeek-V4-Pro", provider: null, source: "opencode", sessions: 1, messages: null, inputTokens: 0, outputTokens: 0, cacheReadTokens: 1000, cacheWriteTokens: 0, reasoningTokens: 0, cost: 2 },
     ];
-    const merged = mergeModelRows(rows, new Map(), false);
+    const merged = mergeModelRows(rows, { rates: new Map(), enabled: false });
     expect(merged).toHaveLength(1);
     const m = merged[0];
     expect(m.model).toBe("DeepSeek V4 Pro");
@@ -199,7 +199,7 @@ describe("mergeModelRows cache preservation", () => {
     const rows = [
       { model: "kimi-k27-code", provider: "opencode", source: undefined, sessions: 1, messages: null, inputTokens: 100, outputTokens: 0, cacheReadTokens: 100, cacheWriteTokens: 0, reasoningTokens: 0, cost: 1 },
     ];
-    const merged = mergeModelRows(rows, new Map(), false);
+    const merged = mergeModelRows(rows, { rates: new Map(), enabled: false });
     expect(merged[0].cacheReadTokens).toBe(100);
     expect(Object.keys(merged[0].bySource ?? {})).toContain("opencode");
   });
