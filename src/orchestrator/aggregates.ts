@@ -9,8 +9,7 @@ import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { machineKey, modelFamily, modelLabel, stripDateSnapshot } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
-import type { CostEstimationOpts, CostSource, ModelUsageRow, UsageDay } from "../shared/types";
-import { getCacheReadCostPerMillion, getInputCostPerMillion } from "../server/cost-input";
+import type { CostEstimationOpts, CostSource, ModelRates, ModelUsageRow, UsageDay } from "../shared/types";
 
 export interface SourceUsageMetrics {
   sessions: number;
@@ -320,6 +319,11 @@ export function mergeModelRows(
     outputTokens: number;
     cacheReadTokens: number;
     cacheSavings: number;
+    /** The rate sheet this key's rows were priced with (from the winning
+     *  estimated row). Used by the effPerM discount below so the ratio
+     *  derives from the same price source as `cost`. Undefined when no
+     *  rate was found (unknown rows) or estimation is off. */
+    rates: ModelRates | undefined;
     bySource: Record<string, ModelSourceCacheMetrics>;
     best: number;
   };
@@ -347,6 +351,10 @@ export function mergeModelRows(
     //   - estimateCosts=false: passthrough — use the upstream cost as-is.
     let rowCost: number | null;
     let rowCostSource: CostSource | undefined;
+    // The rate set this row was priced with. Kept so cacheSavings and the
+    // effPerM discount below derive from the SAME source as `cost` — one
+    // price sheet per row, not a mix of estimator + legacy local rates.
+    let rowRates: ModelRates | undefined;
     if (costOpts.enabled) {
       // Strip date-snapshot suffixes before lookup so variants like
       // 'DeepSeek V4 Flash 0731' or 'gpt-5.6-luna-20250815' resolve
@@ -356,6 +364,7 @@ export function mergeModelRows(
       const lookupKey = stripDateSnapshot(key);
       const rates = costOpts.rates.get(lookupKey);
       if (rates && (rates.input > 0 || rates.output > 0)) {
+        rowRates = rates;
         rowCost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
         rowCostSource = "estimated";
       } else if (inputTokens + outputTokens + cacheReadTokens === 0) {
@@ -370,13 +379,14 @@ export function mergeModelRows(
       rowCostSource = row.cost !== null && row.cost !== undefined ? "passthrough" : undefined;
     }
 
-    // Net savings = tokens read from cache × (input − cache_read) price delta.
-    // Cache reads are discounted, not free; subtracting the cache_read rate
-    // keeps the estimate honest. A missing cache_read rate falls back to the
-    // gross input cost (treated as free reads).
-    const inputRate = getInputCostPerMillion(row.model);
-    const cacheReadRate = getCacheReadCostPerMillion(row.model);
-    const cacheSavings = (cacheReadTokens * Math.max(0, inputRate - cacheReadRate)) / 1_000_000;
+    // Net savings = tokens read from cache × (input − cache_read) price delta,
+    // priced from the SAME rate sheet as `cost` above. When no rate was found
+    // (unknown/passthrough rows) there is no defensible discount number —
+    // savings stay 0 rather than mixing a second price source in.
+    const cacheSavings =
+      rowRates && rowCostSource === "estimated"
+        ? (cacheReadTokens * Math.max(0, rowRates.input - rowRates.cacheRead)) / 1_000_000
+        : 0;
 
     // Per-source slice of this row's cost. When estimation is on, slice
     // proportionally to per-source tokens × rates (so bySource.<src>.cost
@@ -395,6 +405,7 @@ export function mergeModelRows(
       existing.outputTokens += outputTokens;
       existing.cacheReadTokens += cacheReadTokens;
       existing.cacheSavings += cacheSavings;
+      if (rowRates) existing.rates = rowRates;
       const src = existing.bySource[source] ?? { cacheReadTokens: 0, cacheSavings: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
       src.cacheReadTokens += cacheReadTokens;
       src.inputTokens += inputTokens;
@@ -438,6 +449,7 @@ export function mergeModelRows(
         outputTokens,
         cacheReadTokens,
         cacheSavings,
+        rates: rowRates,
         bySource: (() => {
           const entry: { cacheReadTokens: number; cacheSavings: number; inputTokens: number; outputTokens: number; cost: number } = {
             cacheReadTokens,
@@ -463,13 +475,16 @@ export function mergeModelRows(
   }
 
   return [...map.values()]
-    .map(({ best: _best, inputTokens, outputTokens, ...m }) => {
+    .map(({ best: _best, inputTokens, outputTokens, rates, ...m }) => {
       const denom = m.cacheReadTokens + inputTokens;
       // Effective cost per 1M tokens: output tokens count at face value,
       // cache reads are discounted by the model's cache-read-vs-input price
       // ratio (they're cheaper per token, so counting them full-price would
-      // unfairly punish high-cache-rate models).
-      const disc = getInputCostPerMillion(m.model) > 0 ? getCacheReadCostPerMillion(m.model) / getInputCostPerMillion(m.model) : 1;
+      // unfairly punish high-cache-rate models). The ratio comes from the
+      // SAME rate sheet that priced `cost` — no second price source. When
+      // no rate sheet exists (passthrough/unknown), the discount is neutral
+      // (1) so effTokens equals raw token count.
+      const disc = rates && rates.input > 0 ? rates.cacheRead / rates.input : 1;
       const effTokens = inputTokens + outputTokens + m.cacheReadTokens * Math.min(1, Math.max(0, disc));
       const effPerM =
         m.cost !== null && m.cost > 0 && effTokens > 0 && m.sessions >= 3 ? (m.cost / (effTokens / 1_000_000)) : null;
