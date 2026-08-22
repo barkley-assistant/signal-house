@@ -145,6 +145,11 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
       ? buildSnapshotUsage(usageStates, inWindowDay, costRates, config.estimateCosts)
       : null);
     const usage = rawUsage ? fillUsageDefaults(rawUsage) : null;
+  // anyUnknown is computed post-fill so both data paths (snapshot derivation
+  // and queryUsageAggregate's override) report it consistently. The merge
+  // step sets costSource on every row regardless of which path produced
+  // the aggregate.
+  if (usage) usage.anyUnknown = config.estimateCosts && usage.byModel.some((m) => m.costSource === "unknown");
 
   return { window, throughput, cycleTime, ci, staleWork, usage };
 }
@@ -214,7 +219,9 @@ function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: Usag
     cacheSavings: windowSavings,
     bySource,
     byModel: mergedByModel,
-    anyUnknown: estimateCosts && mergedByModel.some((m) => m.costSource === "unknown"),
+    // anyUnknown is set post-fill by computeAggregates so both data paths
+    // (snapshot derivation here + queryUsageAggregate override) report
+    // it consistently.
   };
 }
 
