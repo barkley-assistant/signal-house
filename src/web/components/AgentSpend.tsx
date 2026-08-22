@@ -67,7 +67,7 @@ export function AgentSpend() {
               transition={{ duration: 0.4, delay: 0.15 }}
             >
               <span className="kpi-tile__label">Cache</span>
-              <span className="big-number small">{hitRateDisplay}</span>
+              <span className="spend-hero__amount">{hitRateDisplay}</span>
               <span className="kpi-caption">
                 saved {savedAmount} at model input rates
               </span>
