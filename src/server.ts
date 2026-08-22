@@ -7,6 +7,7 @@ import { readConfig } from "./config/config";
 import { createApp } from "./app";
 import { startPoller } from "./poller/poller";
 import { runRefresh } from "./orchestrator/refresh";
+import { ensurePricingCacheFresh } from "./server/model-pricing-fetcher";
 import { log } from "./shared/logger";
 
 const config = readConfig({
@@ -19,6 +20,12 @@ const app = await createApp(config);
 const { owner, lock, collectors } = app;
 
 log.info("server", `listening on ${app.server.url.host} (${config.environment}, port ${config.port})`);
+
+// Warm the pricing cache before the first refresh. Best-effort — a fetch
+// failure is logged inside the fetcher and never aborts startup. The
+// first refresh would otherwise run with an empty cache and produce
+// $0 costs for openai rows until the next refresh cycle.
+await ensurePricingCacheFresh();
 
 // Optional background refresh loop (disabled by default).
 let pollerStop: (() => void) | null = null;
