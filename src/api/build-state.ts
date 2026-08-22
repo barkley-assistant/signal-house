@@ -13,7 +13,6 @@ import { parsedLatestStates } from "../db/latest-state";
 import { getRefreshMetaMany } from "../db/refresh-meta";
 import { computeAggregates, type UsageAggregate } from "../orchestrator/aggregates";
 import { fetchAllRates } from "../server/model-pricing";
-import { getPricingCacheStatus } from "../server/model-pricing-fetcher";
 import type { ModelRates } from "../shared/types";
 import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/privacy";
 import { utcDaysAgo, utcDay } from "../shared/dates";

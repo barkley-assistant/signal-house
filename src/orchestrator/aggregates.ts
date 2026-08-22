@@ -218,13 +218,6 @@ function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: Usag
   };
 }
 
-/** Compute total cost from the merged model rows. Used when estimateCosts
- *  is true — the per-row `cost` field already carries the estimated value.
- *  Returns the upstream sum when estimateCosts is false. */
-function sumCostFromMerged(rows: ReturnType<typeof combineModels>): number {
-  return sum(rows.map((r) => r.cost ?? 0)) ?? 0;
-}
-
 /** Ensure additive cache fields are concrete numbers so downstream UI and
  *  API consumers never need to handle missing keys. */
 function fillUsageDefaults(u: UsageAggregate): UsageAggregate {
