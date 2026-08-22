@@ -18,6 +18,7 @@ import { withAuth } from "./auth/basic";
 import { jsonError, notFound } from "./shared/http";
 import { buildWebBundle, serveWebAsset, publicDirFor } from "./shared/web-assets";
 import { log } from "./shared/logger";
+import { getPricingMapSnapshot } from "./server/model-pricing-fetcher";
 
 export interface App {
   server: Server<unknown>;
@@ -35,12 +36,20 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
   const collectors = createCollectors(config);
   const lock = new RefreshLock(owner.db, config.refresh.lockStaleMs);
 
+  // Build the rates map once at startup from the fetcher's in-memory cache
+  // (the startup hook in src/server.ts warms it before app construction).
+  // If the cache is empty at this moment, the map is empty and the first
+  // refresh tick will repopulate it via setCostRates(); the aggregator handles
+  // either case (missing rates → costSource: 'unknown').
+  const costRates = getPricingMapSnapshot();
+
   const deps: ApiDeps = {
     db: owner.db,
     config,
     collectors,
     lock,
     refreshCtx: () => ({ owner, config, collectors, lock }),
+    costRates,
   };
 
   const api = (handler: (deps: ApiDeps, req: Request) => Response | Promise<Response>) =>

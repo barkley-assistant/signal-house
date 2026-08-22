@@ -325,7 +325,13 @@ export function mergeModelRows(
     let rowCost: number | null;
     let rowCostSource: CostSource | undefined;
     if (costOpts.enabled) {
-      const rates = costOpts.rates.get(key);
+      // Strip date-snapshot suffixes before lookup so variants like
+      // 'DeepSeek V4 Flash 0731' or 'gpt-5.6-luna-20250815' resolve
+      // against the same rate entry as their base model. Mirrors the
+      // resolver's own logic; necessary because the rates map keys are
+      // already stripped at fetch time.
+      const lookupKey = key.replace(/-[0-9]{4,}$/, "");
+      const rates = costOpts.rates.get(lookupKey);
       if (rates && (rates.input > 0 || rates.output > 0)) {
         rowCost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
         rowCostSource = "estimated";

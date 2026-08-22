@@ -89,6 +89,25 @@ export function getPricingCacheStatus(): PricingCacheStatus {
 }
 
 /**
+ * Sync snapshot of the in-memory cache, exposed as a flat Map for the
+ * aggregator and the daily-trend query. Empty when the cache hasn't been
+ * populated yet. Keys are machine-keyed (lowercase, dots stripped, date
+ * suffixes stripped — same shape as the resolver uses).
+ *
+ * Returns a NEW Map (the in-memory cache isn't aliased out). The aggregator
+ * never mutates this; we hand it a snapshot once per buildState call so
+ * the daily-trend query and the by-model rollup read identical rates.
+ */
+export function getPricingMapSnapshot(): Map<string, { input: number; output: number; cacheRead: number }> {
+  if (!inMemory) return new Map();
+  const out = new Map<string, { input: number; output: number; cacheRead: number }>();
+  for (const [k, v] of Object.entries(inMemory.map)) {
+    out.set(k, { input: v.input, output: v.output, cacheRead: v.cacheRead });
+  }
+  return out;
+}
+
+/**
  * Ensure the in-memory cache is loaded. If the disk cache is missing or older
  * than TTL, attempt a network refresh. Non-blocking on failure — falls back
  * to whatever the disk has, or stays empty.

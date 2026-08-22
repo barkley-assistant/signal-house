@@ -5,6 +5,7 @@ import type { RuntimeConfig } from "../config/types";
 import type { Collector } from "../collectors";
 import type { RefreshContext } from "../orchestrator/refresh";
 import type { RefreshLock } from "../orchestrator/lock";
+import type { CostEstimationOpts, ModelRates } from "../shared/types";
 import { runRefresh } from "../orchestrator/refresh";
 import { json, jsonError } from "../shared/http";
 import { buildState } from "./build-state";
@@ -21,6 +22,10 @@ export interface ApiDeps {
   collectors: Collector[];
   refreshCtx: () => RefreshContext;
   lock: RefreshLock;
+  /** Pre-fetched per-machine-key rates map. Built once at app construction
+   *  time so daily-trend (and any future cost-aware endpoint) reads the
+   *  same map as the by-model rollup. Empty when estimation is disabled. */
+  costRates: Map<string, ModelRates>;
 }
 
 /** GET /api/state — optional `?days=7|30|90` scopes every windowed metric. */
@@ -47,13 +52,27 @@ export function healthHandler(_deps: ApiDeps, req: Request): Response {
 }
 
 /** GET /api/daily/spend — per-day cost+tokens trend for the Agent Spend chart.
- *  `?days=7|30|90` picks the window (default 30). */
-export function dailyTrendHandler(deps: ApiDeps, req: Request): Response {
+ *  `?days=7|30|90` picks the window (default 30).
+ *
+ *  When `SIGNAL_HOUSE_ESTIMATE_COSTS=true` (the default), per-day costs are
+ *  recomputed from tokens × litellm rates so the chart matches the by-model
+ *  rollup in `/api/state`. When false, falls through to the upstream-reported
+ *  `cost.total` per day (today's behavior).
+ *
+ *  The rates map is fetched fresh per-request via the resolver so a daily
+ *  refresh that arrives between dashboard polls (every 24h for the litellm
+ *  cache) is picked up immediately, with no stale-snapshot bugs. */
+export async function dailyTrendHandler(deps: ApiDeps, req: Request): Promise<Response> {
   const url = new URL(req.url);
   const days = parseWindowDays(url.searchParams.get("days"));
   const to = url.searchParams.get("to") ?? utcDay();
   const from = url.searchParams.get("from") ?? utcDaysAgo(days);
-  return json(req, { from, to, days, points: queryDailyTrend(deps.db, from, to) });
+  const costOpts: CostEstimationOpts = {
+    rates: deps.costRates,
+    enabled: deps.config.estimateCosts,
+  };
+  const points = await queryDailyTrend(deps.db, from, to, costOpts);
+  return json(req, { from, to, days, points });
 }
 
 /** GET /api/daily/delivery — per-day CI pass-rate + commits + PRs-merged for the

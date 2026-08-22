@@ -8,7 +8,8 @@
  */
 
 import type { Database } from "bun:sqlite";
-import type { DailyWrite } from "../shared/types";
+import type { CostEstimationOpts, DailyWrite } from "../shared/types";
+import { fetchAllRates } from "../server/model-pricing";
 
 export interface DailyMetricRow {
   date: string;
@@ -110,12 +111,24 @@ export function queryDailyMetrics(db: Database, q: DailyQuery): DailyMetricPoint
 
 /** Aggregated per-day cost + token series for the Agent Spend trend chart.
  *  The `tokens` column keeps its original 5-term sum semantics; `cacheRead`
- *  is an additive column for the cache-read chart series. */
-export function queryDailyTrend(db: Database, from: string, to: string): Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }> {
-  const rows = db
+ *  is an additive column for the cache-read chart series.
+ *
+ *  When `costOpts.enabled` is true, `cost` is recomputed per-(date, model)
+ *  from tokens × rates so the chart tracks the estimator's value, not the
+ *  upstream-reported one. When disabled, it falls through to the upstream
+ *  sum (today's behavior). Either way the per-day series matches the
+ *  estimator's by-model rollup that buildState surfaces. */
+export async function queryDailyTrend(
+  db: Database,
+  from: string,
+  to: string,
+  costOpts: CostEstimationOpts,
+): Promise<Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }>> {
+  // Tokens series: aggregated per day across both sources (matches the
+  // pre-existing chart contract).
+  const tokenRows = db
     .query(
       `SELECT date,
-              SUM(CASE WHEN metric = 'cost.total' THEN value END) AS cost,
               SUM(CASE WHEN metric = 'tokens.input' THEN value END) +
               SUM(CASE WHEN metric = 'tokens.output' THEN value END) +
               SUM(CASE WHEN metric = 'tokens.cache_read' THEN value END) +
@@ -126,8 +139,77 @@ export function queryDailyTrend(db: Database, from: string, to: string): Array<{
        WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
        GROUP BY date ORDER BY date`,
     )
-    .all(from, to) as Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }>;
-  return rows;
+    .all(from, to) as Array<{ date: string; tokens: number | null; cacheRead: number | null }>;
+  const tokensByDate = new Map(tokenRows.map((r) => [r.date, r]));
+
+  if (!costOpts.enabled) {
+    // Passthrough: read upstream cost.total per day, the original behavior.
+    const costRows = db
+      .query(
+        `SELECT date, SUM(CASE WHEN metric = 'cost.total' THEN value END) AS cost
+         FROM daily_metrics
+         WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+         GROUP BY date ORDER BY date`,
+      )
+      .all(from, to) as Array<{ date: string; cost: number | null }>;
+    return tokenRows.map((r) => {
+      const cost = costRows.find((c) => c.date === r.date)?.cost ?? null;
+      return { date: r.date, cost, tokens: r.tokens, cacheRead: r.cacheRead };
+    });
+  }
+
+  // Estimator on: per-(date, model) tokens, lookup rates, sum per day.
+  // First query the per-model metric rows (model.tokens_input, etc.),
+  // dedupe to unique model names, fetch rates once via the resolver, then
+  // sum per-day per-model cost. Models missing from the resolver return
+  // zero rates (matches the by-model rollup's costSource: 'unknown' carve-out
+  // — the daily chart silently omits rows the estimator can't price).
+  const perModelRows = db
+    .query(
+      `SELECT date,
+              json_extract(tags, '$.model') AS model,
+              SUM(CASE WHEN metric = 'model.tokens_input'       THEN value END) AS inputTokens,
+              SUM(CASE WHEN metric = 'model.tokens_output'      THEN value END) AS outputTokens,
+              SUM(CASE WHEN metric = 'model.tokens_cache_read' THEN value END) AS cacheReadTokens
+       FROM daily_metrics
+       WHERE date >= ? AND date <= ?
+         AND source IN ('opencode', 'hermes')
+         AND metric LIKE 'model.tokens_%'
+       GROUP BY date, json_extract(tags, '$.model')`,
+    )
+    .all(from, to) as Array<{
+      date: string;
+      model: string;
+      inputTokens: number | null;
+      outputTokens: number | null;
+      cacheReadTokens: number | null;
+    }>;
+
+  const uniqueModels = Array.from(
+    new Set(perModelRows.map((r) => r.model).filter((m): m is string => !!m)),
+  );
+  const rates = await fetchAllRates(uniqueModels);
+
+  const costByDate = new Map<string, number>();
+  for (const row of perModelRows) {
+    if (!row.model) continue;
+    // Strip date-snapshot suffixes before lookup so variants like
+    // 'DeepSeek V4 Flash 0731' or 'gpt-5.6-luna-20250815' resolve against
+    // the same rate entry as their base model.
+    const lookupKey = row.model.replace(/-[0-9]{4,}$/, "");
+    const r = rates.get(row.model) ?? rates.get(lookupKey);
+    if (!r || (r.input === 0 && r.output === 0)) continue;
+    const input = row.inputTokens ?? 0;
+    const output = row.outputTokens ?? 0;
+    const cacheRead = row.cacheReadTokens ?? 0;
+    const modelCost = (input * r.input + output * r.output + cacheRead * r.cacheRead) / 1_000_000;
+    costByDate.set(row.date, (costByDate.get(row.date) ?? 0) + modelCost);
+  }
+
+  return tokenRows.map((r) => {
+    const cost = costByDate.has(r.date) ? costByDate.get(r.date)! : null;
+    return { date: r.date, cost, tokens: r.tokens, cacheRead: r.cacheRead };
+  });
 }
 
 /** All distinct (date, source) pairs that have ANY rows in range. */
