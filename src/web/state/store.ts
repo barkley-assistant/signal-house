@@ -5,7 +5,6 @@
 import { create } from "zustand";
 import type { StatePayload } from "../../api/build-state";
 import type { DiagnosticsPayload } from "../../diagnostics/sources";
-import { formatNumber, formatCompact } from "../../shared/format";
 import { DEFAULT_WINDOW_DAYS, isWindowDays, type WindowDays } from "../../shared/window";
 
 export type { StatePayload, DiagnosticsPayload };
@@ -190,5 +189,3 @@ export async function loadDeliveryTrend(days: WindowDays): Promise<DeliveryPoint
     return [];
   }
 }
-
-export { formatNumber, formatCompact };

@@ -6,7 +6,7 @@
  */
 import type { Database } from "bun:sqlite";
 import { parsedLatestStates } from "../db/latest-state";
-import { utcDay, utcDayFromMs } from "../shared/dates";
+import { utcDayFromMs } from "../shared/dates";
 
 export interface DeliveryCiPoint {
   totalRuns: number;
@@ -101,6 +101,3 @@ export function buildDeliveryTrend(db: Database, from: string, to: string): Deli
   const days = Math.round((endMs - startMs) / 86_400_000) + 1;
   return { from, to, days, points };
 }
-
-/** Re-export for callers that want the same anchor other handlers use. */
-export { utcDay };
