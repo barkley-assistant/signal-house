@@ -72,16 +72,15 @@ export function parseLitellmPricing(json: unknown): PricingMap {
 
   // First pass: build every candidate entry, grouped by machine key.
   const candidates = new Map<string, Candidate[]>();
+  let skippedNoRates = 0;
+  let skippedEmptyKey = 0;
   for (const [rawKey, value] of Object.entries(json)) {
     if (!isPlainObject(value)) continue;
 
     const inputPerToken = numberOr(value.input_cost_per_token, NaN);
     const outputPerToken = numberOr(value.output_cost_per_token, NaN);
     if (!Number.isFinite(inputPerToken) || !Number.isFinite(outputPerToken)) {
-      log.debug(
-        "model-pricing-parser",
-        `skip ${rawKey}: missing or non-finite rates (input=${value.input_cost_per_token}, output=${value.output_cost_per_token})`,
-      );
+      skippedNoRates++;
       continue;
     }
 
@@ -98,7 +97,10 @@ export function parseLitellmPricing(json: unknown): PricingMap {
     }
 
     const key = machineKey(rawKey);
-    if (!key) continue;
+    if (!key) {
+      skippedEmptyKey++;
+      continue;
+    }
 
     const route: "native" | "routed" = rawKey.includes("/") ? "routed" : "native";
     const entry: Candidate = {
@@ -118,18 +120,16 @@ export function parseLitellmPricing(json: unknown): PricingMap {
   // (the vendor's own price sheet is what the operator is actually billed
   // against when they configure the provider directly). Within a route
   // kind, cheapest input wins — the operator can always route to the
-  // cheapest reseller, so that's the defensible default.
+  // cheapest reseller, so that's the defensible default. Per-entry detail
+  // lives in the cache (sourceKey + route); the log carries only counts,
+  // because one full-table parse used to produce megabytes of debug lines.
+  let collisions = 0;
   const out: PricingMap = {};
   for (const [key, list] of candidates) {
     const natives = list.filter((c) => c.route === "native");
     const pool = natives.length > 0 ? natives : list;
     const winner = pool.reduce((a, b) => (b.input < a.input ? b : a));
-    if (list.length > 1) {
-      log.debug(
-        "model-pricing-parser",
-        `collision on ${key}: ${list.length} entries, kept ${winner.rawKey} (${winner.route}, input $${winner.input}/1M)`,
-      );
-    }
+    if (list.length > 1) collisions++;
     out[key] = {
       input: winner.input,
       output: winner.output,
@@ -138,6 +138,14 @@ export function parseLitellmPricing(json: unknown): PricingMap {
       route: winner.route,
     };
   }
+  log.debug(
+    "model-pricing-parser",
+    `parsed ${out.length} entries` +
+      (collisions > 0 ? `, ${collisions} machine-key collisions resolved (winner recorded per entry)` : "") +
+      (skippedNoRates > 0 || skippedEmptyKey > 0
+        ? `, skipped ${skippedNoRates} without finite rates + ${skippedEmptyKey} with empty keys`
+        : ""),
+  );
   return out;
 }
 
