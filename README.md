@@ -8,7 +8,7 @@
 
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-1.4.0-black?logo=bun&logoColor=white)](https://bun.sh)
-[![tests: 171 unit · 10 e2e](https://img.shields.io/badge/tests-171%20unit%20%C2%B7%2010%20e2e-2ea44f)]()
+[![tests: 206 unit · 10 e2e](https://img.shields.io/badge/tests-206%20unit%20%C2%B7%2010%20e2e-2ea44f)]()
 [![stack: Bun-native](https://img.shields.io/badge/stack-Bun%20native-38bdf8)]()
 [![privacy: fail-closed](https://img.shields.io/badge/privacy-fail--closed-c4b5fd)]()
 
@@ -56,8 +56,8 @@ See [Configuration](#configuration) for what actually matters.
 | Section | Answers |
 |---|---|
 | **Health strip** | Throughput, cycle time, CI pass rate, stale work, and cost/tokens per hour — the five numbers you actually care about, at a glance. Side-by-side on tablet/desktop, stacked on phones, with the Cost & Tokens tile spanning full width and keeping its rate + value legible on the smallest screens |
-| **Delivery** | A paired panel: **CI pass-rate trend** (filled line, 0–100%) over **Throughput** (stacked bar — commits + PRs merged per day). Both charts share one date x-axis and react to the same 7/30/90-day window selector. Gap days render as hatched bands so missing telemetry reads as missing, not as zero |
-| **Agent Spend** | Total cost, sessions, and tokens across all agent sources, with the **cache hit rate** and **saved amount** sitting alongside as hero stats. Per-source ledger (OpenCode, Hermes), per-day cost + tokens chart, and a **By model** table that's sortable by sessions, tokens, cost, cache %, and a **`$/1M` cost-efficiency** column — cheapest-first by default |
+| **Delivery** | A paired panel: **CI pass-rate** (per-day bars — green ≥95%, amber 70–95%, red <70%, faint marker for days with no runs) over **Throughput** (stacked bar — commits + PRs merged per day). Both charts share one date x-axis and react to the same 7/30/90-day window selector. Bars scale responsively with the window and viewport |
+| **Agent Spend** | Total cost, sessions, and tokens across all agent sources, with the **cache hit rate** and **saved amount** sitting alongside as hero stats. Per-source ledger (OpenCode, Hermes), per-day cost + tokens chart, and a **By model** table that's sortable by sessions, tokens, cost, cache %, and a **`$/1M` cost-efficiency** column — cheapest-first by default. Costs are **estimated from public list pricing** (litellm) by default — every dollar figure on the panel comes from the same estimator; see [`SIGNAL_HOUSE_ESTIMATE_COSTS`](#configuration) to opt out |
 | **Attention Queue** | Open issues and PRs that need eyes — newest first, stale flagged, CI status attached |
 | **Source Diagnostics** | Collector health, discovered repos, and configuration summary — lazy-loaded, privacy-filtered |
 
@@ -74,7 +74,7 @@ One process, seven endpoints. All require HTTP Basic auth when `SECRET_HOUSE_ACC
 | GET | `/api/state` | Full dashboard payload (privacy-filtered). Optional `?days=7\|30\|90` scopes every windowed metric (default 30) |
 | GET | `/api/daily/spend` | Per-day cost + tokens trend for the Agent Spend chart. `?days=7\|30\|90` picks the window (default 30) |
 | GET | `/api/daily/delivery` | Per-day CI pass-rate + commits + PRs-merged for the Delivery panel. Same `?days=` selector as `/api/daily/spend` |
-| GET | `/api/diagnostics` | Collector health + discovered repos (lazy, privacy-applied) |
+| GET | `/api/diagnostics` | Collector health + discovered repos + pricing-cache state (lazy, privacy-applied) |
 | GET | `/api/health` | Liveness check — never triggers collectors |
 | POST | `/api/refresh` | Manual refresh, concurrency-guarded (409 when busy) |
 | POST | `/api/refresh/reset-lock` | Clear a stuck refresh lock |
@@ -92,14 +92,19 @@ Everything is environment variables, all read once at startup, all validated wit
 | `SECRET_HOUSE_ACCESS_PASSWORD` | empty | Set it → the whole dashboard requires Basic auth |
 | `SECRET_HOUSE_POLLER_ENABLED` | `false` | Background refresh loop (off by default; refresh manually or via the button) |
 | `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS` | `false` | Show private-repo items in the Attention Queue (the deliberate opt-in) |
+| `SIGNAL_HOUSE_ESTIMATE_COSTS` | `true` | Estimate every cost figure from public list pricing (litellm) + local rates instead of trusting upstream-reported values. Set `false` for upstream passthrough — see [Cost estimation](docs/operations.md#cost-estimation) |
 
 Missing sources degrade gracefully: the collector reports `unavailable` with a warning, the refresh still succeeds, and the dashboard tells you what's missing instead of pretending.
+
+### Cost estimation
+
+By default every dollar number on the dashboard is **estimated at read time**: `(tokens × model rate) / 1M`, with rates resolved per model from litellm's community-maintained pricing table (refreshed daily into a local cache), falling back to any rates you've set in your OpenCode config. Nothing estimated is ever written to the database — flip `SIGNAL_HOUSE_ESTIMATE_COSTS=false` and the very next refresh shows upstream-reported values again. Full details, including the cache location and diagnostics fields, live in [docs/operations.md](docs/operations.md#cost-estimation).
 
 ## Testing
 
 ```bash
 bun run check          # typecheck + lint + tests + build, all gates
-bun test tests/        # 171 unit / integration / API-contract tests
+bun test tests/        # 206 unit / integration / API-contract tests
 bunx playwright test   # 10 e2e tests across desktop Chromium, Pixel 7, iPhone 13
 bunx tsc --noEmit      # strict TypeScript, zero errors
 bunx eslint .          # zero warnings
