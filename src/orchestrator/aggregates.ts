@@ -25,6 +25,16 @@ export interface SourceUsageMetrics {
 export interface ModelSourceCacheMetrics {
   cacheReadTokens: number;
   cacheSavings: number;
+  /** Per-source token breakdown. Used to slice the model-row estimated cost
+   *  across sources so bySource.<src>.cost is internally consistent with
+   *  byModel[].cost (every cost number on the dashboard comes from the
+   *  same estimator). */
+  inputTokens: number;
+  outputTokens: number;
+  /** Per-source slice of the model-row cost. When estimation is enabled
+   *  this is the estimator's number (tokens × rates). When disabled it's
+   *  the upstream value. */
+  cost: number;
 }
 
 export interface ModelUsageMetrics {
@@ -175,13 +185,27 @@ function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: Usag
 
   const mergedByModel = combineModels(usageStates, costOpts);
   let windowSavings = 0;
+  // When estimation is on, replace each source's upstream cost with the
+  // estimator's per-source contribution (sum of per-source costs across
+  // the merged model rows). When off, leave the upstream byDay sum in
+  // place — that's what the source tiles should show.
+  const bySourceCostFromMerge = new Map<string, number>();
   for (const m of mergedByModel) {
     windowSavings += m.cacheSavings ?? 0;
     for (const [src, data] of Object.entries(m.bySource ?? {})) {
       const srcMetrics = bySource[src];
       if (srcMetrics) {
         srcMetrics.cacheSavings = (srcMetrics.cacheSavings ?? 0) + data.cacheSavings;
+        if (costOpts.enabled) {
+          bySourceCostFromMerge.set(src, (bySourceCostFromMerge.get(src) ?? 0) + data.cost);
+        }
       }
+    }
+  }
+  if (costOpts.enabled) {
+    for (const [src, cost] of bySourceCostFromMerge) {
+      const srcMetrics = bySource[src];
+      if (srcMetrics) srcMetrics.cost = cost;
     }
   }
 
@@ -354,6 +378,14 @@ export function mergeModelRows(
     const cacheReadRate = getCacheReadCostPerMillion(row.model);
     const cacheSavings = (cacheReadTokens * Math.max(0, inputRate - cacheReadRate)) / 1_000_000;
 
+    // Per-source slice of this row's cost. When estimation is on, slice
+    // proportionally to per-source tokens × rates (so bySource.<src>.cost
+    // is internally consistent with byModel[].cost and the same data
+    // flows everywhere). When estimation is off, slice proportionally to
+    // the row's total upstream cost (so the sum matches the upstream
+    // value without forcing each source to independently know the rate).
+    const rowSourceCost = rowCost ?? 0;
+
     const existing = map.get(key);
     if (existing) {
       existing.sessions += row.sessions;
@@ -363,9 +395,29 @@ export function mergeModelRows(
       existing.outputTokens += outputTokens;
       existing.cacheReadTokens += cacheReadTokens;
       existing.cacheSavings += cacheSavings;
-      const src = existing.bySource[source] ?? { cacheReadTokens: 0, cacheSavings: 0 };
+      const src = existing.bySource[source] ?? { cacheReadTokens: 0, cacheSavings: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
       src.cacheReadTokens += cacheReadTokens;
+      src.inputTokens += inputTokens;
+      src.outputTokens += outputTokens;
       src.cacheSavings += cacheSavings;
+      // Per-source cost: estimator computes from per-source tokens × rates
+      // (so it lines up with the estimator's own number on the row); passthrough
+      // distributes the row's upstream cost by per-source token share.
+      if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
+        const lookupKey = key.replace(/-[0-9]{4,}$/, "");
+        const rates = costOpts.rates.get(lookupKey);
+        if (rates && (rates.input > 0 || rates.output > 0)) {
+          src.cost += (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
+        }
+      } else if (!costOpts.enabled && rowCost !== null && rowCost > 0) {
+        // Distribute upstream cost by token share: each source's tokens
+        // divided by total row tokens, times the row's total upstream cost.
+        const totalRowTokens = inputTokens + outputTokens + cacheReadTokens;
+        if (totalRowTokens > 0) {
+          const share = (inputTokens + outputTokens + cacheReadTokens) / totalRowTokens;
+          src.cost += rowCost * share;
+        }
+      }
       existing.bySource[source] = src;
       if (row.sessions > existing.best) {
         existing.best = row.sessions;
@@ -386,7 +438,25 @@ export function mergeModelRows(
         outputTokens,
         cacheReadTokens,
         cacheSavings,
-        bySource: { [source]: { cacheReadTokens, cacheSavings } },
+        bySource: (() => {
+          const entry: { cacheReadTokens: number; cacheSavings: number; inputTokens: number; outputTokens: number; cost: number } = {
+            cacheReadTokens,
+            inputTokens,
+            outputTokens,
+            cacheSavings,
+            cost: 0,
+          };
+          if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
+            const lookupKey = key.replace(/-[0-9]{4,}$/, "");
+            const rates = costOpts.rates.get(lookupKey);
+            if (rates && (rates.input > 0 || rates.output > 0)) {
+              entry.cost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
+            }
+          } else if (!costOpts.enabled && rowSourceCost > 0) {
+            entry.cost = rowSourceCost;
+          }
+          return { [source]: entry };
+        })(),
         best: row.sessions,
       });
     }

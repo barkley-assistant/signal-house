@@ -112,7 +112,7 @@
    stats sit in the page rather than as boxed cards. */
 .spend-overview {
   display: grid;
-  grid-template-columns: 1fr 1fr 2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
   gap: 12px;
   align-items: stretch;
   margin: 16px 0;
@@ -134,9 +134,17 @@
 .spend-hero__amount {
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 56px;
+  /* clamp() keeps the big cost figure inside its column at every viewport.
+   *  5vw is the responsive term — at a 600px wide card the figure renders at
+   *  30px; at 1200px it renders at the 56px ceiling. The lower bound (24px)
+   *  prevents unreadable sizes on tiny screens. No more cost/cache overlap. */
+  font-size: clamp(24px, 5vw, 56px);
   line-height: 1.1;
   color: var(--text-primary);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .spend-hero__meta {
   display: flex;

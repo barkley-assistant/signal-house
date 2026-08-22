@@ -96,13 +96,23 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
 
   const byModel = queryModelRows(db, from, to, costOpts);
   let windowSavings = 0;
+  const bySourceCostFromMerge = new Map<string, number>();
   for (const m of byModel) {
     windowSavings += m.cacheSavings ?? 0;
     for (const [source, data] of Object.entries(m.bySource ?? {})) {
       const src = bySource[source];
       if (src) {
         src.cacheSavings = (src.cacheSavings ?? 0) + data.cacheSavings;
+        if (costOpts.enabled) {
+          bySourceCostFromMerge.set(source, (bySourceCostFromMerge.get(source) ?? 0) + data.cost);
+        }
       }
+    }
+  }
+  if (costOpts.enabled) {
+    for (const [source, cost] of bySourceCostFromMerge) {
+      const src = bySource[source];
+      if (src) src.cost = cost;
     }
   }
 

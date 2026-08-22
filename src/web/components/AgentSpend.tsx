@@ -9,15 +9,16 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
-import { formatNumber, formatCost, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
+import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { touchAwareTooltip } from "./chart-tooltip";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
  *  Plain requestAnimationFrame loop (no framer motion-value indirection) so
  *  it's deterministic. prefers-reduced-motion is honoured by the global CSS
- *  kill in base.css. */
+ *  kill in base.css. Uses formatCostHero so the running tick matches the
+ *  final formatting (cents suppressed when the target is ≥ $1k). */
 function useCountUp(target: number | null, duration = 900) {
-  const [text, setText] = useState<string>(target === null ? "—" : formatCost(0));
+  const [text, setText] = useState<string>(target === null ? "—" : formatCostHero(0));
   useEffect(() => {
     if (target === null) return;
     const start = performance.now();
@@ -25,9 +26,9 @@ function useCountUp(target: number | null, duration = 900) {
     const tick = (now: number) => {
       const p = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
-      setText(formatCost(target * eased));
+      setText(formatCostHero(target * eased));
       if (p < 1) raf = requestAnimationFrame(tick);
-      else setText(formatCost(target));
+      else setText(formatCostHero(target));
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

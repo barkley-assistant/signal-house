@@ -32,6 +32,26 @@ export function formatCost(value: number | null | undefined): string {
   }).format(value);
 }
 
+/** Hero currency: drops the cents when the value reaches four digits so the
+ *  big Agent Spend tile reads "$1,318" instead of "$1,318.36". Below $1,000
+ *  keeps cents as before (consistent with formatCost). The shared divisor
+ *  is the visual rule: dashboard wants sub-cent precision on small numbers,
+ *  loses it once the precision is noise on the figure.
+ *
+ *  Note: a per-hour rate that crosses $1k is rare and would show without
+ *  cents too — fine, the rule is the same. */
+export function formatCostHero(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const digits = abs >= 1_000 ? 0 : 2;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
 /** Cost per 1M effective tokens: 0.1186 → "$0.119", 1.58 → "$1.58". null → "—". */
 export function formatEffPerM(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value) || value < 0) return "—";
