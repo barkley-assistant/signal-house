@@ -106,19 +106,21 @@
 /* Attention queue + agent spend are stacked full-width sections
    (operator preference: queue under the spend card). */
 
-/* Agent Spend overview — one panel, two regions. The top half (macro totals)
-   is a two-up mini-grid: Total cost on the left, Cache (rate + saved) on
-   the right — same kpi-tile grammar as the health strip so they read as
-   siblings. The per-source ledger (micro) fills the second row. */
+/* Agent Spend overview — single row, two columns. Left column stacks the
+   macro tiles (Total cost, Cache) vertically; right column holds the
+   per-source ledger (OpenCode, Hermes). Each macro tile uses the same
+   kpi-tile grammar as the health strip so they read as siblings. */
 .spend-overview {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: stretch;
   margin: 16px 0;
 }
-.spend-overview__top {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* Left column: Total cost card on top, Cache card below. */
+.spend-overview__hero {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 .spend-overview__total,
@@ -131,6 +133,9 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+.spend-overview__total {
+  gap: 6px;
 }
 .spend-overview__cache {
   justify-content: center;
@@ -194,9 +199,9 @@
   text-overflow: ellipsis;
 }
 @media (max-width: 700px) {
-  /* On phones the two-up top pair collapses to a single column so each card
-     gets full width. */
-  .spend-overview__top {
+  /* On phones the two-column overview collapses to a single column so the
+     total cost card, cache card, and per-source ledger each get full width. */
+  .spend-overview {
     grid-template-columns: 1fr;
   }
   .spend-hero__amount {

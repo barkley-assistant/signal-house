@@ -51,7 +51,7 @@ export function AgentSpend() {
       ) : (
         <>
           <div className="spend-overview">
-            <div className="spend-overview__top">
+            <div className="spend-overview__hero">
               <div className="spend-overview__total">
                 <div className="kpi-tile__label">Total cost</div>
                 <div className="spend-hero__amount">{heroAmount}</div>
