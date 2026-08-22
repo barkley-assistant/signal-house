@@ -8,10 +8,13 @@
 
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-1.3.14-black?logo=bun&logoColor=white)](https://bun.sh)
-[![tests: 103 unit · 18 e2e](https://img.shields.io/badge/tests-103%20unit%20%C2%B7%2018%20e2e-2ea44f)]()
+[![tests: 171 unit · 10 e2e](https://img.shields.io/badge/tests-171%20unit%20%C2%B7%2010%20e2e-2ea44f)]()
 [![stack: Bun-native](https://img.shields.io/badge/stack-Bun%20native-38bdf8)]()
+[![privacy: fail-closed](https://img.shields.io/badge/privacy-fail--closed-c4b5fd)]()
 
 </div>
+
+![Signal House dashboard](docs/screenshots/dashboard.webp)
 
 Signal House is a small, fast, aggressively-local dashboard for anyone running AI coding agents and shipping real code alongside them. It watches your GitHub repos, your local git history, and your agent session databases (Hermes, OpenCode), and answers one question without flinching: **is work actually moving?**
 
@@ -51,21 +54,25 @@ See [Configuration](#configuration) for what actually matters.
 
 | Section | Answers |
 |---|---|
-| **Health strip** | Throughput, cycle time, CI pass rate, stale work, cost/tokens per hour — the five numbers you actually care about, at a glance |
-| **Agent Spend** | Total cost, sessions, and tokens across all agent sources, per-day trend chart, and a per-model breakdown with sortable columns |
+| **Health strip** | Throughput, cycle time, CI pass rate, stale work, and cost/tokens per hour — the five numbers you actually care about, at a glance. Side-by-side on tablet/desktop, stacked on phones, with the Cost & Tokens tile spanning full width and keeping its rate + value legible on the smallest screens |
+| **Delivery** | A paired panel: **CI pass-rate trend** (filled line, 0–100%) over **Throughput** (stacked bar — commits + PRs merged per day). Both charts share one date x-axis and react to the same 7/30/90-day window selector. Gap days render as hatched bands so missing telemetry reads as missing, not as zero |
+| **Agent Spend** | Total cost, sessions, and tokens across all agent sources, with the **cache hit rate** and **saved amount** sitting alongside as hero stats. Per-source ledger (OpenCode, Hermes), per-day cost + tokens chart, and a **By model** table that's sortable by sessions, tokens, cost, cache %, and a **`$/1M` cost-efficiency** column — cheapest-first by default |
 | **Attention Queue** | Open issues and PRs that need eyes — newest first, stale flagged, CI status attached |
 | **Source Diagnostics** | Collector health, discovered repos, and configuration summary — lazy-loaded, privacy-filtered |
 
 Every number is privacy-filtered server-side. Repos whose visibility can't be verified are treated as **private** — the dashboard fails closed, not open.
 
+On phones, chart tooltips only fire on a deliberate tap (not on scroll-drag), and the by-model table reflows into a single-row card per model with five stats side-by-side so nothing scrolls horizontally.
+
 ## API
 
-One process, six endpoints. All require HTTP Basic auth when `SECRET_HOUSE_ACCESS_PASSWORD` is set.
+One process, seven endpoints. All require HTTP Basic auth when `SECRET_HOUSE_ACCESS_PASSWORD` is set.
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/state` | Full dashboard payload (privacy-filtered). Optional `?days=7\|30\|90` scopes every windowed metric (default 30) |
 | GET | `/api/daily/spend` | Per-day cost + tokens trend for the Agent Spend chart. `?days=7\|30\|90` picks the window (default 30) |
+| GET | `/api/daily/delivery` | Per-day CI pass-rate + commits + PRs-merged for the Delivery panel. Same `?days=` selector as `/api/daily/spend` |
 | GET | `/api/diagnostics` | Collector health + discovered repos (lazy, privacy-applied) |
 | GET | `/api/health` | Liveness check — never triggers collectors |
 | POST | `/api/refresh` | Manual refresh, concurrency-guarded (409 when busy) |
@@ -77,7 +84,7 @@ Everything is environment variables, all read once at startup, all validated wit
 
 | Variable | Default | What it does |
 |---|---|---|
-| `SECRET_HOUSE_GITHUB_TOKEN` | — | GitHub API token for issues, PRs, CI, and real repo visibility |
+| `SECRET_HOUSE_GITHUB_TOKEN` | — | GitHub API token for issues, PRs, Actions, and checks |
 | `SECRET_HOUSE_GIT_REPOS` / `SECRET_HOUSE_PROJECT_ROOTS` | — | Local git inputs: explicit repos, discovery roots, or both |
 | `SECRET_HOUSE_HERMES_DB_PATH` | `~/.hermes/state.db` | Hermes Agent session database |
 | `SECRET_HOUSE_OPENCODE_DB_PATH` | `~/.local/share/opencode/opencode.db` | OpenCode session database |
@@ -91,8 +98,8 @@ Missing sources degrade gracefully: the collector reports `unavailable` with a w
 
 ```bash
 bun run check          # typecheck + lint + tests + build, all gates
-bun test tests/        # 103 unit / integration / API-contract tests
-bunx playwright test   # 18 e2e tests across desktop Chromium, Pixel 7, iPhone 13
+bun test tests/        # 171 unit / integration / API-contract tests
+bunx playwright test   # 10 e2e tests across desktop Chromium, Pixel 7, iPhone 13
 bunx tsc --noEmit      # strict TypeScript, zero errors
 bunx eslint .          # zero warnings
 ```
