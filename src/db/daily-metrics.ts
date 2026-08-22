@@ -9,6 +9,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts, DailyWrite } from "../shared/types";
+import { machineKey } from "../shared/models";
 import { fetchAllRates } from "../server/model-pricing";
 
 export interface DailyMetricRow {
@@ -193,11 +194,13 @@ export async function queryDailyTrend(
   const costByDate = new Map<string, number>();
   for (const row of perModelRows) {
     if (!row.model) continue;
-    // Strip date-snapshot suffixes before lookup so variants like
-    // 'DeepSeek V4 Flash 0731' or 'gpt-5.6-luna-20250815' resolve against
-    // the same rate entry as their base model.
-    const lookupKey = row.model.replace(/-[0-9]{4,}$/, "");
-    const r = rates.get(row.model) ?? rates.get(lookupKey);
+    // The rates map is keyed by machine key (lowercase + dot-stripped, via
+    // machineKey()). Strip date suffixes on top of that. Note that
+    // machineKey also strips dots — so 'gpt-5.6-luna' becomes 'gpt-56-luna'.
+    const mk = machineKey(row.model);
+    if (!mk) continue;
+    const lookupKey = mk.replace(/-[0-9]{4,}$/, "");
+    const r = rates.get(mk) ?? rates.get(lookupKey);
     if (!r || (r.input === 0 && r.output === 0)) continue;
     const input = row.inputTokens ?? 0;
     const output = row.outputTokens ?? 0;
