@@ -106,21 +106,34 @@
 /* Attention queue + agent spend are stacked full-width sections
    (operator preference: queue under the spend card). */
 
-/* Agent Spend overview — one panel, two regions. The hero (macro totals)
-   anchors the left; the per-source ledger (micro) fills the right so the
-   operator sees at a glance what composes the big number. */
+/* Agent Spend overview — one panel, two regions. The top half (macro totals)
+   is a two-up mini-grid: Total cost on the left, Cache (rate + saved) on
+   the right — same kpi-tile grammar as the health strip so they read as
+   siblings. The per-source ledger (micro) fills the second row. */
 .spend-overview {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 24px;
-  align-items: center;
-  margin: 16px 0;
-}
-/* Macro: total cost as the hero figure, sessions + tokens muted beneath. */
-.spend-hero {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
+  margin: 16px 0;
+}
+.spend-overview__top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.spend-overview__total,
+.spend-overview__cache {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.spend-overview__cache {
+  justify-content: center;
 }
 .spend-hero__amount {
   font-family: var(--font-mono);
@@ -181,13 +194,11 @@
   text-overflow: ellipsis;
 }
 @media (max-width: 700px) {
-  .spend-overview {
+  /* On phones the two-up top pair collapses to a single column so each card
+     gets full width. */
+  .spend-overview__top {
     grid-template-columns: 1fr;
-    gap: 8px;
   }
-  /* On phones the hero figure is huge and the per-source ledger stretches
-     its label/cost apart via space-between. Tier both: smaller hero, and
-     the ledger rows keep label + cost adjacent with breath between rows. */
   .spend-hero__amount {
     font-size: 44px;
   }
@@ -195,13 +206,6 @@
     flex-wrap: wrap;
     gap: 6px 10px;
     font-size: 13px;
-  }
-  .spend-hero__cache {
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-  .spend-hero__cache .kpi-caption {
-    font-size: 11px;
   }
   .spend-source-row__meta {
     white-space: normal;
