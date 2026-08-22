@@ -1,5 +1,6 @@
 /** API route handlers — thin HTTP layer over domain functions. */
 
+import pkg from "../../package.json";
 import type { Database } from "bun:sqlite";
 import type { RuntimeConfig } from "../config/types";
 import type { Collector } from "../collectors";
@@ -45,7 +46,7 @@ export function healthHandler(_deps: ApiDeps, req: Request): Response {
   return json(req, {
     status: "ok",
     service: "signal-house",
-    version: "2.0.0",
+    version: pkg.version,
     time: new Date().toISOString(),
     uptimeSeconds: Math.floor(process.uptime()),
   });
