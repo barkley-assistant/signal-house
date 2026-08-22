@@ -141,7 +141,6 @@ export async function queryDailyTrend(
        GROUP BY date ORDER BY date`,
     )
     .all(from, to) as Array<{ date: string; tokens: number | null; cacheRead: number | null }>;
-  const tokensByDate = new Map(tokenRows.map((r) => [r.date, r]));
 
   if (!costOpts.enabled) {
     // Passthrough: read upstream cost.total per day, the original behavior.

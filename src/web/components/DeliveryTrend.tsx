@@ -245,11 +245,19 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
         {
           type: "bar",
           data,
-          barWidth: 9,
-          // barGap and barCategoryGap tightened so adjacent days sit close
-          // together (this is a daily trend; weekly spacing would confuse).
-          barGap: "1%",
-          barCategoryGap: "12%",
+          // Responsive bar sizing — the bar fills 70% of its category slot,
+          // and the remaining 30% is the gap between days. As the window
+          // grows (30-day → 90-day) or the viewport narrows (desktop →
+          // mobile), the category slot shrinks proportionally, so the bars
+          // shrink with it. The 70% fill keeps adjacent bars distinct
+          // without crowding, regardless of how many days the user asks
+          // for. Pixel values would either look fine on 30-day / desktop
+          // (current behaviour) and cramped on 90-day / mobile, or vice
+          // versa — the percentage approach is the single shape that
+          // works everywhere.
+          barWidth: "70%",
+          barGap: 0,
+          barCategoryGap: "30%",
           emphasis: {
             focus: "series",
             itemStyle: { color: "#f8fafc" }, // brighter accent on hover — the band color is the resting state
