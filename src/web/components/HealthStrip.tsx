@@ -71,6 +71,11 @@ export function HealthStrip({ state }: { state: StatePayload | null }) {
         <div className="kpi-tile__label">Cost &amp; Tokens</div>
         <div className="big-number">{none(ct?.costPerHour) ? "—" : formatCost(ct!.costPerHour!)}</div>
         <div className="kpi-caption">{none(ct?.tokensPerHour) ? "No usage telemetry" : `${formatCompact(ct!.tokensPerHour!)} tok/hr`}</div>
+        {!none(ct?.costPerHour) && (
+          <div className="kpi-caption kpi-caption--disclosure">
+            Estimated from public list pricing. Set <code>SIGNAL_HOUSE_ESTIMATE_COSTS=false</code> to use upstream-reported values.
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );
