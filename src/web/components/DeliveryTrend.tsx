@@ -346,7 +346,16 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
           stack: "throughput",
           data: commits,
           itemStyle: { color: COMMITS_COLOR, borderRadius: [0, 0, 0, 0] },
-          barMaxWidth: 16,
+          // Same percentage-based sizing as the CI chart above — the bar
+          // fills 70% of its category slot, the rest is gap. Scales cleanly
+          // across 30-day / 90-day windows and desktop / mobile viewports
+          // without any per-shape conditional. barMaxWidth is dropped — the
+          // percentage already handles the upper bound (90-day × 70% slot
+          // is narrower than the old 16px cap, mobile × 70% is narrower
+          // again, both readable).
+          barWidth: "70%",
+          barGap: 0,
+          barCategoryGap: "30%",
         },
         {
           name: "PRs merged",
@@ -354,7 +363,9 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
           stack: "throughput",
           data: prs,
           itemStyle: { color: PR_COLOR, borderRadius: [3, 3, 0, 0] },
-          barMaxWidth: 16,
+          barWidth: "70%",
+          barGap: 0,
+          barCategoryGap: "30%",
         },
       ],
     },
