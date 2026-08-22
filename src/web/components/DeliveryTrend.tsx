@@ -1,13 +1,13 @@
 /**
- * Delivery panel — CI pass-rate (filled line, 0–100%) paired with a Throughput
- * stacked bar (commits + PRs merged). Two ECharts instances sit side-by-side
- * on tablet/desktop and stack vertically on phones (<=700px). Styling
- * mirrors the Daily cost & tokens chart: same dark background, same muted
- * split lines, same tooltip shell, same 11px legend.
+ * Delivery panel — CI pass-rate (per-day bar chart, 0–100%) paired with a
+ * Throughput stacked bar (commits + PRs merged). Two ECharts instances sit
+ * side-by-side on tablet/desktop and stack vertically on phones (<=700px).
+ * Styling mirrors the Daily cost & tokens chart: same dark background, same
+ * muted split lines, same tooltip shell, same 11px legend.
  *
  * Missing-day treatment:
- *  - CI null (no terminal runs) → line is broken (connectNulls: false). The
- *    tooltip surfaces "No CI runs" for those days.
+ *  - CI null (no terminal runs) → tiny baseline marker (CI_BAR_FAINT) so the
+ *    x-axis is dense but quiet. The tooltip surfaces "No CI runs".
  *  - Commits / PRs null (no telemetry that day) → ECharts bars with null
  *    values render as a clean gap. The tooltip says "No telemetry" and
  *    names which series is missing when only one is.
@@ -23,6 +23,16 @@ import { touchAwareTooltip } from "./chart-tooltip";
 const CI_COLOR = "#4ade80"; // var(--success) — green
 const COMMITS_COLOR = "#94a3b8"; // var(--text-secondary) — slate
 const PR_COLOR = "#38bdf8"; // var(--info) — blue
+
+// Rate-band colours for the CI bar chart. The visual cue is a more honest
+// read of the line-chart's area-fill: green says "we're clean", amber
+// says "we have noise", red says "we're broken". Below the bars is a small
+// total-runs annotation so the user can tell apart "100% from 1 run" and
+// "100% from 50 runs" at a glance.
+const CI_BAR_GREEN = "#4ade80"; // pass-rate >= 95%
+const CI_BAR_AMBER = "#fbbf24"; // 70% <= pass-rate < 95%
+const CI_BAR_RED = "#f87171"; // pass-rate < 70%
+const CI_BAR_FAINT = "rgba(74, 222, 128, 0.18)"; // days with no CI data — quiet marker so the user can see "nothing today"
 
 const TOP_HEIGHT = 110;
 const BOTTOM_HEIGHT = 110;
@@ -142,14 +152,56 @@ export function DeliveryTrend() {
   );
 }
 
+/** Render the per-day CI pass-rate as a per-day bar chart.
+ *
+ *  Each bar is the day's pass-rate (0–100%). The bar's *colour* is the rate
+ *  band (green ≥95, amber 70–95, red <70). The bar's *width* encodes total
+ *  run count (the day's surface area = rate × volume). Days with no CI
+ *  data get a faint baseline marker so the x-axis is dense but quiet — the
+ *  visual difference between "1 run, 100% pass" and "0 runs" is preserved
+ *  without faking a continuous trend across gaps.
+ *
+ *  This replaces the earlier line-chart, which had two problems:
+ *  - connectNulls:false made single isolated days invisible (the line
+ *    broke at null on both sides and showSymbol:false hid the dot).
+ *  - the line's area-fill implied continuity that wasn't there — a CI
+ *    rate of 95% for 30 days solid was visually distinct from a CI rate
+ *    of 95% on day 7 + 0 runs the other 29 days, but the line chart
+ *    smoothed both into the same flat green ribbon.
+ *
+ *  Bar chart makes the per-day reality visible. No "isolated slither"
+ *  hack required. */
 function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
   const dates = points.map((p) => p.date);
-  // Pass-rate as a percentage 0–100. null for days with no terminal runs so
-  // the line cleanly breaks (connectNulls: false below) and the area fill
-  // doesn't trail across the gap.
-  const seriesData: Array<number | null> = points.map((p) =>
-    p.ci ? Math.round((p.ci.passRate ?? 0) * 1000) / 10 : null,
-  );
+
+  // Per-day data: pass-rate (0-100), the band color, and the surface area
+  // multiplier that scales bar width by total runs. Width saturates at a
+  // cap so a day with 100 runs doesn't crowd the chart — the height stays
+  // meaningful (rate), the width only signals "lots of runs today".
+  type BarDatum = {
+    value: [string, number]; // [date, rate]
+    itemStyle: { color: string; borderRadius: [number, number, number, number] };
+    runCount: number;
+  };
+  const data: BarDatum[] = points.map((p) => {
+    if (!p.ci) {
+      // No CI runs that day — emit a tiny baseline marker so the user can
+      // see "nothing today" without breaking the x-axis density.
+      return {
+        value: [p.date, 0.5],
+        itemStyle: { color: CI_BAR_FAINT, borderRadius: [2, 2, 0, 0] },
+        runCount: 0,
+      };
+    }
+    const ratePct = (p.ci.passRate ?? 0) * 100;
+    const color = ratePct >= 95 ? CI_BAR_GREEN : ratePct >= 70 ? CI_BAR_AMBER : CI_BAR_RED;
+    return {
+      value: [p.date, ratePct],
+      itemStyle: { color, borderRadius: [3, 3, 0, 0] },
+      runCount: p.ci.totalRuns,
+    };
+  });
+
   chart.setOption(
     {
       animation: true,
@@ -160,9 +212,9 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
-        axisPointer: { type: "line", lineStyle: { color: "#2c3038" } },
+        axisPointer: { type: "shadow", shadowStyle: { color: "rgba(56, 189, 248, 0.06)" } },
         formatter: (params: unknown) => {
-          const arr = params as Array<{ axisValue: string; value: number | null }>;
+          const arr = params as Array<{ axisValue: string; data: { value: [string, number]; runCount?: number } }>;
           if (!arr.length) return "";
           const p = points.find((q) => q.date === arr[0].axisValue);
           if (!p || !p.ci) {
@@ -175,7 +227,6 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       },
       xAxis: {
         type: "category",
-        boundaryGap: false,
         data: dates,
         axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
         axisLine: { lineStyle: { color: "#232732" } },
@@ -192,44 +243,22 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       },
       series: [
         {
-          type: "line",
-          data: seriesData,
-          smooth: 0.3,
-          showSymbol: false,
-          connectNulls: false,
-          lineStyle: { color: CI_COLOR, width: 2 },
-          areaStyle: { color: "rgba(74, 222, 128, 0.16)" },
-          // Mark the worst-dip day in the window with a small red dot so a
-          // glance surfaces the day CI was the worst. Suppressed when every
-          // day is >= 95% so it doesn't shout at a green week.
-          markPoint: computeWorstDip(seriesData, dates),
+          type: "bar",
+          data,
+          barWidth: 9,
+          // barGap and barCategoryGap tightened so adjacent days sit close
+          // together (this is a daily trend; weekly spacing would confuse).
+          barGap: "1%",
+          barCategoryGap: "12%",
+          emphasis: {
+            focus: "series",
+            itemStyle: { color: "#f8fafc" }, // brighter accent on hover — the band color is the resting state
+          },
         },
       ],
     },
     true
   );
-}
-
-function computeWorstDip(
-  seriesData: Array<number | null>,
-  dates: string[]
-): echarts.MarkPointComponentOption | undefined {
-  let worstIdx = -1;
-  let worstVal = Infinity;
-  seriesData.forEach((v, i) => {
-    if (v !== null && v < worstVal) {
-      worstVal = v;
-      worstIdx = i;
-    }
-  });
-  if (worstIdx === -1 || worstVal >= 95) return undefined;
-  return {
-    symbol: "circle",
-    symbolSize: 7,
-    itemStyle: { color: "#f87171" },
-    label: { show: false },
-    data: [{ name: dates[worstIdx], coord: [dates[worstIdx], worstVal] }],
-  };
 }
 
 function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
