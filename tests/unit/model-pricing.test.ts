@@ -5,7 +5,7 @@ import {
   setIOForTesting,
 } from "../../src/server/model-pricing-fetcher";
 import { setCostConfigPath, resetCostConfigCache } from "../../src/server/cost-input";
-import { getModelPricing as resolveModelPricing } from "../../src/server/model-pricing";
+import { getModelPricing as resolveModelPricing, fetchAllRates } from "../../src/server/model-pricing";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -190,5 +190,31 @@ describe("model-pricing resolver", () => {
     expect(rates.input).toBe(1.0);
     expect(rates.output).toBe(4.0); // 1.0 × 4
     expect(rates.cacheRead).toBe(0); // not present in source
+  });
+});
+
+describe("fetchAllRates", () => {
+  test("returns a map keyed by machine key, dedupes by key", async () => {
+    await seedLitellmCache({
+      "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
+      "deepseek-v4-pro": { input: 0.35, output: 1.4, cacheRead: 0.07 },
+    });
+
+    const rates = await fetchAllRates([
+      "GPT-5", // → "gpt-5"
+      "gpt-5", // dedupe
+      "deepseek-v4-pro",
+      "DeepSeek-V4-Pro", // → "deepseek-v4-pro" — dedupe with above
+      "mystery-model", // → zero rates
+    ]);
+    expect(rates.size).toBe(3); // gpt-5, deepseek-v4-pro, mystery-model
+    expect(rates.get("gpt-5")?.input).toBe(1.25);
+    expect(rates.get("deepseek-v4-pro")?.output).toBe(1.4);
+    expect(rates.get("mystery-model")?.input).toBe(0);
+  });
+
+  test("empty input returns empty map", async () => {
+    const rates = await fetchAllRates([]);
+    expect(rates.size).toBe(0);
   });
 });

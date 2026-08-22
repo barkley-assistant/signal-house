@@ -43,6 +43,34 @@ export interface ModelRates {
 const OUTPUT_DEFAULT_MULTIPLIER = 4;
 
 /**
+ /** Pre-fetch rates for a batch of model keys. Returns a Map keyed by
+  *  machine key (lowercase + dot-stripped). Use this in callers that need
+  *  sync access to rates — the aggregator runs sync, calls this once per
+  *  refresh, then looks up per-row without awaiting.
+  *
+  * Dedupes by machine key before calling the resolver (so "GPT-5" and
+  * "gpt-5" count as the same lookup). Empty input returns an empty map.
+  * Never throws.
+  */
+ export async function fetchAllRates(modelKeys: readonly string[]): Promise<Map<string, ModelRates>> {
+   const uniq = new Set<string>();
+   for (const raw of modelKeys) {
+     const k = stripDateSnapshot(machineKey(raw));
+     if (k) uniq.add(k);
+   }
+   const entries = await Promise.all(
+     [...uniq].map(async (key) => [key, await getModelPricing(key)] as const),
+   );
+   return buildRatesMap(entries);
+ }
+
+/** Synchronous variant: build a rates map from pre-fetched rates. Useful
+ *  in tests that want to inject a pre-built map. */
+export function buildRatesMap(entries: Iterable<readonly [string, ModelRates]>): Map<string, ModelRates> {
+  return new Map(entries);
+}
+
+/**
  * Resolve per-1M-token rates for `model` (any human-readable form — the
  * resolver normalises). Tries litellm first, then operator's local
  * opencode.jsonc, then returns all zeros.

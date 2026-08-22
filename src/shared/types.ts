@@ -115,6 +115,11 @@ export interface UsageDay {
   byModel?: ModelUsageRow[];
 }
 
+/** How a model row's `cost` was derived. Server-set by the aggregator when
+ *  `SIGNAL_HOUSE_ESTIMATE_COSTS=true` (default). Computed at read time;
+ *  never persisted to the snapshot tables. */
+export type CostSource = "estimated" | "local" | "passthrough" | "unknown" | "skipped";
+
 /** Per-model usage across the collection window. */
 export interface ModelUsageRow {
   model: string;
@@ -131,6 +136,10 @@ export interface ModelUsageRow {
   cacheWriteTokens: number | null;
   reasoningTokens: number | null;
   cost: number | null;
+  /** How `cost` was derived. Set by the aggregator at merge time. Absent on
+   *  raw collector output; the dashboard treats absence as "passthrough"
+   *  for display purposes. */
+  costSource?: CostSource;
 }
 
 export interface UsageSummary {
