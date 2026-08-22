@@ -7,7 +7,7 @@
 **The local operator dashboard for AI coding agents — is work actually moving, or just looking busy?**
 
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Bun](https://img.shields.io/badge/Bun-1.3.14-black?logo=bun&logoColor=white)](https://bun.sh)
+[![Bun](https://img.shields.io/badge/Bun-1.4.0-black?logo=bun&logoColor=white)](https://bun.sh)
 [![tests: 171 unit · 10 e2e](https://img.shields.io/badge/tests-171%20unit%20%C2%B7%2010%20e2e-2ea44f)]()
 [![stack: Bun-native](https://img.shields.io/badge/stack-Bun%20native-38bdf8)]()
 [![privacy: fail-closed](https://img.shields.io/badge/privacy-fail--closed-c4b5fd)]()
@@ -30,9 +30,10 @@ Every metric follows one contract: **unknown stays unknown.** No synthetic zero-
 
 ## Quick start
 
-Requirements: [Bun](https://bun.sh) 1.3.x or newer. That's the entire
+Requirements: [Bun](https://bun.sh) 1.4.x or newer. That's the entire
 toolchain — one runtime, one package manager, one server. No separate
-frontend server, no build pipeline to babysit.
+frontend server, no build pipeline to babysit. (Bun 1.4 dropped the
+pre-2011 x64 baseline; SSE4.2-class CPUs are the floor.)
 
 ```bash
 git clone git@github.com:barkley-assistant/signal-house.git
