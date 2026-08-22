@@ -433,8 +433,10 @@ function ModelTable() {
       // Efficiency reads best cheapest-first: $0.02 Flash before $1.58 GLM.
       // Other columns default to $/count descending; eff flips the default.
       setSort({ key, asc: key === "eff" });
-    } else if (!asc) {
-      setSort({ key, asc: true });
+    } else if (sortKey === key && asc === (key === "eff")) {
+      // Clicking the active column on its DEFAULT direction flips it:
+      // eff asc→desc, other columns desc→asc. The third click resets.
+      setSort({ key, asc: !asc });
     } else {
       setSort({ key: null, asc: false }); // back to default session order
     }

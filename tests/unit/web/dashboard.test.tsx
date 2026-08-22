@@ -455,9 +455,9 @@ describe("ModelTable cache % sort", () => {
         totalCost: 10,
         bySource: { opencode: { sessions: 10, cost: 10, tokens: 1000 } },
         byModel: [
-          { model: "Alpha", family: null, sessions: 5, cost: 5, tokens: 500, cacheReadTokens: 100, cacheHitRate: 0.25, cacheSavings: 0.0003 },
-          { model: "Beta", family: null, sessions: 3, cost: 3, tokens: 300, cacheReadTokens: 200, cacheHitRate: 0.67, cacheSavings: 0.0006 },
-          { model: "Gamma", family: null, sessions: 2, cost: 2, tokens: 200, cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 },
+          { model: "Alpha", family: null, sessions: 5, cost: 5, tokens: 500, cacheReadTokens: 100, cacheHitRate: 0.25, cacheSavings: 0.0003, effPerM: 3 },
+          { model: "Beta", family: null, sessions: 3, cost: 3, tokens: 300, cacheReadTokens: 200, cacheHitRate: 0.67, cacheSavings: 0.0006, effPerM: 2 },
+          { model: "Gamma", family: null, sessions: 2, cost: 2, tokens: 200, cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0, effPerM: 1 },
         ],
       },
     });
@@ -480,6 +480,24 @@ describe("ModelTable cache % sort", () => {
     render(<AgentSpend />);
     const btn = screen.getByRole("button", { name: /cache %/i });
     expect(btn.querySelector(".sort-arrow")).toBeTruthy();
+  });
+
+  test("eff sort cycles cheapest-first → most-expensive → default", () => {
+    useDash.setState({ state: modelUsageState() });
+    render(<AgentSpend />);
+    const btn = screen.getByRole("button", { name: /\$\/1M/i });
+    const names = () =>
+      screen.getAllByText(/^(Alpha|Beta|Gamma)$/).map((el) => el.textContent);
+
+    // First click: cheapest-first (asc).
+    fireEvent.click(btn);
+    expect(names()).toEqual(["Gamma", "Beta", "Alpha"]);
+    // Second click: most-expensive-first (desc).
+    fireEvent.click(btn);
+    expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
+    // Third click: back to default session order.
+    fireEvent.click(btn);
+    expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
   });
 });
 
