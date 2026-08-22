@@ -156,7 +156,7 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 18, bottom: 22, containLabel: false },
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 48, bottom: 28, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
