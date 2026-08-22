@@ -65,10 +65,6 @@ export interface UsageAggregate {
   cacheSavings?: number;
   bySource: Record<string, SourceUsageMetrics>;
   byModel: Array<ModelUsageMetrics>;
-  /** True when at least one row's cost was computed because no rate was
-   *  available anywhere (litellm miss + local miss). Surfaced for the
-   *  Agent Spend panel's model-coverage footnote. */
-  anyUnknown?: boolean;
 }
 
 export interface Aggregates {
@@ -145,11 +141,6 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
       ? buildSnapshotUsage(usageStates, inWindowDay, costOpts)
       : null);
     const usage = rawUsage ? fillUsageDefaults(rawUsage) : null;
-  // anyUnknown is computed post-fill so both data paths (snapshot derivation
-  // and queryUsageAggregate's override) report it consistently. The merge
-  // step sets costSource on every row regardless of which path produced
-  // the aggregate.
-  if (usage) usage.anyUnknown = config.estimateCosts && usage.byModel.some((m) => m.costSource === "unknown");
 
   return { window, throughput, cycleTime, ci, staleWork, usage };
 }

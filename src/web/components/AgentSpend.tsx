@@ -88,18 +88,7 @@ export function AgentSpend() {
           <hr className="spend-divider" />
           <DailyUsageChart />
           <ModelTable />
-          {usage?.anyUnknown && (
-            <p className="spend-disclosure" data-disclosure="coverage">
-              Some models use local rates (no public list entry found). Tap to view coverage.
-            </p>
-          )}
         </>
-      )}
-      {usage && (
-        <p className="spend-disclosure" data-disclosure="architectural">
-          Costs are estimated from public list pricing (litellm) and local rates.
-          Disable via <code>SIGNAL_HOUSE_ESTIMATE_COSTS=false</code> to use upstream-reported values.
-        </p>
       )}
     </section>
   );

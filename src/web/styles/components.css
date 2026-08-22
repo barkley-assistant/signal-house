@@ -223,22 +223,6 @@
   border-top: 1px solid var(--divider);
   margin: 4px 0 0;
 }
-/* Disclosure footers for the Agent Spend panel — the architectural note
- * (always on when estimation is enabled) and the coverage note (only
- * when at least one row's rate is unknown). Muted small text, no icon. */
-.spend-disclosure {
-  margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--muted);
-}
-.spend-disclosure code {
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  background: var(--surface-1, transparent);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
 .big-number.small {
   font-size: 20px;
 }
