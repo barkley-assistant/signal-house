@@ -2,5 +2,8 @@
 exact = false
 
 [test]
+# Scope the default test glob to tests/ — bare `bun test` would otherwise
+# scan e2e/ and choke on the Playwright spec (test.describe is not bun:test).
+root = "./tests"
 timeout = 30000
 preload = ["./tests/happy-dom.ts"]
