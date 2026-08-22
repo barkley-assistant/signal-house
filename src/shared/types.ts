@@ -120,6 +120,14 @@ export interface UsageDay {
  *  never persisted to the snapshot tables. */
 export type CostSource = "estimated" | "local" | "passthrough" | "unknown" | "skipped";
 
+/** Rates for one model in per-1M-token terms. The aggregator's
+ *  pre-fetched map. */
+export interface ModelRates {
+  input: number;
+  output: number;
+  cacheRead: number;
+}
+
 /** Per-model usage across the collection window. */
 export interface ModelUsageRow {
   model: string;

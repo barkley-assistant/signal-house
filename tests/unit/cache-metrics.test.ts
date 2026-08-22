@@ -54,7 +54,7 @@ describe("queryUsageAggregate cache metrics", () => {
     const db = openDb();
     seedDay(db, "opencode", utcDay(), { input: 0, cacheRead: 1000, model: "kimi-k27-code", modelInput: 0, modelCacheRead: 1000 });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     expect(agg.cacheHitRate).toBeCloseTo(1, 5);
     expect(agg.bySource.opencode.cacheHitRate).toBeCloseTo(1, 5);
     expect(agg.cacheReadTokens).toBe(1000);
@@ -65,7 +65,7 @@ describe("queryUsageAggregate cache metrics", () => {
     const db = openDb();
     seedDay(db, "opencode", utcDay(), { input: 1000, cacheRead: 0, model: "kimi-k27-code", modelInput: 1000, modelCacheRead: 0 });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     expect(agg.cacheHitRate).toBeCloseTo(0, 5);
     expect(agg.bySource.opencode.cacheHitRate).toBeCloseTo(0, 5);
     expect(agg.cacheReadTokens).toBe(0);
@@ -76,7 +76,7 @@ describe("queryUsageAggregate cache metrics", () => {
     const db = openDb();
     seedDay(db, "opencode", utcDay(), { input: 0, cacheRead: 0, model: "kimi-k27-code", modelInput: 0, modelCacheRead: 0 });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     expect(agg.cacheHitRate).toBe(0);
     expect(agg.cacheHitRate).not.toBeNaN();
     expect(agg.cacheHitRate).not.toBeNull();
@@ -91,7 +91,7 @@ describe("queryUsageAggregate cache metrics", () => {
     // hermes: 100 cache read / 200 input + 100 cache read = 100/300
     seedDay(db, "hermes", utcDay(), { input: 200, cacheRead: 100, model: "kimi-k27-code", modelInput: 200, modelCacheRead: 100 });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     // window total: 400 / (400 + 1200) = 0.25
     expect(agg.cacheHitRate).toBeCloseTo(0.25, 5);
     expect(agg.bySource.opencode.cacheHitRate).toBeCloseTo(300 / 1300, 5);

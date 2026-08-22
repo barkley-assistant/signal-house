@@ -12,6 +12,9 @@ import type { Collector } from "../collectors";
 import { parsedLatestStates } from "../db/latest-state";
 import { getRefreshMetaMany } from "../db/refresh-meta";
 import { computeAggregates, type UsageAggregate } from "../orchestrator/aggregates";
+import { fetchAllRates } from "../server/model-pricing";
+import { getPricingCacheStatus } from "../server/model-pricing-fetcher";
+import type { ModelRates } from "../shared/types";
 import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/privacy";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
@@ -77,7 +80,7 @@ export interface StatePayload {
 
 const ATTENTION_LIMIT = 20;
 
-export function buildState(db: Database, config: RuntimeConfig, collectors: Collector[], now: number = Date.now(), days: number = DEFAULT_WINDOW_DAYS): StatePayload {
+export async function buildState(db: Database, config: RuntimeConfig, collectors: Collector[], now: number = Date.now(), days: number = DEFAULT_WINDOW_DAYS): Promise<StatePayload> {
   const states = parsedLatestStates(db);
 
   const bySource = new Map(states.map((s) => [s.source, s]));
@@ -86,7 +89,23 @@ export function buildState(db: Database, config: RuntimeConfig, collectors: Coll
   // derivation is the fallback inside computeAggregates.
   const start = utcDaysAgo(days);
   const end = utcDay();
-  const aggregates = computeAggregates(states, config, days, queryUsageAggregate(db, start, end));
+
+  // Pre-fetch model rates for estimation. The aggregator reads from this map
+  // per-row without awaiting (it's a sync lookup). Dedupes by machine key.
+  // We collect the model keys from all per-source byModel rows. If estimation
+  // is off, the map is unused but still cheap to build (empty if no rows).
+  const allModelKeys = states.flatMap((s) =>
+    (s.data?.usage?.byModel ?? []).map((m) => m.model),
+  );
+  const costRates: Map<string, ModelRates> = await fetchAllRates(allModelKeys);
+
+  const aggregates = computeAggregates(
+    states,
+    config,
+    days,
+    queryUsageAggregate(db, start, end, costRates, config.estimateCosts),
+    costRates,
+  );
 
   const allRepos = states.flatMap((s) => s.data!.repositories);
   const privacyMap = resolvePrivacyMap(allRepos);

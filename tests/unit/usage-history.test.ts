@@ -61,7 +61,7 @@ function seedDay(db: Database, source: string, date: string, opts: { sessions?: 
 describe("queryUsageAggregate", () => {
   test("returns null when the window has no rows at all", () => {
     const db = openDb();
-    expect(queryUsageAggregate(db, utcDaysAgo(30), utcDay())).toBeNull();
+    expect(queryUsageAggregate(db, utcDaysAgo(30), utcDay(), new Map(), false)).toBeNull();
     db.close();
   });
 
@@ -72,7 +72,7 @@ describe("queryUsageAggregate", () => {
     seedDay(db, "hermes", utcDaysAgo(1), { sessions: 1, cost: 1, tokens: 500, model: "DeepSeek-V4-Pro", modelSessions: 1, modelCost: 1 });
     seedDay(db, "opencode", utcDaysAgo(1), { sessions: 3, cost: 2, tokens: 2000, model: "DeepSeek-V4-Pro", modelSessions: 3, modelCost: 2 });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     expect(agg.totalSessions).toBe(6);
     expect(agg.totalCost).toBeCloseTo(4, 5);
     expect(agg.totalTokens).toBeCloseTo(3500, 5);
@@ -86,12 +86,12 @@ describe("queryUsageAggregate", () => {
     seedDay(db, "hermes", utcDaysAgo(40), { sessions: 5, cost: 50, tokens: 5000, model: "Oldmodel", modelSessions: 5, modelCost: 50 });
     seedDay(db, "hermes", utcDay(), { sessions: 1, cost: 1, tokens: 100, model: "Weekmodel", modelSessions: 1, modelCost: 1 });
 
-    const week = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const week = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     expect(week.totalSessions).toBe(1);
     expect(week.totalCost).toBeCloseTo(1, 5);
     expect(week.byModel.map((m) => m.model)).toEqual(["Weekmodel"]);
 
-    const ninety = queryUsageAggregate(db, utcDaysAgo(90), utcDay())!;
+    const ninety = queryUsageAggregate(db, utcDaysAgo(90), utcDay(), new Map(), false)!;
     expect(ninety.totalSessions).toBe(6);
     expect(ninety.byModel.map((m) => m.model).sort()).toEqual(["Oldmodel", "Weekmodel"]);
     db.close();
@@ -102,7 +102,7 @@ describe("queryUsageAggregate", () => {
     // cost.total and tokens written as NULL (telemetry absent that day)
     seedDay(db, "hermes", utcDay(), { sessions: 4, cost: null, tokens: null, model: "Nocost", modelSessions: 4, modelCost: null });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     expect(agg.totalSessions).toBe(4);
     expect(agg.totalCost).toBeNull();
     expect(agg.totalTokens).toBeNull();
@@ -120,7 +120,7 @@ describe("queryUsageAggregate", () => {
     // "unknown" carries no signal and must be dropped from the table
     seedDay(db, "opencode", utcDay(), { model: "unknown", modelSessions: 9, modelCost: 9, modelTokens: 9, modelOnly: true });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     expect(agg.byModel).toHaveLength(1);
     expect(agg.byModel[0].model).toBe("DeepSeek V4 Pro"); // curated label
     expect(agg.byModel[0].sessions).toBe(3);
@@ -134,7 +134,7 @@ describe("queryUsageAggregate", () => {
     seedDay(db, "hermes", utcDaysAgo(2), { sessions: 1, cost: 5, tokens: 10 });
     seedDay(db, "hermes", utcDaysAgo(1), { sessions: 1, cost: null, tokens: 10 });
 
-    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay())!;
+    const agg = queryUsageAggregate(db, utcDaysAgo(7), utcDay(), new Map(), false)!;
     // known day contributes; unknown day does not fabricate a zero — but the
     // total must still reflect the known $5.
     expect(agg.totalCost).toBeCloseTo(5, 5);

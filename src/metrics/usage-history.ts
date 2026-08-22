@@ -16,6 +16,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { UsageAggregate } from "../orchestrator/aggregates";
+import type { ModelRates } from "../shared/types";
 import { mergeModelRows } from "../orchestrator/aggregates";
 
 const DAY_METRICS = [
@@ -38,7 +39,7 @@ function knownSum(values: Array<number | null>): number | null {
   return known.length > 0 ? known.reduce((a, b) => a + b, 0) : null;
 }
 
-export function queryUsageAggregate(db: Database, from: string, to: string): UsageAggregate | null {
+export function queryUsageAggregate(db: Database, from: string, to: string, costRates: Map<string, ModelRates>, estimateCosts: boolean): UsageAggregate | null {
   const placeholders = DAY_METRICS.map(() => "?").join(",");
   const rows = db
     .query(
@@ -92,7 +93,7 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
     windowInput += inputTokens;
   }
 
-  const byModel = queryModelRows(db, from, to);
+  const byModel = queryModelRows(db, from, to, costRates, estimateCosts);
   let windowSavings = 0;
   for (const m of byModel) {
     windowSavings += m.cacheSavings ?? 0;
@@ -120,7 +121,7 @@ export function queryUsageAggregate(db: Database, from: string, to: string): Usa
 /** Per-model rows from the accumulated daily_metrics model history, merged
  *  across sources into one row per normalized model (labels/families from
  *  the curated map, "unknown" dropped, sessions desc). */
-function queryModelRows(db: Database, from: string, to: string): UsageAggregate["byModel"] {
+function queryModelRows(db: Database, from: string, to: string, costRates: Map<string, ModelRates>, estimateCosts: boolean): UsageAggregate["byModel"] {
   const rows = db
     .query(
       `SELECT source, json_extract(tags, '$.model') AS model, metric, SUM(value) AS value
@@ -195,5 +196,7 @@ function queryModelRows(db: Database, from: string, to: string): UsageAggregate[
       reasoningTokens: r.reasoningTokens,
       cost: r.cost,
     })),
+    costRates,
+    estimateCosts,
   );
 }

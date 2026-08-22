@@ -75,6 +75,11 @@ export function buildRatesMap(entries: Iterable<readonly [string, ModelRates]>):
  * resolver normalises). Tries litellm first, then operator's local
  * opencode.jsonc, then returns all zeros.
  *
+ * The dashboard doesn't distinguish litellm-source from local-source rows
+ * visually (one shared footnote covers both). For v1 the resolver returns
+ * only the rates; if a future UI wants per-row provenance we can extend
+ * the return type to include the hit-source.
+ *
  * Never throws, never returns NaN. Caller can treat `{0,0,0}` as
  * "we don't know the price for this model."
  */

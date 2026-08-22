@@ -24,9 +24,10 @@ export interface ApiDeps {
 }
 
 /** GET /api/state — optional `?days=7|30|90` scopes every windowed metric. */
-export function stateHandler(deps: ApiDeps, req: Request): Response {
+export async function stateHandler(deps: ApiDeps, req: Request): Promise<Response> {
   const days = parseWindowDays(new URL(req.url).searchParams.get("days"));
-  return json(req, buildState(deps.db, deps.config, deps.collectors, Date.now(), days));
+  const payload = await buildState(deps.db, deps.config, deps.collectors, Date.now(), days);
+  return json(req, payload);
 }
 
 /** GET /api/diagnostics — lazy; the UI only fetches when the panel opens. */
