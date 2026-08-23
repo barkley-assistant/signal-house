@@ -61,6 +61,9 @@ const TOP_HEIGHT = 110;
 const BOTTOM_HEIGHT = 110;
 const GRID_LEFT = 44;
 const GRID_RIGHT = 16;
+// Legend sits at the top of every delivery chart; this reserves breathing
+// room between the legend row and the plot (Agent Spend uses 48 at ~2x size).
+const GRID_TOP_LEGEND = 30;
 
 function fmtDayShort(d: string): string {
   const [y, m, day] = d.split("-").map(Number);
@@ -239,7 +242,7 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 22, bottom: 18, containLabel: false },
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: GRID_TOP_LEGEND, bottom: 18, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
@@ -364,7 +367,8 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 16, bottom: 18, containLabel: false },
+      // CI has no legend but shares the same plot top so all three rows align.
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: GRID_TOP_LEGEND, bottom: 18, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
@@ -443,7 +447,7 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       animationDuration: 600,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 22, bottom: 18, containLabel: false },
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: GRID_TOP_LEGEND, bottom: 18, containLabel: false },
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
