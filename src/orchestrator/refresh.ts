@@ -17,7 +17,7 @@ import type { Collector, CollectorResult, SourceData, RefreshStatusKind, Collect
 import type { RuntimeConfig } from "../config/types";
 import type { PersistedState } from "../config/types";
 import type { DatabaseOwner } from "../db/client";
-import { insertSnapshot } from "../db/snapshots";
+import { insertSnapshotIfChanged } from "../db/snapshots";
 import { setLatestState, getAllLatestState } from "../db/latest-state";
 import { setRefreshMeta } from "../db/refresh-meta";
 import { replaceDayForSource, backfillDaysForSource } from "../db/daily-metrics";
@@ -149,7 +149,9 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
           usage: persisted.usage,
         };
         setLatestState(ctx.owner.db, result.source, state, nowMs);
-        insertSnapshot(ctx.owner.db, result.source, nowMs, persisted);
+        // Append-only history: skip the row when nothing changed (issue
+        // #361 phase 2) — an absent snapshot means "identical to previous".
+        insertSnapshotIfChanged(ctx.owner.db, result.source, nowMs, persisted);
 
         // Same-day metrics replace; earlier days upsert (refresh rows whose
         // values changed, leave pruned-upstream days untouched).

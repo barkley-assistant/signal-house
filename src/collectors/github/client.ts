@@ -98,6 +98,41 @@ const API_BASE = "https://api.github.com";
 // calls trip its secondary rate limits — 5 is a conservative middle ground.
 const REPO_CONCURRENCY = 5;
 
+/** One cached response for conditional-request reuse (issue #361 phase 2). */
+interface EtagEntry {
+  etag: string;
+  body: unknown;
+  /** Link header captured with the response, so a 304 can still paginate. */
+  link: string | null;
+}
+
+/**
+ * Process-lifetime etag cache: request URL → last response. Conditional
+ * requests that answer 304 are served from this cache and (per GitHub's
+ * documented behaviour) do not count against the core rate limit — the
+ * whole point at a 10-minute poll cadence where most answers are "unchanged".
+ */
+const etagCache = new Map<string, EtagEntry>();
+
+export function etagCacheSizeForTesting(): number {
+  return etagCache.size;
+}
+
+export function clearEtagCacheForTesting(): void {
+  etagCache.clear();
+}
+
+/**
+ * Pure predicate for pulls-pagination early stop (phase 2): the pulls API
+ * has no date filter, but results come newest-first (sort=updated), so once
+ * a whole page is older than `since` AND contains no open PRs, every later
+ * page is too — stop. Pages containing ANY open PR always continue, because
+ * open PRs are kept regardless of age.
+ */
+export function shouldStopPullPaging(pagePulls: Array<{ state?: unknown; updated_at?: unknown }>, since: string): boolean {
+  return pagePulls.length > 0 && pagePulls.every((pr) => pr.state !== "open" && !withinWindow(pr.updated_at as string | undefined, since));
+}
+
 export class GitHubClient {
   private readonly headers: Record<string, string>;
   private readonly timeoutMs: number;
@@ -116,8 +151,10 @@ export class GitHubClient {
    * GET with pagination; returns all items across pages.
    * Some endpoints wrap the list in an object ({total_count, <listKey>: []});
    * pass listKey to unwrap. Flat arrays are accepted too.
+   * Optional `stopWhen`: inspected after each page — when it returns true,
+   * pagination stops (later pages cannot contain wanted items).
    */
-  private async getPaged<T>(path: string, params: Record<string, string | number>, listKey?: string): Promise<T[]> {
+  private async getPaged<T>(path: string, params: Record<string, string | number>, listKey?: string, stopWhen?: (pageItems: T[]) => boolean): Promise<T[]> {
     const url = new URL(`${opts_base(this.opts)}${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
@@ -138,6 +175,7 @@ export class GitHubClient {
       }
       items.push(...(list as T[]));
       page++;
+      if (stopWhen && stopWhen(list as T[])) break;
       nextUrl = parseNextLink(res.headers.get("link"));
     }
     return items;
@@ -148,12 +186,35 @@ export class GitHubClient {
     const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
     let res: Response;
     try {
-      res = await fetch(url, { headers: this.headers, signal: ctrl.signal });
+      const cached = etagCache.get(url);
+      const headers: Record<string, string> = { ...this.headers };
+      if (cached) headers["if-none-match"] = cached.etag;
+      res = await fetch(url, { headers, signal: ctrl.signal });
     } catch (err) {
       const aborted = ctrl.signal.aborted;
       throw new GitHubError("network", aborted ? `request timed out after ${this.timeoutMs}ms` : `network error: ${message(err)}`, true);
     } finally {
       clearTimeout(timer);
+    }
+
+    if (res.status === 304) {
+      // Not modified — serve the cached body. GitHub does not charge core
+      // rate limit for conditional requests answered 304.
+      const cached = etagCache.get(url);
+      if (cached) {
+        const replayHeaders = new Headers();
+        for (const h of ["etag", "x-ratelimit-remaining", "x-ratelimit-reset"]) {
+          const v = res.headers.get(h);
+          if (v) replayHeaders.set(h, v);
+        }
+        if (cached.link) replayHeaders.set("link", cached.link);
+        return new Response(JSON.stringify(cached.body), {
+          status: 200,
+          headers: replayHeaders,
+        });
+      }
+      // No cache entry (shouldn't happen — we only send if-none-match when
+      // we hold an etag). Fall through and treat as a normal error below.
     }
 
     if (res.status === 401) throw new GitHubError("auth", "GitHub authentication failed (401) — token invalid or missing scopes", false, 401);
@@ -169,6 +230,17 @@ export class GitHubClient {
     }
     if (res.status === 404) throw new GitHubError("not_found", `GitHub resource not found (404): ${redactUrl(url)}`, false, 404, new URL(url).pathname);
     if (!res.ok) throw new GitHubError("http", `GitHub HTTP ${res.status} for ${redactUrl(url)}`, true, res.status);
+
+    // Cache successful GETs for future conditional reuse.
+    const etag = res.headers.get("etag");
+    if (etag && res.status === 200) {
+      try {
+        const body: unknown = await res.clone().json();
+        etagCache.set(url, { etag, body, link: res.headers.get("link") });
+      } catch {
+        /* non-JSON body — nothing to cache */
+      }
+    }
     return res;
   }
 
@@ -179,7 +251,18 @@ export class GitHubClient {
     return raw.map(mapRepo);
   }
 
-  /** A single repo's details + issues + PRs + workflow runs. */
+  /** GET an arbitrary path through the full fetch pipeline (etag cache,
+   *  304 replay, error mapping). @visible-for-testing — exercises the same
+   *  code path as every endpoint without inventing fake internals. */
+  async listThingsForTest(path: string): Promise<unknown[]> {
+    return this.getPaged<Record<string, unknown>>(path, {});
+  }
+
+  /** A single repo's details + issues + PRs + workflow runs.
+   *  Phase 2 (issue #361): server-side filtering where the API supports it —
+   *  issues take `since`, workflow runs take `created` — and the pulls list
+   *  (no server filter exists) stops paginating once a whole page is older
+   *  than the window with no open PRs aboard. */
   async fetchRepo(owner: string, repoName: string, since: string): Promise<GitHubRepoDetail> {
     const encOwner = encodeURIComponent(owner);
     const encRepo = encodeURIComponent(repoName);
@@ -189,16 +272,29 @@ export class GitHubClient {
     const pullsPath = `/repos/${encOwner}/${encRepo}/pulls`;
     const [detailRes, issues, pullRequests, workflowRuns] = await Promise.all([
       this.fetchJson(`${opts_base(this.opts)}/repos/${encOwner}/${encRepo}`).then((r) => r.json() as Promise<Record<string, unknown>>),
-      this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/issues`, {
-        state: "all",
-        since,
-        per_page: 100,
-      }),
-      this.getPaged<Record<string, unknown>>(pullsPath, { state: "all", per_page: 100 }).catch((err: unknown) => {
+      this.getPaged<Record<string, unknown>>(
+        `/repos/${encOwner}/${encRepo}/issues`,
+        {
+          state: "all",
+          since,
+          per_page: 100,
+        },
+      ),
+      this.getPaged<Record<string, unknown>>(
+        pullsPath,
+        { state: "all", per_page: 100, sort: "updated", direction: "desc" },
+        undefined,
+        (page) => shouldStopPullPaging(page, since),
+      ).catch((err: unknown) => {
         if (err instanceof GitHubError && err.kind === "not_found" && err.path?.endsWith("/pulls")) return [];
         throw err;
       }),
-      this.getPaged<Record<string, unknown>>(`/repos/${encOwner}/${encRepo}/actions/runs`, { per_page: 100 }, "workflow_runs"),
+      this.getPaged<Record<string, unknown>>(
+        `/repos/${encOwner}/${encRepo}/actions/runs`,
+        // Server-side window: only runs created in the lookback period.
+        { per_page: 100, created: `>=${since}` },
+        "workflow_runs",
+      ),
     ]);
 
     const repoSummary = mapRepo(detailRes);
