@@ -211,3 +211,29 @@ export async function loadDeliveryTrend(days: WindowDays): Promise<DeliveryPoint
     return [];
   }
 }
+
+export interface ResourcePoint {
+  date: string;
+  /** Percentages 0–100; null = no data that day (renders as a gap, never 0). */
+  memPct: number | null;
+  swapPct: number | null;
+  cpuPct: number | null;
+}
+
+export interface ResourceTrendResponse {
+  enabled: boolean;
+  points: ResourcePoint[];
+}
+
+/** Load the optional host-resource trend. Disabled servers answer
+ *  `{ enabled: false, points: [] }`; transport errors degrade to the same
+ *  shape so the chart hides instead of erroring the panel. */
+export async function loadResourceTrend(days: WindowDays): Promise<ResourceTrendResponse> {
+  try {
+    const res = await fetchJson<ResourceTrendResponse>(`/api/daily/resource?days=${days}`);
+    if (!res.enabled || res.points.length === 0) return { enabled: false, points: [] };
+    return res;
+  } catch {
+    return { enabled: false, points: [] };
+  }
+}

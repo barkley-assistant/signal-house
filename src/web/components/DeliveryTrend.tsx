@@ -1,11 +1,27 @@
 /**
- * Delivery panel — CI pass-rate (per-day bar chart, 0–100%) paired with a
- * Throughput stacked bar (commits + PRs merged). Two ECharts instances sit
- * side-by-side on tablet/desktop and stack vertically on phones (<=700px).
+ * Delivery panel — optional host-resource line chart (memory / swap / CPU %),
+ * CI pass-rate (per-day bar chart, 0–100%), and a Throughput stacked bar
+ * (commits + PRs merged).
+ *
+ * Layout has two shapes, chosen by data rather than props:
+ *  - Default: CI ∥ Throughput side-by-side on tablet/desktop (.delivery-grid),
+ *    stacked vertically on phones (<=700px).
+ *  - When /api/daily/resource reports host metrics enabled WITH data, the
+ *    panel switches to .delivery-stack: Resource full-width first, then CI,
+ *    then Throughput. Both charts' DOM nodes live in ONE container whose
+ *    class switches — moving refs between different containers would
+ *    unmount the nodes and orphan their ECharts instances.
+ *
+ * The resource chart is fully opt-in server-side (SIGNAL_HOUSE_HOST_METRICS_
+ * ENABLED). Disabled or dataless responses render zero artifact: the chart
+ * div simply stays display:none and the grid layout never changes.
+ *
  * Styling mirrors the Daily cost & tokens chart: same dark background, same
  * muted split lines, same tooltip shell, same 11px legend.
  *
  * Missing-day treatment:
+ *  - Resource percentages null → connectNulls:false line gaps; the tooltip
+ *    surfaces "No data" (or names which series are missing when partial).
  *  - CI null (no terminal runs) → tiny baseline marker (CI_BAR_FAINT) so the
  *    x-axis is dense but quiet. The tooltip surfaces "No CI runs".
  *  - Commits / PRs null (no telemetry that day) → ECharts bars with null
@@ -14,7 +30,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
-import { useDash, loadDeliveryTrend, type DeliveryPoint } from "../state/store";
+import { useDash, loadDeliveryTrend, loadResourceTrend, type DeliveryPoint, type ResourcePoint } from "../state/store";
 import { formatNumber } from "../../shared/format";
 import { touchAwareTooltip } from "./chart-tooltip";
 
@@ -23,6 +39,12 @@ import { touchAwareTooltip } from "./chart-tooltip";
 const CI_COLOR = "#4ade80"; // var(--success) — green
 const COMMITS_COLOR = "#94a3b8"; // var(--text-secondary) — slate
 const PR_COLOR = "#38bdf8"; // var(--info) — blue
+
+// Host-resource series colours — the shared chart palette from the panel
+// design rules (blue/yellow/green), matching Agent Spend's accents.
+const MEM_COLOR = "#38bdf8";
+const SWAP_COLOR = "#facc15";
+const CPU_COLOR = "#4ade80";
 
 // Rate-band colours for the CI bar chart. The visual cue is a more honest
 // read of the line-chart's area-fill: green says "we're clean", amber
@@ -75,28 +97,38 @@ const COMMON_TOOLTIP = {
 };
 
 export function DeliveryTrend() {
+  const resRef = useRef<HTMLDivElement>(null);
   const ciRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const resChartRef = useRef<echarts.ECharts | null>(null);
   const ciChartRef = useRef<echarts.ECharts | null>(null);
   const barChartRef = useRef<echarts.ECharts | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasData, setHasData] = useState(true);
+  // Resource chart visibility comes from the API's enabled flag — no local
+  // config surface, so a disabled server renders zero extra chrome.
+  const [resPoints, setResPoints] = useState<ResourcePoint[] | null>(null);
   const days = useDash((s) => s.days);
 
   useEffect(() => {
     if (!ciRef.current || !barRef.current) return;
+    if (resRef.current) resChartRef.current = echarts.init(resRef.current, "dark");
     ciChartRef.current = echarts.init(ciRef.current, "dark");
     barChartRef.current = echarts.init(barRef.current, "dark");
     const ro = new ResizeObserver(() => {
+      resChartRef.current?.resize();
       ciChartRef.current?.resize();
       barChartRef.current?.resize();
     });
     ro.observe(ciRef.current);
     ro.observe(barRef.current);
+    if (resRef.current) ro.observe(resRef.current);
     return () => {
       ro.disconnect();
+      resChartRef.current?.dispose();
       ciChartRef.current?.dispose();
       barChartRef.current?.dispose();
+      resChartRef.current = null;
       ciChartRef.current = null;
       barChartRef.current = null;
     };
@@ -104,8 +136,9 @@ export function DeliveryTrend() {
 
   useEffect(() => {
     let disposed = false;
-    void loadDeliveryTrend(days).then((points) => {
+    void Promise.all([loadDeliveryTrend(days), loadResourceTrend(days)]).then(([points, resource]) => {
       if (disposed || !ciChartRef.current || !barChartRef.current) return;
+      setResPoints(resource.points.length > 0 ? resource.points : null);
       if (points.length === 0) {
         setHasData(false);
         setLoading(false);
@@ -121,19 +154,35 @@ export function DeliveryTrend() {
     };
   }, [days]);
 
+  useEffect(() => {
+    if (!resChartRef.current || !resPoints || resPoints.length === 0) return;
+    renderResource(resChartRef.current, resPoints);
+  }, [resPoints]);
+
+  // One stable container; the class chooses grid (CI ∥ Throughput) or stack
+  // (Resource → CI → Throughput). Chart nodes never remount on toggle.
+  const showRes = resPoints !== null && !loading && hasData;
+
   return (
-    <section className="card delivery-card" aria-label="Delivery — CI health and shipping activity">
+    <section className="card delivery-card" aria-label="Delivery — host resources, CI health and shipping activity">
       <h2>Delivery</h2>
       {!hasData && !loading ? (
         <p className="state-label">No delivery data yet — GitHub collector unavailable or no runs in window</p>
       ) : (
-        <div className="delivery-grid" aria-busy={loading || undefined}>
+        <div className={showRes ? "delivery-stack" : "delivery-grid"} aria-busy={loading || undefined}>
           {loading ? (
             <>
               <div className="skeleton" style={{ height: TOP_HEIGHT }} />
               <div className="skeleton" style={{ height: BOTTOM_HEIGHT }} />
             </>
           ) : null}
+          <div
+            ref={resRef}
+            className="delivery-chart"
+            style={{ height: TOP_HEIGHT, display: showRes ? "block" : "none" }}
+            aria-label="Host resources — memory, swap and CPU utilization per day"
+            aria-hidden={!showRes || undefined}
+          />
           <div
             ref={ciRef}
             className="delivery-chart"
@@ -149,6 +198,96 @@ export function DeliveryTrend() {
         </div>
       )}
     </section>
+  );
+}
+
+/** Render the per-day host-resource percentages as a 3-series line chart.
+ *
+ *  Memory / swap / CPU are all 0–100% on one axis, so a single shared
+ *  y-scale is honest — no per-series normalization to misread. Days with
+ *  no archive data stay null and connectNulls:false breaks the line there:
+ *  gaps mean "no data", never zero. The tooltip names the missing series
+ *  when a day is only partially covered (e.g. swap added later). */
+function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
+  const dates = points.map((p) => p.date);
+
+  const seriesOf = (name: string, key: "memPct" | "swapPct" | "cpuPct", color: string) => ({
+    name,
+    type: "line" as const,
+    data: points.map((p) => p[key]),
+    smooth: 0.3,
+    showSymbol: false,
+    connectNulls: false,
+    lineStyle: { color, width: 2 },
+    itemStyle: { color },
+    emphasis: { focus: "series" as const },
+  });
+
+  chart.setOption(
+    {
+      animation: true,
+      animationDuration: 600,
+      animationEasing: "cubicOut",
+      backgroundColor: "transparent",
+      grid: { left: GRID_LEFT, right: GRID_RIGHT, top: 22, bottom: 18, containLabel: false },
+      tooltip: {
+        ...COMMON_TOOLTIP,
+        ...touchAwareTooltip(),
+        axisPointer: { type: "line", lineStyle: { color: "#232732" } },
+        formatter: (params: unknown) => {
+          const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
+          if (!arr.length) return "";
+          const p = points.find((q) => q.date === arr[0].axisValue);
+          if (!p) return "";
+          const visible = arr.filter((row) => row.value !== null);
+          const missing = arr.filter((row) => row.value === null).map((row) => row.seriesName);
+          const rowsHtml =
+            visible.length > 0
+              ? visible
+                  .map((row) => `${row.marker} ${row.seriesName}: <b style="color:#e2e8f0">${(row.value as number).toFixed(1)}%</b>`)
+                  .join("<br/>")
+              : `<div style="color:#64748b;font-style:italic">No data</div>`;
+          const extras =
+            visible.length > 0 && missing.length > 0
+              ? `<div style="margin-top:4px;color:#64748b;font-size:11px">${missing.join(" · ")}: no data</div>`
+              : "";
+          return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${fmtDayFull(arr[0].axisValue)}</div>${rowsHtml}${extras}`;
+        },
+      },
+      legend: {
+        data: ["Memory", "Swap", "CPU"],
+        orient: "horizontal",
+        top: 0,
+        right: 8,
+        icon: "circle",
+        itemWidth: 8,
+        itemHeight: 8,
+        itemGap: 14,
+        textStyle: { color: "#94a3b8", fontSize: 11 },
+      },
+      xAxis: {
+        type: "category",
+        data: dates,
+        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
+        axisLine: { lineStyle: { color: "#232732" } },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: 100,
+        axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `${v}%`, interval: 24 },
+        splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+        axisLine: { show: false },
+        axisTick: { show: false },
+      },
+      series: [
+        seriesOf("Memory", "memPct", MEM_COLOR),
+        seriesOf("Swap", "swapPct", SWAP_COLOR),
+        seriesOf("CPU", "cpuPct", CPU_COLOR),
+      ],
+    },
+    true
   );
 }
 

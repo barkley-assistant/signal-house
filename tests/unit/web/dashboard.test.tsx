@@ -544,4 +544,82 @@ describe("DeliveryTrend", () => {
       expect(screen.getByText(/No delivery data yet/i)).toBeTruthy();
     });
   });
+
+  // Route-aware fetch stub for the resource-chart cases: the panel now
+  // loads /api/daily/delivery AND /api/daily/resource in parallel.
+  function mockFetchRoutes(routes: { delivery?: unknown; resource?: unknown }) {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+      const body = url.includes("/api/daily/resource") ? routes.resource : routes.delivery;
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+  }
+
+  function captureInit() {
+    const options: unknown[] = [];
+    vi.spyOn(echarts, "init").mockImplementation(((el: unknown) => ({
+      setOption: (opt: unknown) => options.push(opt),
+      resize() {},
+      dispose() {},
+      on() {},
+      getDom: () => el,
+    })) as unknown as typeof echarts.init);
+    return options;
+  }
+
+  const RESOURCE_POINTS = [
+    { date: "2026-08-19", memPct: null, swapPct: null, cpuPct: null },
+    { date: "2026-08-20", memPct: 59.7, swapPct: 14.9, cpuPct: 4.7 },
+    { date: "2026-08-21", memPct: 61.2, swapPct: 15.1, cpuPct: 6.2 },
+  ];
+
+  test("resource chart stays hidden when host metrics are disabled", async () => {
+    const options = captureInit();
+    mockFetchRoutes({ delivery: { points: [{ date: "2026-08-20", ci: { totalRuns: 10, passCount: 9, failCount: 1, passRate: 0.9 }, commits: 4, prsMerged: 1 }] }, resource: { enabled: false, points: [] } });
+
+    render(<DeliveryTrend />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("CI pass-rate trend")).toBeTruthy();
+    });
+
+    // No resource node exposed: the node exists (stable container) but is
+    // display:none + aria-hidden, and the grid layout is preserved.
+    expect(document.querySelector(".delivery-grid")).toBeTruthy();
+    expect(document.querySelector(".delivery-stack")).toBeNull();
+    const resNode = document.querySelector('div[aria-label^="Host resources"]') as HTMLElement;
+    expect(resNode).toBeTruthy();
+    expect(resNode.style.display).toBe("none");
+    expect(resNode.getAttribute("aria-hidden")).toBe("true");
+    // Only the two default charts were ever rendered.
+    const seriesNames = options
+      .flatMap((o) => ((o as { series?: Array<{ name?: string }> }).series ?? []).map((s) => s.name));
+    expect(seriesNames).not.toContain("Memory");
+  });
+
+  test("resource chart renders first-of-three when enabled with data", async () => {
+    const options = captureInit();
+    mockFetchRoutes({
+      delivery: { points: [{ date: "2026-08-20", ci: { totalRuns: 10, passCount: 9, failCount: 1, passRate: 0.9 }, commits: 4, prsMerged: 1 }] },
+      resource: { enabled: true, points: RESOURCE_POINTS },
+    });
+
+    render(<DeliveryTrend />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("CI pass-rate trend")).toBeTruthy();
+      expect(screen.getByLabelText("Throughput — commits and PRs merged per day")).toBeTruthy();
+    });
+    expect(screen.getByLabelText("Host resources — memory, swap and CPU utilization per day")).toBeTruthy();
+
+    // Stacked full-width layout replaces the side-by-side grid.
+    expect(document.querySelector(".delivery-stack")).toBeTruthy();
+
+    // The resource renderer got a Memory/Swap/CPU series on a shared 0–100 axis.
+    const res = options.find((o) =>
+      ((o as { series?: Array<{ name?: string }> }).series ?? []).some((s) => s.name === "Memory"),
+    ) as { yAxis?: { max?: number }; series?: Array<{ name?: string; connectNulls?: boolean }> } | undefined;
+    expect(res).toBeTruthy();
+    expect(res!.yAxis?.max).toBe(100);
+    expect(res!.series?.find((s) => s.name === "Swap")).toBeTruthy();
+    expect(res!.series?.find((s) => s.name === "CPU")?.connectNulls).toBe(false);
+  });
 });
