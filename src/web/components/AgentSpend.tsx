@@ -124,6 +124,27 @@ function SpendSource({ label, source, usage }: { label: string; source: string; 
   );
 }
 
+/** Read a persisted ECharts legend selection ({seriesName: visible}) from
+ *  localStorage. Absent key, corrupt JSON, or non-object payload → undefined
+ *  (ECharts then shows every series — the natural default). */
+export function readLegendSelection(storageKey: string): Record<string, boolean> | undefined {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, boolean> = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v === "boolean") out[k] = v;
+      }
+      return Object.keys(out).length > 0 ? out : undefined;
+    }
+  } catch {
+    /* corrupt or unavailable storage — default to all-visible */
+  }
+  return undefined;
+}
+
 /** Daily cost + token trend from /api/daily/spend, styled natively to the
  *  dashboard: card background, token palette, faint split lines matching the
  *  table borders. Dual y-axes — cost (left, blue) and tokens (right, yellow).
@@ -134,6 +155,8 @@ function DailyUsageChart() {
   const chartRef = useRef<echarts.ECharts | null>(null);
   const [loading, setLoading] = useState(true);
   const days = useDash((s) => s.days);
+  // Persisted legend selection: which of Cost/Tokens/Cache read are on.
+  const LEGEND_STORAGE_KEY = "signal-house:daily-usage-legend";
   // Axis peaks are computed once per window and frozen within it — they
   // define the chart's y-scale. A deliberate window change rescales to fit
   // the new data; the 30s poll within a window must not (recomputing on
@@ -193,6 +216,14 @@ function DailyUsageChart() {
       // to the full-dataset peak so the surviving series has its full context
       // — no auto-rescale to the remaining (smaller) data.
       const onLegendToggle = () => {
+        // Persist which series are on so the choice survives reloads
+        // (issue: "sorting and filtering settings should remember").
+        try {
+          const legendOpt = chartRef.current?.getOption().legend as Array<{ selected?: Record<string, boolean> }> | undefined;
+          localStorage.setItem(LEGEND_STORAGE_KEY, JSON.stringify(legendOpt?.[0]?.selected ?? {}));
+        } catch {
+          /* storage unavailable — toggling still works this session */
+        }
         chartRef.current?.setOption(
           {
             yAxis: [
@@ -270,6 +301,9 @@ function DailyUsageChart() {
         ],
         legend: {
           data: ["Cost ($)", "Tokens", "Cache read"],
+          // Restore the operator's last legend toggles (persisted in
+          // onLegendToggle). Unknown/absent keys default to visible.
+          selected: readLegendSelection(LEGEND_STORAGE_KEY),
           orient: "horizontal",
           top: 0,
           right: 8,

@@ -32,6 +32,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import { useDash, loadDeliveryTrend, loadResourceTrend, type DeliveryPoint, type ResourcePoint } from "../state/store";
+import { readLegendSelection } from "./AgentSpend";
 import { formatNumber } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
@@ -107,6 +108,24 @@ export function DeliveryTrend() {
   // config surface, so a disabled server renders zero extra chrome.
   const [resPoints, setResPoints] = useState<ResourcePoint[] | null>(null);
   const days = useDash((s) => s.days);
+  // Persisted legend selection for the resource chart (CPU/Memory/Swap).
+  const RES_LEGEND_STORAGE_KEY = "signal-house:resource-legend";
+
+  useEffect(() => {
+    if (!resChartRef.current) return;
+    const onLegendToggle = (): void => {
+      try {
+        const legendOpt = resChartRef.current?.getOption().legend as Array<{ selected?: Record<string, boolean> }> | undefined;
+        localStorage.setItem(RES_LEGEND_STORAGE_KEY, JSON.stringify(legendOpt?.[0]?.selected ?? {}));
+      } catch {
+        /* storage unavailable — toggling still works this session */
+      }
+    };
+    resChartRef.current.on("legendselectchanged", onLegendToggle);
+    return () => {
+      resChartRef.current?.off("legendselectchanged", onLegendToggle);
+    };
+  }, []);
 
   useEffect(() => {
     if (!ciRef.current || !barRef.current) return;
@@ -154,7 +173,7 @@ export function DeliveryTrend() {
 
   useEffect(() => {
     if (!resChartRef.current || !resPoints || resPoints.length === 0) return;
-    renderResource(resChartRef.current, resPoints);
+    renderResource(resChartRef.current, resPoints, RES_LEGEND_STORAGE_KEY);
   }, [resPoints]);
 
   // One stable container; the class chooses the two-column grid (CI ∥
@@ -207,7 +226,7 @@ export function DeliveryTrend() {
  *  no archive data stay null and connectNulls:false breaks the line there:
  *  gaps mean "no data", never zero. The tooltip names the missing series
  *  when a day is only partially covered (e.g. swap added later). */
-function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
+function renderResource(chart: echarts.ECharts, points: ResourcePoint[], legendStorageKey: string): void {
   const dates = points.map((p) => p.date);
 
   // Same area-fill treatment as the Agent Spend chart: each series washes
@@ -265,6 +284,8 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
         // CPU leads the legend (operator preference). Legend display order
         // is independent of series paint order below.
         data: ["CPU", "Memory", "Swap"],
+        // Restore the operator's last legend toggles.
+        selected: readLegendSelection(legendStorageKey),
         orient: "horizontal",
         top: 0,
         right: 8,
