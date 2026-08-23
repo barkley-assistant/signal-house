@@ -18,7 +18,7 @@ import type { RuntimeConfig } from "../config/types";
 import type { PersistedState } from "../config/types";
 import type { DatabaseOwner } from "../db/client";
 import { insertSnapshot } from "../db/snapshots";
-import { setLatestState } from "../db/latest-state";
+import { setLatestState, getAllLatestState } from "../db/latest-state";
 import { setRefreshMeta } from "../db/refresh-meta";
 import { replaceDayForSource, backfillDaysForSource } from "../db/daily-metrics";
 import { runRetention } from "../db/retention";
@@ -60,10 +60,19 @@ export interface RefreshOutcome {
   results: CollectorResult<SourceData>[];
   partialData: boolean;
   privacyUncoveredCount: number;
+  /** Sources skipped this pass because their cadence hadn't elapsed. */
+  skipped: string[];
 }
 
 const REFRESH_META_KEY = "refresh_state";
 
+/**
+ * Refresh semantics:
+ * - `manual` forces every collector (operator override of cadence).
+ * - `poller` respects per-source cadence (issue #361): fast sources every
+ *   tick, github only when orchestrator.githubIntervalSeconds has elapsed
+ *   since its last successful capture.
+ */
 export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise<RefreshOutcome> {
   const startedAt = new Date().toISOString();
   const acquired = ctx.lock.acquire(owner);
@@ -76,6 +85,7 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
       results: [],
       partialData: false,
       privacyUncoveredCount: 0,
+      skipped: [],
     };
   }
 
@@ -84,7 +94,8 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
     // failure is logged inside the fetcher and never aborts the refresh.
     await ensurePricingCacheFresh();
 
-    const results = await runCollectors(ctx);
+    const forceAll = owner === "manual";
+    const { results, skipped } = await runCollectors(ctx, forceAll);
 
     const succeeded = results.filter((r) => r.ok && r.data !== null);
     const failed = results.filter((r) => !r.ok);
@@ -109,6 +120,7 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
         results,
         partialData: true,
         privacyUncoveredCount: privacyUncovered,
+        skipped,
       };
     }
 
@@ -190,6 +202,7 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
       results,
       partialData,
       privacyUncoveredCount: privacyUncovered,
+      skipped,
     };
   } catch (err) {
     log.error("refresh", `refresh crashed: ${(err as Error).message}`);
@@ -201,6 +214,7 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
       results: [],
       partialData: true,
       privacyUncoveredCount: 0,
+      skipped: [],
     };
   } finally {
     ctx.lock.release(acquired.token);
@@ -211,8 +225,13 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
  * Run all collectors. The git collector runs FIRST so the GitHub collector
  * can fetch issues/PRs/CI for every repo git discovered locally; everything
  * else (github, hermes, opencode, sessions) runs in a bounded pool.
+ *
+ * Per-source cadence (issue #361): when `forceAll` is false, a collector is
+ * SKIPPED unless it is due — see isCollectorDue. Skipped sources are absent
+ * from the returned results entirely (they are neither successes nor
+ * failures this pass).
  */
-async function runCollectors(ctx: RefreshContext): Promise<CollectorResult<SourceData>[]> {
+async function runCollectors(ctx: RefreshContext, forceAll: boolean): Promise<{ results: CollectorResult<SourceData>[]; skipped: string[] }> {
   const collectors = [...ctx.collectors];
   const results: CollectorResult<SourceData>[] = [];
 
@@ -231,9 +250,57 @@ async function runCollectors(ctx: RefreshContext): Promise<CollectorResult<Sourc
     }
   }
 
-  // Phase 1: everything else (including github, now with candidates).
-  results.push(...(await runCollectorPool(collectors, ctx.config.orchestrator.concurrency)));
-  return results;
+  // Phase 1: everything else (including github, now with candidates),
+  // filtered to sources that are actually due this pass.
+  const nowMs = Date.now();
+  const skipped: string[] = [];
+  const due: Collector[] = [];
+  if (forceAll) {
+    due.push(...collectors);
+  } else {
+    const lastSuccess = sourceLastSuccessMs(ctx.owner.db);
+    for (const c of collectors) {
+      if (isCollectorDue(c.id, lastSuccess.get(c.id) ?? null, nowMs, ctx.config)) due.push(c);
+      else skipped.push(String(c.id));
+    }
+  }
+  if (skipped.length > 0) {
+    log.info("refresh", "cadence: skipping not-yet-due sources", { skipped });
+  }
+
+  results.push(...(await runCollectorPool(due, ctx.config.orchestrator.concurrency)));
+  return { results, skipped };
+}
+
+/** Map of source → last SUCCESSFUL capture time (latest_state.updated ms).
+ *  Rows only exist for sources that completed and persisted data, so an
+ *  absent row means "never succeeded". */
+function sourceLastSuccessMs(db: Database): Map<string, number> {
+  return new Map(getAllLatestState(db).map((r) => [r.source, r.updated]));
+}
+
+/** Whether a collector should run in THIS pass (poller path; manual passes
+ *  force everything and never consult this).
+ *
+ *  Fast local sources (everything except github) run on every tick. GitHub
+ *  — a dozen-plus API calls per repo — only re-runs once
+ *  `orchestrator.githubIntervalSeconds` has elapsed since its last
+ *  successful capture.
+ *
+ *  Failure semantics fall out of keying off latest_state: a failed pass
+ *  persists nothing, so `lastOkAt` stays at the previous success and the
+ *  source remains due on every subsequent tick until it succeeds. A blip
+ *  delays the cadence rather than skipping data. */
+export function isCollectorDue(
+  id: CollectorId | string,
+  lastOkAtMs: number | null,
+  nowMs: number,
+  config: RuntimeConfig,
+): boolean {
+  if (id !== "github") return true;
+  if (lastOkAtMs === null) return true;
+  const intervalMs = config.orchestrator.githubIntervalSeconds * 1000;
+  return nowMs - lastOkAtMs >= intervalMs;
 }
 
 /** Collect one collector with the standard abort + error wrapping. */
