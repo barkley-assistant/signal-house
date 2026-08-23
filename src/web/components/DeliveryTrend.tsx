@@ -257,7 +257,9 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
         },
       },
       legend: {
-        data: ["Memory", "Swap", "CPU"],
+        // CPU leads the legend (operator preference); keep this order in
+        // sync with the series array below.
+        data: ["CPU", "Memory", "Swap"],
         orient: "horizontal",
         top: 0,
         right: 8,
@@ -270,6 +272,10 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
       xAxis: {
         type: "category",
         data: dates,
+        // Anchor the line to the plot edges: default category axes pad half
+        // a band on each side, which reads as the trend "floating" short of
+        // the chart bounds next to the bar charts, which fill their bands.
+        boundaryGap: false,
         axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
         axisLine: { lineStyle: { color: "#232732" } },
         axisTick: { show: false },
@@ -284,9 +290,9 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
         axisTick: { show: false },
       },
       series: [
+        seriesOf("CPU", "cpuPct", CPU_COLOR),
         seriesOf("Memory", "memPct", MEM_COLOR),
         seriesOf("Swap", "swapPct", SWAP_COLOR),
-        seriesOf("CPU", "cpuPct", CPU_COLOR),
       ],
     },
     true
