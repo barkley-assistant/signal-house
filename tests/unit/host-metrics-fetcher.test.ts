@@ -168,6 +168,13 @@ describe("ensureHostMetricsFresh", () => {
     await ensureHostMetricsFresh(ts("2026-08-23", 11));
     expect(second.calls.length).toBe(0);
     expect(getHostMetricsPoints("2026-08-22", "2026-08-22")[0].memPct).not.toBeNull();
+
+    // Diagnostics hydrate from the disk cache even when the freshness gate
+    // skipped every spawn — no phantom "empty / 0 days" after a restart.
+    const status = getHostMetricsStatus();
+    expect(status.lastFetchStatus).toBe("ok");
+    expect(status.dayCount).toBe(1);
+    expect(status.lastFetchedAt).not.toBeNull();
   });
 
   test("all-spawns-fail: cold cache reports failed, warm cache reports stale", async () => {

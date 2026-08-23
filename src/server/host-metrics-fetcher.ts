@@ -182,7 +182,19 @@ let currentIO: HostMetricsIO = {
 export async function ensureHostMetricsFresh(now: Date = new Date()): Promise<void> {
   if (!inMemory) {
     const loaded = loadFromDisk();
-    if (loaded) inMemory = loaded;
+    if (loaded) {
+      inMemory = loaded;
+      // Hydrate diagnostics from the disk cache immediately — the same-hour
+      // freshness gate below may legitimately skip any spawning this hour,
+      // and without this the block would read "empty / 0 days" all hour
+      // despite serving perfectly good cached data.
+      lastStatus = {
+        ...lastStatus,
+        lastFetchedAt: loaded.evaluatedAt,
+        lastFetchStatus: "ok",
+        dayCount: loaded.days.size,
+      };
+    }
   }
 
   if (inMemory && sameUtcHour(new Date(inMemory.evaluatedAt), now)) return;
