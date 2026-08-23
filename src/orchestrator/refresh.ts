@@ -186,14 +186,18 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
           status,
           partialData,
           privacyUncoveredCount: privacyUncovered,
-          sourceResults: results.map((r) => ({ source: r.source, ok: r.ok, unavailable: r.unavailable, errors: r.errors.length })),
+          sourceResults: results.map((r) => ({ source: r.source, ok: r.ok, unavailable: r.unavailable, errors: r.errors.length, durationMs: r.durationMs })),
         },
         nowMs,
       );
     });
 
     runRetention(ctx.owner.db, ctx.config);
-    log.info("refresh", `refresh completed: ${status}`, { sources: results.length, failed: failed.length });
+    // One-line per-refresh latency summary — the "where did the time go"
+    // surface for the cadence work (issue #361). Sorted slowest-first so
+    // the expensive source is always the first thing you read.
+    const timing = [...results].sort((a, b) => b.durationMs - a.durationMs).map((r) => `${r.source}=${r.durationMs}ms`);
+    log.info("refresh", `collector timings: ${timing.join(" ")}`, { skippedCount: skipped.length });
 
     return {
       status,
@@ -356,7 +360,7 @@ function journalFailure(db: Database, startedAt: string, results: CollectorResul
       status: "failed",
       partialData: true,
       privacyUncoveredCount: 0,
-      sourceResults: results.map((r) => ({ source: r.source, ok: r.ok, unavailable: r.unavailable, errors: r.errors.length })),
+      sourceResults: results.map((r) => ({ source: r.source, ok: r.ok, unavailable: r.unavailable, errors: r.errors.length, durationMs: r.durationMs })),
     },
     now,
   );

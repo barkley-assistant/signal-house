@@ -98,6 +98,10 @@ export function buildDiagnostics(db: Database, config: RuntimeConfig, collectors
     sources: collectors.map((c) => {
       const state = bySource.get(c.id);
       const capturedAt = state?.capturedAt ?? null;
+      // Last pass's latency for this source, from the persisted refresh
+      // summary (issue #361 observability). Null until the first refresh.
+      const refreshState = getRefreshMeta<{ sourceResults?: Array<{ source: string; durationMs?: number }> }>(db, "refresh_state");
+      const durationMs = refreshState?.sourceResults?.find((s) => s.source === c.id)?.durationMs ?? null;
       return {
         id: c.id,
         title: c.title,
@@ -105,7 +109,7 @@ export function buildDiagnostics(db: Database, config: RuntimeConfig, collectors
         ok: state?.ok ?? false,
         unavailable: state?.unavailable ?? true,
         capturedAt,
-        durationMs: null, // duration is not persisted in latest_state; refresh_meta has totals
+        durationMs,
         warnings: state?.warnings ?? [],
         errors: state?.errors ?? [],
         stale: capturedAt === null || now - capturedAt > staleThresholdMs,
