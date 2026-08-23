@@ -8,6 +8,7 @@ import { createApp } from "./app";
 import { startPoller } from "./poller/poller";
 import { runRefresh } from "./orchestrator/refresh";
 import { ensurePricingCacheFresh } from "./server/model-pricing-fetcher";
+import { ensureHostMetricsFresh } from "./server/host-metrics-fetcher";
 import { log } from "./shared/logger";
 
 const config = readConfig({
@@ -26,6 +27,15 @@ log.info("server", `listening on ${app.server.url.host} (${config.environment}, 
 // first refresh would otherwise run with an empty cache and produce
 // $0 costs for openai rows until the next refresh cycle.
 await ensurePricingCacheFresh();
+
+// Warm the host-metrics cache before first request. Best-effort and gated
+// on the opt-in flag: with the flag off this is a no-op, and a pmlogger
+// failure is logged inside the fetcher without aborting startup. Without
+// this warm-up the diagnostics block would read "empty / dayCount 0" until
+// someone opened the dashboard.
+if (config.hostMetrics.enabled) {
+  await ensureHostMetricsFresh();
+}
 
 // Optional background refresh loop (disabled by default).
 let pollerStop: (() => void) | null = null;
