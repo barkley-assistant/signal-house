@@ -15,7 +15,7 @@ export interface TestServer {
   stop(): void;
 }
 
-export async function startServer(opts: { dbPath: string; port?: number; auth?: { username: string; password: string } }): Promise<TestServer> {
+export async function startServer(opts: { dbPath: string; port?: number; auth?: { username: string; password: string }; hostMetrics?: boolean }): Promise<TestServer> {
   mkdirSync(dirname(opts.dbPath), { recursive: true });
 
   const config: RuntimeConfig = {
@@ -41,7 +41,7 @@ export async function startServer(opts: { dbPath: string; port?: number; auth?: 
     privacy: { showPrivateRepoItems: false },
     refresh: { lockStaleMs: 600_000 },
     estimateCosts: false,
-    hostMetrics: { enabled: false },
+    hostMetrics: { enabled: opts.hostMetrics ?? false },
   };
 
   const app = await createApp(config);

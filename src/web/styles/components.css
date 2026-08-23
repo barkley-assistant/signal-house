@@ -545,22 +545,17 @@
   display: block;
   width: 100%;
 }
-/* Host-metrics layout: three full-width charts stacked vertically
-   (Resource → CI → Throughput). Used only when the opt-in host metrics
-   feed is enabled AND has data; see DeliveryTrend.tsx for the toggle. */
-.delivery-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 12px;
+/* Host-metrics layout: the same grid gains a third column
+   (Resource | CI | Throughput, one row on desktop). Used only when the
+   opt-in host metrics feed is enabled AND has data; see DeliveryTrend.tsx. */
+.delivery-grid.three {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
 @media (max-width: 700px) {
-  .delivery-grid {
+  .delivery-grid,
+  .delivery-grid.three {
     grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-  .delivery-stack {
     gap: 12px;
   }
 }

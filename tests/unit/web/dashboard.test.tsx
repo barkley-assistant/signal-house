@@ -583,9 +583,9 @@ describe("DeliveryTrend", () => {
     });
 
     // No resource node exposed: the node exists (stable container) but is
-    // display:none + aria-hidden, and the grid layout is preserved.
+    // display:none + aria-hidden, and the two-column grid is preserved.
     expect(document.querySelector(".delivery-grid")).toBeTruthy();
-    expect(document.querySelector(".delivery-stack")).toBeNull();
+    expect(document.querySelector(".delivery-grid.three")).toBeNull();
     const resNode = document.querySelector('div[aria-label^="Host resources"]') as HTMLElement;
     expect(resNode).toBeTruthy();
     expect(resNode.style.display).toBe("none");
@@ -610,8 +610,8 @@ describe("DeliveryTrend", () => {
     });
     expect(screen.getByLabelText("Host resources — memory, swap and CPU utilization per day")).toBeTruthy();
 
-    // Stacked full-width layout replaces the side-by-side grid.
-    expect(document.querySelector(".delivery-stack")).toBeTruthy();
+    // Three-across grid replaces the two-column grid on desktop.
+    expect(document.querySelector(".delivery-grid.three")).toBeTruthy();
 
     // The resource renderer got a Memory/Swap/CPU series on a shared 0–100 axis.
     const res = options.find((o) =>

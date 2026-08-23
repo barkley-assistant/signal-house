@@ -4,13 +4,14 @@
  * (commits + PRs merged).
  *
  * Layout has two shapes, chosen by data rather than props:
- *  - Default: CI ∥ Throughput side-by-side on tablet/desktop (.delivery-grid),
- *    stacked vertically on phones (<=700px).
+ *  - Default: CI ∥ Throughput side-by-side (.delivery-grid), stacked
+ *    vertically on phones (<=700px).
  *  - When /api/daily/resource reports host metrics enabled WITH data, the
- *    panel switches to .delivery-stack: Resource full-width first, then CI,
- *    then Throughput. Both charts' DOM nodes live in ONE container whose
- *    class switches — moving refs between different containers would
- *    unmount the nodes and orphan their ECharts instances.
+ *    grid gains a third column (Resource | CI | Throughput, one row on
+ *    desktop; still collapses to a vertical stack on phones). Both charts'
+ *    DOM nodes live in ONE container whose class switches — moving refs
+ *    between different containers would unmount the nodes and orphan their
+ *    ECharts instances.
  *
  * The resource chart is fully opt-in server-side (SIGNAL_HOUSE_HOST_METRICS_
  * ENABLED). Disabled or dataless responses render zero artifact: the chart
@@ -159,8 +160,9 @@ export function DeliveryTrend() {
     renderResource(resChartRef.current, resPoints);
   }, [resPoints]);
 
-  // One stable container; the class chooses grid (CI ∥ Throughput) or stack
-  // (Resource → CI → Throughput). Chart nodes never remount on toggle.
+  // One stable container; the class chooses the two-column grid (CI ∥
+  // Throughput) or the three-column grid (Resource | CI | Throughput).
+  // Chart nodes never remount on toggle.
   const showRes = resPoints !== null && !loading && hasData;
 
   return (
@@ -169,7 +171,7 @@ export function DeliveryTrend() {
       {!hasData && !loading ? (
         <p className="state-label">No delivery data yet — GitHub collector unavailable or no runs in window</p>
       ) : (
-        <div className={showRes ? "delivery-stack" : "delivery-grid"} aria-busy={loading || undefined}>
+        <div className={showRes ? "delivery-grid three" : "delivery-grid"} aria-busy={loading || undefined}>
           {loading ? (
             <>
               <div className="skeleton" style={{ height: TOP_HEIGHT }} />
