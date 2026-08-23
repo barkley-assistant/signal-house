@@ -16,6 +16,6 @@
     "noUnusedParameters": false,
     "types": ["bun"]
   },
-  "include": ["src", "tests", "scripts", "eslint.config.js", "src/types"],
+  "include": ["src", "tests", "scripts", "tools", "eslint.config.js", "src/types"],
   "exclude": ["node_modules", "dist", "*.config.js"]
 }
