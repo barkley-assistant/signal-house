@@ -81,6 +81,13 @@ button.primary {
   max-width: var(--content-max);
   margin: 0 auto;
   padding: 24px;
+  /* Standalone PWA: clear the Android gesture bar / iOS home indicator and
+     the display cutout instead of tucking content underneath them. The
+     max() keeps normal browser padding identical on desktop. */
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
 }
 
 .app-header {
@@ -210,6 +217,12 @@ button.primary {
   color: var(--text-muted);
   font-size: 12px;
   margin-top: 4px;
+  /* Captions are single-line stats ("888 pass · 132 fail · 1032 runs") —
+     a wrap orphaning the last word reads as a layout bug. Shrink slightly
+     on tight cards instead. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Skeleton placeholders reserve exact real-content dimensions (no CLS). */

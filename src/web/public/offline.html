@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signal House — offline</title>
+  <style>
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: #07080a;
+      color: #94a3b8;
+      font-family: system-ui, -apple-system, sans-serif;
+      text-align: center;
+      padding: 24px;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #facc15; display: inline-block; margin-right: 8px;
+    }
+    h1 { color: #e2e8f0; font-size: 18px; font-weight: 600; margin: 12px 0 6px; }
+    p { font-size: 13px; line-height: 1.5; margin: 0 0 20px; }
+    button {
+      appearance: none; border: 1px solid #2c3038; background: #111318;
+      color: #e2e8f0; font: inherit; font-size: 13px; font-weight: 600;
+      padding: 10px 22px; border-radius: 8px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="dot"></span><strong>Offline</strong>
+    <h1>Can't reach Signal House</h1>
+    <p>Live metrics need a connection. Cached charts may be stale —<br />retry once you're back online.</p>
+    <button onclick="location.reload()">Retry</button>
+  </main>
+</body>
+</html>

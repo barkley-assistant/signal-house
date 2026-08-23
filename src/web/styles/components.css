@@ -272,6 +272,13 @@
     letter-spacing: 0.02em;
     white-space: nowrap;
   }
+  /* Touch targets on the sort strip (pointer:coarse only — desktop pills
+     stay compact). */
+  @media (pointer: coarse) {
+    .model-table .sort-btn {
+      padding: 9px 14px;
+    }
+  }
   .model-table .sort-btn:hover {
     border-color: var(--glow-300, #38bdf8);
   }
@@ -345,6 +352,7 @@
     gap: 1px;
     text-align: left;
     font-variant-numeric: tabular-nums;
+    min-width: 0; /* allow the label to ellipsize instead of wrapping */
   }
   .model-table td.num::before {
     content: attr(data-label);
@@ -352,6 +360,20 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-muted);
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  /* Longest label ("Cache %") is the one that wraps at ~390px and breaks
+     the card's column baseline (audit 2026-08-23). Shorten stat labels on
+     touch devices where the cards are the primary layout. */
+  @media (pointer: coarse) {
+    .model-table td.num[data-label="Cache %"]::before {
+      content: "Cach";
+    }
+    .model-table td.num[data-label="Sessions"]::before {
+      content: "Sess";
+    }
   }
 }
 
@@ -503,6 +525,14 @@
   border-radius: 7px;
   cursor: pointer;
   transition: color 120ms ease;
+}
+
+/* Touch targets: WCAG 2.5.5 wants ≥44px; Android Material guidance is 48dp.
+   Desktop keeps the compact look via pointer:coarse scoping. */
+@media (pointer: coarse) {
+  .time-filter__btn {
+    padding: 13px 16px;
+  }
 }
 
 .time-filter__btn:hover {

@@ -7,7 +7,7 @@
  * is built to disk (dist/public) instead. Recorded in the traceability doc.
  */
 
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, cpSync, readdirSync } from "node:fs";
 import { resolve, normalize, join } from "node:path";
 
 const MIME: Record<string, string> = {
@@ -17,6 +17,7 @@ const MIME: Record<string, string> = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json",
   ".woff2": "font/woff2",
   ".json": "application/json; charset=utf-8",
   ".map": "application/json; charset=utf-8",
@@ -36,6 +37,11 @@ export async function buildWebBundle(publicDir: string): Promise<void> {
     for (const logLine of result.logs) process.stderr.write(logLine.message + "\n");
     throw new Error("web bundle build failed");
   }
+  // Static PWA files (manifest, service worker, offline fallback, icons)
+  // ship verbatim — no hashing, so the service worker can manage them by
+  // stable path. cpSync overwrites; directory merge keeps icons/ nested.
+  const publicSrc = resolve(root, "src/web/public");
+  if (existsSync(publicSrc)) cpSync(publicSrc, publicDir, { recursive: true });
   // Surface warnings (side-effect-only imports, oversized chunks, etc.) so
   // they don't silently disappear from build output.
   for (const logLine of result.logs) {
@@ -96,10 +102,15 @@ export function serveWebAsset(publicDir: string, urlPath: string): Response | nu
 
   const ext = filePath.slice(filePath.lastIndexOf("."));
   const body = Bun.file(filePath);
+  // Service workers must revalidate on every fetch: browsers cap SW script
+  // caching at 24h, but an immutable header would pin an old worker for a
+  // year — new deploys would never reach installed clients. Same for the
+  // manifest (name/icons/theme changes should propagate promptly).
+  const noCache = ext === ".html" || filePath.endsWith("sw.js") || filePath.endsWith("manifest.webmanifest");
   return new Response(body, {
     headers: {
       "content-type": MIME[ext] ?? "application/octet-stream",
-      "cache-control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable",
+      "cache-control": noCache ? "no-cache" : "public, max-age=31536000, immutable",
     },
   });
 }

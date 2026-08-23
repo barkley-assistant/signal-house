@@ -2,8 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Signal House</title>
+    <meta name="description" content="Know whether work is moving — and where it's stuck." />
+    <meta name="theme-color" content="#07080a" />
+    <!-- manifest + apple-touch-icon are injected at runtime (main.tsx):
+         Bun.build resolves <link href> as build-time imports, and these
+         live in /public — copied verbatim, no hashing. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Signal House" />
     <link rel="stylesheet" href="./styles/base.css" />
     <link rel="stylesheet" href="./styles/components.css" />
     <link rel="icon" type="image/png" href="./assets/signal-house-logo.png" />
