@@ -12,6 +12,7 @@ import { resolvePrivacyMap, visibleRepoKeys, uncoveredRepos } from "../privacy/p
 import { redactConfig } from "../config/redact";
 import type { Collector } from "../collectors";
 import { getPricingCacheStatus } from "../server/model-pricing-fetcher";
+import { getHostMetricsStatus } from "../server/host-metrics-fetcher";
 
 export interface DiagnosticsPayload {
   generatedAt: string;
@@ -19,6 +20,14 @@ export interface DiagnosticsPayload {
     lastFetchedAt: string | null;
     lastFetchStatus: "ok" | "failed" | "stale" | "empty";
     modelCount: number;
+    source: string;
+  };
+  hostMetrics: {
+    enabled: boolean;
+    lastFetchedAt: string | null;
+    lastFetchStatus: "ok" | "failed" | "stale" | "empty" | "disabled";
+    dayCount: number;
+    archiveCount: number;
     source: string;
   };
   sources: Array<{
@@ -70,6 +79,20 @@ export function buildDiagnostics(db: Database, config: RuntimeConfig, collectors
         lastFetchStatus: status.lastFetchStatus,
         modelCount: status.modelCount,
         source: status.source,
+      };
+    })(),
+    hostMetrics: (() => {
+      const status = getHostMetricsStatus();
+      const enabled = config.hostMetrics.enabled;
+      return {
+        enabled,
+        lastFetchedAt: enabled ? status.lastFetchedAt : null,
+        // When disabled the fetcher never ran; report that instead of the
+        // module's initial "empty" so operators don't chase a phantom fault.
+        lastFetchStatus: enabled ? status.lastFetchStatus : "disabled",
+        dayCount: enabled ? status.dayCount : 0,
+        archiveCount: enabled ? status.archiveCount : 0,
+        source: enabled ? status.source : "",
       };
     })(),
     sources: collectors.map((c) => {

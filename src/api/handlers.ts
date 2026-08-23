@@ -15,6 +15,7 @@ import { setRefreshMeta } from "../db/refresh-meta";
 import { queryDailyTrend } from "../db/daily-metrics";
 import { utcDay, utcDaysAgo } from "../shared/dates";
 import { buildDeliveryTrend } from "../metrics/delivery";
+import { ensureHostMetricsFresh, getHostMetricsPoints } from "../server/host-metrics-fetcher";
 import { parseWindowDays } from "../shared/window";
 
 export interface ApiDeps {
@@ -79,6 +80,27 @@ export function deliveryTrendHandler(deps: ApiDeps, req: Request): Response {
   const to = url.searchParams.get("to") ?? utcDay();
   const from = url.searchParams.get("from") ?? utcDaysAgo(days);
   return json(req, buildDeliveryTrend(deps.db, from, to));
+}
+
+/** GET /api/daily/resource — per-day mem/swap/cpu percentages for the
+ *  Delivery panel's optional third chart. Mirrors the sibling daily windows.
+ *
+ *  Gated on SIGNAL_HOUSE_HOST_METRICS_ENABLED (default off): when disabled
+ *  the fetcher has never run and the payload is `{ enabled: false, points: [] }`
+ *  — the UI hides the chart instead of rendering an empty one. When enabled,
+ *  this evaluates the pmlogsummary cache (cheap no-op within the same clock
+ *  hour) and returns a dense day list; days without data carry nulls. */
+export async function resourceTrendHandler(deps: ApiDeps, req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const days = parseWindowDays(url.searchParams.get("days"));
+  const to = url.searchParams.get("to") ?? utcDay();
+  const from = url.searchParams.get("from") ?? utcDaysAgo(days);
+
+  if (!deps.config.hostMetrics.enabled) {
+    return json(req, { from, to, days, enabled: false, points: [] });
+  }
+  await ensureHostMetricsFresh();
+  return json(req, { from, to, days, enabled: true, points: getHostMetricsPoints(from, to) });
 }
 
 /** POST /api/refresh — manual refresh through the SAME runner as the poller. */

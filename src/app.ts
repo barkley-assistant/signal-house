@@ -13,7 +13,7 @@ import type { RuntimeConfig } from "./config/types";
 import { DatabaseOwner } from "./db/client";
 import { createCollectors } from "./collectors";
 import { RefreshLock } from "./orchestrator/lock";
-import { stateHandler, diagnosticsHandler, healthHandler, refreshHandler, resetLockHandler, dailyTrendHandler, deliveryTrendHandler, type ApiDeps } from "./api/handlers";
+import { stateHandler, diagnosticsHandler, healthHandler, refreshHandler, resetLockHandler, dailyTrendHandler, deliveryTrendHandler, resourceTrendHandler, type ApiDeps } from "./api/handlers";
 import { withAuth } from "./auth/basic";
 import { jsonError, notFound } from "./shared/http";
 import { buildWebBundle, serveWebAsset, publicDirFor } from "./shared/web-assets";
@@ -55,6 +55,7 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
   const apiResetLock = api(resetLockHandler);
   const apiDailyTrend = withAuth((req) => dailyTrendHandler(deps, req), config);
   const apiDeliveryTrend = withAuth((req) => deliveryTrendHandler(deps, req), config);
+  const apiResourceTrend = withAuth((req) => resourceTrendHandler(deps, req), config);
 
   // The SPA is served as static files (dist/public) through the auth'd handler.
   const publicDir = publicDirFor(process.cwd());
@@ -85,6 +86,7 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
         if (path === "/api/refresh/reset-lock" && req.method === "POST") return apiResetLock(req);
         if (path === "/api/daily/spend" && req.method === "GET") return apiDailyTrend(req);
         if (path === "/api/daily/delivery" && req.method === "GET") return apiDeliveryTrend(req);
+        if (path === "/api/daily/resource" && req.method === "GET") return apiResourceTrend(req);
         return req.method === "GET" || req.method === "POST" ? notFound(req) : jsonError(req, 405, "Method Not Allowed");
       }
 

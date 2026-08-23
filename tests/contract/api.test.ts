@@ -125,6 +125,96 @@ describe("state contract", () => {
   });
 });
 
+describe("daily resource contract", () => {
+  test("disabled by default: enabled:false, empty points, no fetcher side effects", async () => {
+    const res = await authed("/api/daily/resource?days=7");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { from: string; to: string; days: number; enabled: boolean; points: unknown[] };
+    expect(body.enabled).toBe(false);
+    expect(body.points).toEqual([]);
+    expect(body.days).toBe(7);
+    expect(body.from).toBe(utcDaysAgo(7));
+    expect(body.to).toBe(utcDay());
+  });
+
+  test("enabled server returns dense day list with explicit nulls", async () => {
+    // Separate app instance so the shared one keeps its default-off config.
+    // The fetcher's runner/archive-root seams are redirected so this test is
+    // hermetic (never touches /var/log/pcp) yet still exercises the full
+    // HTTP → handler → fetcher → parser path with deterministic fixtures.
+    const { mkdirSync: mk, writeFileSync: wr } = await import("node:fs");
+    const { setHostMetricsEnvironmentForTesting, setHostMetricsRunnerForTesting, resetHostMetricsForTesting } =
+      await import("../../src/server/host-metrics-fetcher");
+
+    const enabledDir = mkdtempSync(join(tmpdir(), "sh-api-host-"));
+    const archives = join(enabledDir, "archives");
+    mk(archives, { recursive: true });
+
+    // Archive "yesterday" so it always lands inside the requested window,
+    // whatever day the suite runs on.
+    const { utcDayFromMs } = await import("../../src/shared/dates");
+    const yesterday = utcDayFromMs(Date.now() - 86_400_000);
+    wr(join(archives, `${yesterday.replaceAll("-", "")}.index`), "x");
+
+    // Same verbatim fixture as tests/unit/host-metrics-parser.test.ts.
+    const FIXTURE = [
+      "mem.util.available  9375155.083 Kbyte",
+      "mem.physmem  15708244.000 Kbyte",
+      'swap.used  3840628356.992 byte',
+      'swapdev.length ["/swap.img"] 16777212.000 Kbyte',
+      'swapdev.length ["/dev/zram0"] 8388604.000 Kbyte',
+      "kernel.all.cpu.user  0.138 none",
+      "kernel.all.cpu.sys  0.049 none",
+      "kernel.all.cpu.idle  3.781 none",
+      "kernel.all.cpu.nice  0.000 none",
+      "kernel.all.cpu.irq.soft  0.001 none",
+      "kernel.all.cpu.irq.hard  0.000 none",
+      "kernel.all.cpu.steal  0.000 none",
+    ].join("\n");
+    setHostMetricsEnvironmentForTesting(archives, join(enabledDir, "cache", "host-metrics.json"));
+    setHostMetricsRunnerForTesting(async () => ({ ok: true, stdout: FIXTURE }));
+
+    const enabledServer = await startServer({
+      dbPath: join(enabledDir, "metrics.db"),
+      port: 0,
+      auth: { username: "admin", password: "s3cret!" },
+      hostMetrics: true,
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${enabledServer.port}/api/daily/resource?days=7`, {
+        headers: { authorization: `Basic ${btoa("admin:s3cret!")}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        enabled: boolean;
+        points: Array<{ date: string; memPct: number | null; swapPct: number | null; cpuPct: number | null }>;
+      };
+      expect(body.enabled).toBe(true);
+      expect(body.points.length).toBe(8); // 7-day window, inclusive
+
+      // The archived day carries the hand-computed fixture percentages…
+      const archived = body.points.find((p) => p.date === yesterday);
+      expect(archived?.memPct).toBeCloseTo(59.69, 1);
+      expect(archived?.cpuPct).toBeCloseTo(4.74, 1);
+      // …and days without archives are honest nulls, never zeros.
+      const emptyDay = body.points.find((p) => p.date !== "2026-08-22");
+      expect(emptyDay?.memPct).toBeNull();
+    } finally {
+      enabledServer.stop();
+      resetHostMetricsForTesting();
+      rmSync(enabledDir, { recursive: true, force: true });
+    }
+  });
+
+  test("diagnostics surface the hostMetrics block with honest disabled status", async () => {
+    const res = await authed("/api/diagnostics");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { hostMetrics: { enabled: boolean; lastFetchStatus: string } };
+    expect(body.hostMetrics.enabled).toBe(false);
+    expect(body.hostMetrics.lastFetchStatus).toBe("disabled");
+  });
+});
+
 describe("refresh + lock", () => {
   test("POST /api/refresh runs through the real refresh runner", async () => {
     const res = await authed("/api/refresh", { method: "POST" });
