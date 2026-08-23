@@ -43,3 +43,23 @@ export function dayWindowMs(day: string): { start: number; end: number } {
   const start = Date.parse(`${day}T00:00:00Z`);
   return { start, end: start + 86_400_000 };
 }
+
+/**
+ * Round `v` up to a "nice" axis maximum with ~20% headroom built in.
+ *
+ * Uses a per-decade ladder of friendly mantissas instead of pure
+ * powers-of-ten, so values land on the next familiar step rather than
+ * leaping a whole order of magnitude: a 93-commit day yields max 120,
+ * not 200. Steps within a decade: 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10×.
+ * Non-positive input returns 0 (callers apply their own floors).
+ */
+export function niceCeil(v: number): number {
+  if (v <= 0 || !Number.isFinite(v)) return 0;
+  const withHead = v * 1.2;
+  const mag = Math.pow(10, Math.floor(Math.log10(withHead)));
+  const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  for (const s of steps) {
+    if (s * mag >= withHead) return s * mag;
+  }
+  return 10 * mag;
+}

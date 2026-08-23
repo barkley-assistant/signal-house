@@ -33,6 +33,7 @@ import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import { useDash, loadDeliveryTrend, loadResourceTrend, type DeliveryPoint, type ResourcePoint } from "../state/store";
 import { formatNumber } from "../../shared/format";
+import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
 
 // Same accent palette as the Daily cost & tokens chart so the panels feel
@@ -81,13 +82,6 @@ function fmtDayFull(d: string): string {
     month: "long",
     year: "numeric",
   });
-}
-
-function niceCeil(v: number): number {
-  if (v <= 0) return 4;
-  const withHead = v * 1.2;
-  const mag = Math.pow(10, Math.floor(Math.log10(withHead)));
-  return Math.ceil(withHead / mag) * mag;
 }
 
 const COMMON_TOOLTIP = {
@@ -443,7 +437,8 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
     ...commits.filter((v): v is number => v !== null),
     ...prs.filter((v): v is number => v !== null),
   );
-  const yMax = niceCeil(barMax);
+  // Shared ladder: a 93-commit day now yields max 120, not 200.
+  const yMax = Math.max(4, niceCeil(barMax));
   chart.setOption(
     {
       animation: true,

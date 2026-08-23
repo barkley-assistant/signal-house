@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
 import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
+import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
@@ -181,14 +182,6 @@ function DailyUsageChart() {
       if (peaksRef.current === null) {
         const costPeak = points.reduce((m, p) => Math.max(m, p.cost ?? 0), 0);
         const tokensPeak = points.reduce((m, p) => Math.max(m, p.tokens ?? 0, p.cacheRead ?? 0), 0);
-        // Round up to a "nice" number with 20% headroom so the top label
-        // and the top of the line don't collide.
-        const niceCeil = (v: number) => {
-          if (v <= 0) return 1;
-          const withHead = v * 1.2;
-          const mag = Math.pow(10, Math.floor(Math.log10(withHead)));
-          return Math.ceil(withHead / mag) * mag;
-        };
         peaksRef.current = {
           cost: Math.max(1, niceCeil(costPeak)),
           tokens: Math.max(1, niceCeil(tokensPeak)),
