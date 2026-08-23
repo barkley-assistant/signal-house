@@ -142,6 +142,23 @@ describe("config", () => {
       readConfig({ env: envOf({ SIGNAL_HOUSE_HOST_METRICS_ENABLED: "sure" }), cwd: "/tmp", dev: false }),
     ).toThrow(ConfigError);
   });
+
+  test("orchestrator.githubIntervalSeconds defaults to 600 (10 min)", () => {
+    const c = readConfig({ env: envOf({}), cwd: "/tmp", dev: false });
+    expect(c.orchestrator.githubIntervalSeconds).toBe(600);
+  });
+
+  test("orchestrator.githubIntervalSeconds clamps into [60, 86400]", () => {
+    expect(readConfig({ env: envOf({ SECRET_HOUSE_GITHUB_INTERVAL_SECONDS: "30" }), cwd: "/tmp", dev: false }).orchestrator.githubIntervalSeconds).toBe(60);
+    expect(readConfig({ env: envOf({ SECRET_HOUSE_GITHUB_INTERVAL_SECONDS: "900" }), cwd: "/tmp", dev: false }).orchestrator.githubIntervalSeconds).toBe(900);
+    expect(readConfig({ env: envOf({ SECRET_HOUSE_GITHUB_INTERVAL_SECONDS: "999999" }), cwd: "/tmp", dev: false }).orchestrator.githubIntervalSeconds).toBe(86_400);
+  });
+
+  test("orchestrator.githubIntervalSeconds rejects malformed values with ConfigError", () => {
+    expect(() =>
+      readConfig({ env: envOf({ SECRET_HOUSE_GITHUB_INTERVAL_SECONDS: "soon" }), cwd: "/tmp", dev: false }),
+    ).toThrow(ConfigError);
+  });
 });
 
 describe("config redaction", () => {

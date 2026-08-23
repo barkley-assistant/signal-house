@@ -198,6 +198,7 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
     orchestrator: {
       concurrency: p.int("SECRET_HOUSE_COLLECT_CONCURRENCY", 3, 1, 16),
       lookbackDays: p.int("SECRET_HOUSE_COLLECT_LOOKBACK_DAYS", 90, 1, 365),
+      githubIntervalSeconds: p.int("SECRET_HOUSE_GITHUB_INTERVAL_SECONDS", 600, 60, 86_400),
     },
     staleness: {
       staleThresholdDays: p.int("SECRET_HOUSE_STALE_THRESHOLD_DAYS", 14, 1, 365),

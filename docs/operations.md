@@ -42,6 +42,7 @@ All keys are `SECRET_HOUSE_*`; a small set of backward-compatible aliases
 | `SECRET_HOUSE_HERMES_DB_PATH` | `~/.hermes/state.db` | Hermes usage |
 | `SECRET_HOUSE_OPENCODE_DB_PATH` | `~/.local/share/opencode/opencode.db` | OpenCode usage |
 | `SECRET_HOUSE_POLLER_ENABLED` | `false` | background refresh loop |
+| `SECRET_HOUSE_GITHUB_INTERVAL_SECONDS` | `600` | min seconds between GitHub collector passes (fast sources keep the poll interval) |
 | `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS` | `false` | privacy opt-in |
 | `SIGNAL_HOUSE_ESTIMATE_COSTS` | `true` | cost estimator — see [Cost estimation](#cost-estimation) |
 | `SIGNAL_HOUSE_HOST_METRICS_ENABLED` | `false` | host resource chart — see [Host metrics](#host-metrics) |
@@ -49,6 +50,26 @@ All keys are `SECRET_HOUSE_*`; a small set of backward-compatible aliases
 Missing sources degrade gracefully: the collector reports `unavailable`
 with a warning, the refresh still succeeds, and the dashboard shows the
 warning. A missing source is never a crash.
+
+## Refresh cadence
+
+The poll loop ticks every `SECRET_HOUSE_POLL_INTERVAL_SECONDS` (120s by
+default on this deployment) and collects the fast local sources — git,
+hermes, opencode — on **every** tick. The GitHub collector is the slow
+one (a dozen-plus API calls per repo), so it runs on its own cadence:
+only when `SECRET_HOUSE_GITHUB_INTERVAL_SECONDS` (default 600) has
+elapsed since its last *successful* capture. Concretely: agent stats
+stay 2-minute fresh, GitHub data is at most ~10 minutes stale, and
+GitHub sees roughly 4–6 collector passes per hour instead of 30.
+
+Notes:
+
+- A failed or rate-limited GitHub pass does NOT advance its schedule —
+  the next tick retries immediately until a success lands, so a blip
+  delays the cadence rather than skipping data.
+- POST /api/refresh forces every source regardless of cadence.
+- The per-source `capturedAt` timestamps in /api/diagnostics are the
+  source of truth for when each source last actually ran.
 
 ## Ports
 

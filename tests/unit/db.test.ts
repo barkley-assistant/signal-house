@@ -26,7 +26,7 @@ const baseConfig: RuntimeConfig = {
   opencode: { dbPath: "/tmp/opencode.db" },
   usage: { periodDays: 30 },
   poller: { enabled: false, intervalSeconds: 300, startupDelaySeconds: 5, runOnStartup: true },
-  orchestrator: { concurrency: 3, lookbackDays: 28 },
+  orchestrator: { concurrency: 3, lookbackDays: 28, githubIntervalSeconds: 600 },
   staleness: { staleThresholdDays: 14, staleThresholdMinutes: 15 },
   retention: { snapshotsDays: 30, dailyMetricsDays: 90 },
   privacy: { showPrivateRepoItems: false },

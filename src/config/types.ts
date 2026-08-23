@@ -30,7 +30,18 @@ export interface RuntimeConfig {
     startupDelaySeconds: number;
     runOnStartup: boolean;
   };
-  orchestrator: { concurrency: number; lookbackDays: number };
+  orchestrator: {
+    concurrency: number;
+    lookbackDays: number;
+    /**
+     * Minimum seconds between GitHub collector passes, independent of the
+     * fast poll loop. The poller keeps ticking at `poller.intervalSeconds`;
+     * the orchestrator skips GitHub until this interval has elapsed since
+     * its last successful capture. Clamped ≥ 60 so a misconfig can never
+     * reintroduce sub-minute GitHub polling. Default 600 (10 min).
+     */
+    githubIntervalSeconds: number;
+  };
   staleness: { staleThresholdDays: number; staleThresholdMinutes: number };
   retention: { snapshotsDays: number; dailyMetricsDays: number };
   privacy: { showPrivateRepoItems: boolean };
