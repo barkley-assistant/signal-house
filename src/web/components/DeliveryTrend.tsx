@@ -213,7 +213,14 @@ export function DeliveryTrend() {
 function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
   const dates = points.map((p) => p.date);
 
-  const seriesOf = (name: string, key: "memPct" | "swapPct" | "cpuPct", color: string) => ({
+  // Same area-fill treatment as the Agent Spend chart: each series washes
+  // its own colour under the line (blue 0.12, yellow/green 0.08).
+  const withAlpha = (hex: string, alpha: number): string => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  };
+
+  const seriesOf = (name: string, key: "memPct" | "swapPct" | "cpuPct", color: string, areaAlpha: number) => ({
     name,
     type: "line" as const,
     data: points.map((p) => p[key]),
@@ -222,6 +229,7 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
     connectNulls: false,
     lineStyle: { color, width: 2 },
     itemStyle: { color },
+    areaStyle: { color: withAlpha(color, areaAlpha) },
     emphasis: { focus: "series" as const },
   });
 
@@ -290,9 +298,10 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
         axisTick: { show: false },
       },
       series: [
-        seriesOf("CPU", "cpuPct", CPU_COLOR),
-        seriesOf("Memory", "memPct", MEM_COLOR),
-        seriesOf("Swap", "swapPct", SWAP_COLOR),
+        // Area alphas match Agent Spend: 0.12 for the lead blue, 0.08 for the rest.
+        seriesOf("CPU", "cpuPct", CPU_COLOR, 0.08),
+        seriesOf("Memory", "memPct", MEM_COLOR, 0.12),
+        seriesOf("Swap", "swapPct", SWAP_COLOR, 0.08),
       ],
     },
     true
