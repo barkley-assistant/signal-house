@@ -56,13 +56,24 @@ if (config.poller.enabled) {
   }
 }
 
-// Graceful shutdown: stop timers, checkpoint WAL, close.
+// Graceful shutdown: stop timers, drain an in-flight refresh (bounded), close.
+// Without the drain, SIGTERM mid-refresh orphans the persisted lock row —
+// clearOrphanedAtStartup() backstops that, but finishing cleanly means the
+// next process never starts life with a leaked lock at all.
+const SHUTDOWN_DRAIN_MS = 30_000;
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info("server", `received ${signal}, shutting down`);
   pollerStop?.();
+  const deadline = Date.now() + SHUTDOWN_DRAIN_MS;
+  while (lock.status().inProgress && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (lock.status().inProgress) {
+    log.warn("server", `refresh still in progress after ${SHUTDOWN_DRAIN_MS}ms — proceeding; orphaned lock will be cleared on next startup`);
+  }
   app.stop();
   process.exit(0);
 }
