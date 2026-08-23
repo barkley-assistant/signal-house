@@ -39,3 +39,17 @@ export function utcDayRange(start: string, end: string): string[] {
 export function isoNow(): string {
   return new Date().toISOString();
 }
+
+/** True when both instants fall inside the same wall-clock hour (UTC).
+ *  Deliberately hour-of-day + day granularity, not elapsed-3600s: an
+ *  11:59 computation and a 12:00 one are different hours even though
+ *  they're 60s apart, which makes refresh timing predictable ("on the
+ *  hour"). Used by the fetchers' freshness gates. */
+export function sameUtcHour(a: Date, b: Date): boolean {
+  return (
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate() &&
+    a.getUTCHours() === b.getUTCHours()
+  );
+}
