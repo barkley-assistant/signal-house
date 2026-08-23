@@ -268,8 +268,8 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
         },
       },
       legend: {
-        // CPU leads the legend (operator preference); keep this order in
-        // sync with the series array below.
+        // CPU leads the legend (operator preference). Legend display order
+        // is independent of series paint order below.
         data: ["CPU", "Memory", "Swap"],
         orient: "horizontal",
         top: 0,
@@ -301,10 +301,13 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[]): void {
         axisTick: { show: false },
       },
       series: [
-        // Area alphas match Agent Spend: 0.12 for the lead blue, 0.08 for the rest.
-        seriesOf("CPU", "cpuPct", CPU_COLOR, 0.08),
+        // Paint order (last = topmost): Memory and Swap render first so CPU
+        // — the line that matters most for spotting load spikes — is never
+        // hidden behind them. Area alphas match Agent Spend: 0.12 lead blue,
+        // 0.08 for the rest.
         seriesOf("Memory", "memPct", MEM_COLOR, 0.12),
         seriesOf("Swap", "swapPct", SWAP_COLOR, 0.08),
+        seriesOf("CPU", "cpuPct", CPU_COLOR, 0.08),
       ],
     },
     true
