@@ -214,6 +214,9 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
       lockStaleMs: p.int("SECRET_HOUSE_REFRESH_LOCK_STALE_MS", 600_000, 30_000, 3_600_000),
     },
     estimateCosts: p.bool("SIGNAL_HOUSE_ESTIMATE_COSTS", true),
+    hostMetrics: {
+      enabled: p.bool("SIGNAL_HOUSE_HOST_METRICS_ENABLED", false),
+    },
   };
 }
 

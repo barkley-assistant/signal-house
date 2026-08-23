@@ -44,6 +44,7 @@ All keys are `SECRET_HOUSE_*`; a small set of backward-compatible aliases
 | `SECRET_HOUSE_POLLER_ENABLED` | `false` | background refresh loop |
 | `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS` | `false` | privacy opt-in |
 | `SIGNAL_HOUSE_ESTIMATE_COSTS` | `true` | cost estimator — see [Cost estimation](#cost-estimation) |
+| `SIGNAL_HOUSE_HOST_METRICS_ENABLED` | `false` | host resource chart — see [Host metrics](#host-metrics) |
 
 Missing sources degrade gracefully: the collector reports `unavailable`
 with a warning, the refresh still succeeds, and the dashboard shows the
@@ -130,6 +131,41 @@ Diagnostics: `/api/diagnostics` exposes `pricingCache.lastFetchedAt`,
 `lastFetchStatus` (`ok` / `failed` / `stale` / `empty`), `modelCount`,
 and the source URL. If `modelCount === 0`, the fetcher never loaded
 litellm — check the network and the source URL.
+
+## Host metrics
+
+The Delivery panel can show a third chart — daily memory, swap, and CPU
+utilization percentages for the machine signal-house runs on. It reads
+**PCP pmlogger's on-disk archives** directly (no PMCD, no network), so it
+only works where `pmlogger` is installed and logging that host:
+
+```bash
+ls /var/log/pcp/pmlogger/$(hostname)/
+```
+
+Enable with `SIGNAL_HOUSE_HOST_METRICS_ENABLED=true` and restart. The
+default is **off**: the fetcher never starts, no archives are read, and
+the panel keeps its two-chart layout — no empty chart, no placeholder.
+
+How the data behaves once enabled:
+
+- Each day's numbers are averaged over the whole day by `pmlogsummary`
+  (memory/swap: time-averaged bytes; CPU: utilization derived from the
+  kernel's cumulative counters across that window).
+- pmlogger rotates its archives daily and only keeps a couple of weeks,
+  so the fetcher computes each past day **once** and stores the result in
+  a local JSON cache (`~/.local/share/signal-house-v2/runtime/.data/host-metrics.json`,
+  atomic-write). History accumulates from the moment you enable the flag;
+  archives older than what pmlogger still has cannot be recovered.
+- Memory % uses the kernel's "available memory" estimate (the number that
+  ignores reclaimable page cache), not raw used — raw `used` counts cache
+  as consumption and reads far scarier than reality.
+- Swap % is measured against the total of all swap devices.
+- If the binary or today's archive goes missing mid-run, the affected
+  days render as gaps; everything else keeps working. Diagnostics at
+  `/api/diagnostics` expose `hostMetrics.lastFetchedAt`, `lastFetchStatus`
+  (`ok` / `failed` / `stale` / `empty` / `disabled`), `archiveCount`, and
+  the archive directory.
 
 ## Troubleshooting loop
 

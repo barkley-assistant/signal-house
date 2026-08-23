@@ -41,6 +41,7 @@ export async function startServer(opts: { dbPath: string; port?: number; auth?: 
     privacy: { showPrivateRepoItems: false },
     refresh: { lockStaleMs: 600_000 },
     estimateCosts: false,
+    hostMetrics: { enabled: false },
   };
 
   const app = await createApp(config);

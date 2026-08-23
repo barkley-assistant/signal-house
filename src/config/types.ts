@@ -41,6 +41,12 @@ export interface RuntimeConfig {
    * `cost` is the upstream value (today's behavior).
    */
   estimateCosts: boolean;
+  /**
+   * Host resource metrics (mem/swap/cpu %) from local PCP pmlogger archives.
+   * Default `false`: the fetcher never starts, `/api/daily/resource` reports
+   * `{ enabled: false }`, and the Delivery panel keeps its two-chart layout.
+   */
+  hostMetrics: { enabled: boolean };
 }
 
 export interface RefreshOutcome {

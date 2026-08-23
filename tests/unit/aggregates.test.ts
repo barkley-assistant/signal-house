@@ -33,6 +33,7 @@ const config: RuntimeConfig = {
   privacy: { showPrivateRepoItems: false },
   refresh: { lockStaleMs: 600_000 },
     estimateCosts: false,
+    hostMetrics: { enabled: false },
 };
 
 function state(source: string, data: SourceData): PersistedState {

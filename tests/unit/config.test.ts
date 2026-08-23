@@ -120,6 +120,28 @@ describe("config", () => {
       readConfig({ env: envOf({ SIGNAL_HOUSE_ESTIMATE_COSTS: "maybe" }), cwd: "/tmp", dev: false }),
     ).toThrow(ConfigError);
   });
+
+  test("hostMetrics defaults to disabled (env-var unset)", () => {
+    const c = readConfig({ env: envOf({}), cwd: "/tmp", dev: false });
+    expect(c.hostMetrics.enabled).toBe(false);
+  });
+
+  test("hostMetrics parses SIGNAL_HOUSE_HOST_METRICS_ENABLED boolean spellings", () => {
+    for (const v of ["true", "TRUE", "1", "yes", "on"]) {
+      const c = readConfig({ env: envOf({ SIGNAL_HOUSE_HOST_METRICS_ENABLED: v }), cwd: "/tmp", dev: false });
+      expect(c.hostMetrics.enabled).toBe(true);
+    }
+    for (const v of ["false", "FALSE", "0", "no", "off"]) {
+      const c = readConfig({ env: envOf({ SIGNAL_HOUSE_HOST_METRICS_ENABLED: v }), cwd: "/tmp", dev: false });
+      expect(c.hostMetrics.enabled).toBe(false);
+    }
+  });
+
+  test("hostMetrics rejects malformed values with ConfigError", () => {
+    expect(() =>
+      readConfig({ env: envOf({ SIGNAL_HOUSE_HOST_METRICS_ENABLED: "sure" }), cwd: "/tmp", dev: false }),
+    ).toThrow(ConfigError);
+  });
 });
 
 describe("config redaction", () => {

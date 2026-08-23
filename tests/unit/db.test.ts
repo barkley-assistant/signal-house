@@ -32,6 +32,7 @@ const baseConfig: RuntimeConfig = {
   privacy: { showPrivateRepoItems: false },
   refresh: { lockStaleMs: 600_000 },
     estimateCosts: false,
+    hostMetrics: { enabled: false },
 };
 
 let dir: string;
