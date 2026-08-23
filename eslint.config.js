@@ -7,6 +7,23 @@ export default [
   { ignores: ["dist/**", "node_modules/**", ".data/**", ".signal-house-dev/**", "e2e/**", "playwright.config.ts", "test-results/**"] },
   js.configs.recommended,
   {
+    // Service worker: runs in the SW global scope (self, caches, clients),
+    // not the window scope the browser config below assumes.
+    files: ["src/web/public/sw.js"],
+    languageOptions: {
+      globals: {
+        self: "readonly",
+        caches: "readonly",
+        clients: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        Response: "readonly",
+        Request: "readonly",
+        console: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parser: tsParser,
