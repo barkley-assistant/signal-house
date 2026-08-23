@@ -1,9 +1,9 @@
 {
   "name": "signal-house",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "type": "module",
-  "description": "Local operator dashboard for AI coding agents — Bun-native rewrite",
+  "description": "Local operator dashboard for AI coding agents \u2014 Bun-native rewrite",
   "scripts": {
     "dev": "bun run scripts/dev.ts",
     "build:web": "bun run scripts/build-web.ts",
