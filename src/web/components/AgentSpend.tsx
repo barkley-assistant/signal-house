@@ -344,7 +344,14 @@ function DailyUsageChart() {
 type SortKey = "model" | "sessions" | "tokens" | "cost" | "cachePct" | "eff" | null;
 type SortState = { key: SortKey; asc: boolean };
 
-const SORT_STORAGE_KEY = "signal-house:agent-spend-sort:cachePct";
+/**
+ * Default by-model order: tokens descending (2026-08-23 operator preference,
+ * was upstream session order). The storage key is versioned per default —
+ * bumping it makes a new default apply ONCE to browsers that already stored
+ * the old one, without stomping an explicitly chosen sort afterwards.
+ */
+const DEFAULT_SORT: SortState = { key: "tokens", asc: false };
+const SORT_STORAGE_KEY = "signal-house:agent-spend-sort:cachePct:v2-tokens-desc";
 
 function readSortState(): SortState {
   try {
@@ -358,14 +365,15 @@ function readSortState(): SortState {
   } catch {
     /* storage unavailable or corrupt — fall through to default */
   }
-  return { key: null, asc: false };
+  return DEFAULT_SORT;
 }
 
 /** By-model table spanning all sources; unknown cost renders "—".
- *  Click a column header to sort: sessions/tokens/cost sort descending,
- *  model sorts alphabetically. Clicking the active column again cycles
- *  (desc → asc → back to default session order). Sort state persists
- *  across page loads via localStorage. */
+ *  Default order: tokens descending. Click a column header to sort:
+ *  sessions/tokens/cost sort descending, model sorts alphabetically.
+ *  Clicking the active column again cycles (desc → asc → back to the
+ *  tokens-descending default). Sort state persists across page loads
+ *  via localStorage. */
 function ModelTable() {
   const { state } = useDash();
   const usage = state?.usage ?? null;
@@ -420,7 +428,7 @@ function ModelTable() {
       // eff asc→desc, other columns desc→asc. The third click resets.
       setSort({ key, asc: !asc });
     } else {
-      setSort({ key: null, asc: false }); // back to default session order
+      setSort({ ...DEFAULT_SORT }); // back to the default tokens-descending order
     }
   };
 

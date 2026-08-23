@@ -495,9 +495,49 @@ describe("ModelTable cache % sort", () => {
     // Second click: most-expensive-first (desc).
     fireEvent.click(btn);
     expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
-    // Third click: back to default session order.
+    // Third click: back to default (tokens descending).
     fireEvent.click(btn);
     expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
+  test("default sort is tokens descending on a fresh browser", () => {
+    // Session order deliberately differs from token order to prove the
+    // default is tokens, not upstream order.
+    const s = emptyState({
+      usage: {
+        totalSessions: 2,
+        totalMessages: 4,
+        totalTokens: 1000,
+        totalCost: 2,
+        bySource: { opencode: { sessions: 2, cost: 2, tokens: 1000 } },
+        byModel: [
+          { model: "Alpha", family: null, sessions: 1, cost: 1, tokens: 100, cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0, effPerM: null },
+          { model: "Beta", family: null, sessions: 1, cost: 1, tokens: 900, cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0, effPerM: null },
+        ],
+      },
+    });
+    useDash.setState({ state: s });
+    render(<AgentSpend />);
+    // Beta (900 tokens) leads despite being second in the payload…
+    const names = screen.getAllByText(/^(Alpha|Beta)$/).map((el) => el.textContent);
+    expect(names).toEqual(["Beta", "Alpha"]);
+    // …and the tokens header shows the active descending arrow.
+    const btn = screen.getByRole("button", { name: /tokens/i });
+    expect(btn.querySelector(".sort-arrow")?.textContent).toBe("↓");
+    localStorage.removeItem("signal-house:agent-spend-sort:cachePct:v2-tokens-desc");
+  });
+
+  test("an explicitly chosen sort still beats the default after reload", () => {
+    localStorage.setItem(
+      "signal-house:agent-spend-sort:cachePct:v2-tokens-desc",
+      JSON.stringify({ key: "cost", asc: true }),
+    );
+    useDash.setState({ state: modelUsageState() });
+    render(<AgentSpend />);
+    // Cost ascending on the fixture: Gamma ($2) → Beta ($3) → Alpha ($5).
+    const names = screen.getAllByText(/^(Alpha|Beta|Gamma)$/).map((el) => el.textContent);
+    expect(names).toEqual(["Gamma", "Beta", "Alpha"]);
+    localStorage.removeItem("signal-house:agent-spend-sort:cachePct:v2-tokens-desc");
   });
 });
 
