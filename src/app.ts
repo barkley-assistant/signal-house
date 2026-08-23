@@ -34,6 +34,10 @@ export async function createApp(config: RuntimeConfig): Promise<App> {
   const owner = DatabaseOwner.open(config.db.path);
   const collectors = createCollectors(config);
   const lock = new RefreshLock(owner.db, config.refresh.lockStaleMs);
+  // A previous process may have died holding the persisted lock (crash, or
+  // SIGTERM mid-refresh during a deploy). No legitimate holder can exist at
+  // startup, so clear it instead of letting the stale window block ticks.
+  lock.clearOrphanedAtStartup();
 
   const deps: ApiDeps = {
     db: owner.db,

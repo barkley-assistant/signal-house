@@ -9,6 +9,7 @@
 
 import type { Database } from "bun:sqlite";
 import { getRefreshMeta, setRefreshMeta, deleteRefreshMeta } from "../db/refresh-meta";
+import { log } from "../shared/logger";
 
 export type LockOwner = "manual" | "poller";
 
@@ -68,6 +69,22 @@ export class RefreshLock {
   reset(): void {
     deleteRefreshMeta(this.db, this.KEY);
     this.inProcess = false;
+  }
+
+  /**
+   * Clear a persisted lock left behind by a previous process (crash or
+   * SIGTERM mid-refresh). Safe at startup: no refresh can legitimately be
+   * running — the process that would hold it just died. Without this, the
+   * stale-lock window (config.refresh.lockStaleMs, default 10 min) blocks
+   * every poller tick after an unlucky deploy.
+   */
+  clearOrphanedAtStartup(): void {
+    if (this.inProcess) return; // our own pass is live — never steal it
+    const persisted = getRefreshMeta<PersistedLock>(this.db, this.KEY);
+    if (persisted) {
+      deleteRefreshMeta(this.db, this.KEY);
+      log.info("lock", "cleared orphaned refresh lock from previous process");
+    }
   }
 
   private isStale(lock: PersistedLock): boolean {

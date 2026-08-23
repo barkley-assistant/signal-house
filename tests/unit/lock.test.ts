@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { openMemoryDatabase } from "../../src/db/client";
 import { RefreshLock } from "../../src/orchestrator/lock";
+import { getRefreshMeta, setRefreshMeta } from "../../src/db/refresh-meta";
 
 describe("refresh lock", () => {
   test("acquire succeeds when idle, refuses while in progress", () => {
@@ -64,6 +65,39 @@ describe("refresh lock", () => {
     lock.reset();
     expect(lock.status().inProgress).toBe(false);
     expect(lock.acquire("manual").ok).toBe(true);
+    owner.close();
+  });
+});
+
+describe("clearOrphanedAtStartup", () => {
+  test("clears a persisted orphaned lock at startup", () => {
+    const owner = openMemoryDatabase();
+    const lock = new RefreshLock(owner.db, 600_000);
+    setRefreshMeta(owner.db, "refresh_lock", { token: "orphan", owner: "poller", acquiredAt: Date.now() - 1000 });
+    lock.clearOrphanedAtStartup();
+    expect(getRefreshMeta(owner.db, "refresh_lock")).toBeNull();
+    expect(lock.status().inProgress).toBe(false);
+    owner.close();
+  });
+
+  test("no-op when no lock is persisted", () => {
+    const owner = openMemoryDatabase();
+    const lock = new RefreshLock(owner.db, 600_000);
+    lock.clearOrphanedAtStartup();
+    expect(getRefreshMeta(owner.db, "refresh_lock")).toBeNull();
+    owner.close();
+  });
+
+  test("never steals a lock held by the CURRENT process", () => {
+    const owner = openMemoryDatabase();
+    const lock = new RefreshLock(owner.db, 600_000);
+    const acquired = lock.acquire("manual");
+    if (!acquired.ok) throw new Error("acquire failed");
+    lock.clearOrphanedAtStartup();
+    // Still held — our own in-process pass must survive.
+    expect(lock.status().inProgress).toBe(true);
+    expect(getRefreshMeta(owner.db, "refresh_lock")).not.toBeNull();
+    lock.release(acquired.token);
     owner.close();
   });
 });
