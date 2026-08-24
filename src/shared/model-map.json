@@ -1,11 +1,11 @@
 {
-  "//": "Model map for Signal House — edit this file to add or fix models, no code changes needed. 'machine' is the stable grouping/lookup key: lowercase, vendor prefix stripped, dots stripped, spaces/underscores/dashes collapsed to '-'. 'label' is what the dashboard displays. 'family' groups models from the same vendor (muted tag next to the label); omit when unknown. familyPrefixes is a fallback so models not listed here still get a family.",
+  "//": "Model map for Signal House — edit this file to add or fix models, no code changes needed. 'machine' is the stable grouping/lookup key: lowercase, vendor prefix stripped, dots stripped, spaces/underscores/dashes collapsed to '-'. 'label' is what the dashboard displays. 'family' groups models from the same vendor (muted tag next to the label); omit when unknown. 'aliases' (optional) lists extra machine keys that roll up into this entry — display label, family, and by-model grouping resolve to the canonical entry; cost lookup is NOT aliased. Keep aliases unique across the map. familyPrefixes is a fallback so models not listed here still get a family.",
   "models": [
     { "machine": "deepseek-v4-pro", "label": "DeepSeek V4 Pro", "family": "DeepSeek" },
     { "machine": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "family": "DeepSeek" },
     { "machine": "grok-45", "label": "Grok 4.5", "family": "xAI" },
     { "machine": "grok-build-01", "label": "Grok Build 0.1", "family": "xAI" },
-    { "machine": "ox-alpha", "label": "Ox Alpha", "family": "Stealth" },
+    { "machine": "ox-alpha", "label": "Ox Alpha", "family": "Stealth", "aliases": ["ox-alpha-free"] },
     { "machine": "glm-52", "label": "GLM 5.2", "family": "z.ai" },
     { "machine": "glm-51", "label": "GLM 5.1", "family": "z.ai" },
     { "machine": "glm-5", "label": "GLM 5", "family": "z.ai" },

@@ -7,7 +7,7 @@ import type { PersistedState } from "../config/types";
 import type { RuntimeConfig } from "../config/types";
 import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
-import { machineKey, modelFamily, modelLabel, stripDateSnapshot } from "../shared/models";
+import { canonicalMachineKey, machineKey, modelFamily, modelLabel, stripDateSnapshot } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
 import type { CostEstimationOpts, CostSource, ModelRates, ModelUsageRow, UsageDay } from "../shared/types";
 
@@ -330,8 +330,10 @@ export function mergeModelRows(
   const map = new Map<string, Acc>();
 
   for (const row of rows) {
-    const key = machineKey(row.model);
-    if (!key) continue;
+    const rawKey = machineKey(row.model);
+    if (!rawKey) continue;
+    // Group aliases together without re-keying pricing; cost lookup must stay raw.
+    const key = canonicalMachineKey(row.model);
     // "unknown" carries no signal — drop it from the display entirely.
     if (key === "unknown") continue;
 
@@ -361,7 +363,7 @@ export function mergeModelRows(
       // against the same rate entry as their base model. Mirrors the
       // resolver's own logic; necessary because the rates map keys are
       // already stripped at fetch time.
-      const lookupKey = stripDateSnapshot(key);
+      const lookupKey = stripDateSnapshot(rawKey);
       const rates = costOpts.rates.get(lookupKey);
       if (rates && (rates.input > 0 || rates.output > 0)) {
         rowRates = rates;
@@ -415,7 +417,7 @@ export function mergeModelRows(
       // (so it lines up with the estimator's own number on the row); passthrough
       // distributes the row's upstream cost by per-source token share.
       if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-        const lookupKey = stripDateSnapshot(key);
+        const lookupKey = stripDateSnapshot(rawKey);
         const rates = costOpts.rates.get(lookupKey);
         if (rates && (rates.input > 0 || rates.output > 0)) {
           src.cost += (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
@@ -459,7 +461,7 @@ export function mergeModelRows(
             cost: 0,
           };
           if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-            const lookupKey = stripDateSnapshot(key);
+            const lookupKey = stripDateSnapshot(rawKey);
             const rates = costOpts.rates.get(lookupKey);
             if (rates && (rates.input > 0 || rates.output > 0)) {
               entry.cost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
