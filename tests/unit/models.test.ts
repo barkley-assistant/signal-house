@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { machineKey, modelLabel, modelFamily } from "../../src/shared/models";
+import { canonicalMachineKey, machineKey, modelLabel, modelFamily } from "../../src/shared/models";
 
 describe("machineKey", () => {
   test("collapses case + separator variants to one key", () => {
@@ -70,5 +70,26 @@ describe("modelLabel", () => {
     expect(modelLabel("some-new-model-v3")).toBe("Some New Model V3");
     expect(modelLabel("Auto")).toBe("Auto");
     expect(modelLabel("unknown")).toBe("Unknown");
+  });
+});
+
+describe("model aliasing", () => {
+  test("resolves aliases to the canonical label, family, and machine key", () => {
+    expect(modelLabel("Ox Alpha Free")).toBe("Ox Alpha");
+    expect(modelFamily("Ox Alpha Free")).toBe("Stealth");
+    expect(canonicalMachineKey("Ox Alpha Free")).toBe("ox-alpha");
+  });
+
+  test("preserves unknown-model fallbacks without collapsing", () => {
+    const raw = "some-unknown-thing";
+
+    expect(modelLabel(raw)).toBe("Some Unknown Thing");
+    expect(modelFamily(raw)).toBeNull();
+    expect(canonicalMachineKey(raw)).toBe(machineKey(raw));
+  });
+
+  test("leaves the canonical model path unchanged", () => {
+    expect(modelLabel("Ox Alpha")).toBe("Ox Alpha");
+    expect(canonicalMachineKey("Ox Alpha")).toBe("ox-alpha");
   });
 });
