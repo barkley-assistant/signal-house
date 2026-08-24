@@ -273,25 +273,19 @@
     min-width: 0;
   }
 
-  /* Mobile reset — drop the table's cell layout entirely so the flex
-     wrap on thead actually works. (border-collapse: collapse plus
-     table-row-group semantics hold the children to table-cell layout
-     even when the parent has display:flex, so flex items render
-     one per line instead of wrapping.) All subsequent rules in this
-     @media block rely on the table being a block container at
-     mobile width — the structure (sort-strip up top, model rows
-     below) is preserved by the data not the table semantics.
-     A11y caveat: at desktop width, the table semantics still apply
-     (no override there). */
-  @media (max-width: 640px) {
-    .model-table table,
-    .model-table thead,
-    .model-table tbody,
-    .model-table tr,
-    .model-table th,
-    .model-table td {
-      display: block;
-    }
+  /* Mobile reset — drop the table's cell layout entirely. The
+     border-collapse/table-row-group algorithm otherwise forces children
+     to lay out as table-cells even under a display:flex parent, which
+     is what stacked both the sort pills AND every data cell onto its
+     own line. After this reset each tr/th/td is an ordinary block box;
+     the rules below opt specific containers back into flex. */
+  .model-table table,
+  .model-table thead,
+  .model-table tbody,
+  .model-table tr,
+  .model-table th,
+  .model-table td {
+    display: block;
   }
 
   /* Header → sort strip. The <th> elements need to participate in the
@@ -341,27 +335,24 @@
     background: var(--subtle);
   }
 
-  /* Hide the diagnostics columns + their header at mobile width —
-     they live in the expandable detail panel below each row. The
-     chevron column is the only "7th column" mobile keeps. */
-  .model-table thead th.model-row__chevron-cell {
+  /* Hide every stat cell on mobile by default — only the one matching
+     the active sort shows, driven by .model-row__stat-primary on the
+     JSX. Sessions is the default primary (matches when sortKey is
+     "sessions", "model", or null). The rows are flex containers at
+     this width, so the shown cell participates as a flex item. */
+  .model-row td.num {
     display: none;
   }
-  .model-table tbody tr td.model-row__cache,
-  .model-table tbody tr td.model-row__eff {
-    display: none;
+  .model-row td.num.model-row__stat-primary {
+    display: block;
   }
 
-  /* Chevron column on mobile: the row's affordance hint, anchored
-     at the right edge. Rotates 180° when expanded. We override the
-     desktop `display:none` with explicit table-cell so the column
-     renders inside the actual table layout (not the cramped flex
-     layout the data-label `display:none` would imply). */
+  /* Chevron column on mobile: the row's affordance hint, pinned right
+     by the row's flex layout. Rotates 180° when expanded. Overrides
+     the desktop-default display:none. */
   .model-table tbody tr td.model-row__chevron-cell {
-    display: table-cell;
-    width: 28px;
-    text-align: right;
-    padding-left: 0 !important;
+    display: block;
+    padding: 0;
     color: var(--text-muted);
   }
   .model-table tbody tr .model-row__chevron {
@@ -379,8 +370,13 @@
      cursor + a hover/active state explicit so users discover the
      affordance. Focus ring uses the standard accent. */
   .model-table tbody tr.model-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
     cursor: pointer;
     transition: background 0.12s ease;
+    border-bottom: 1px solid var(--card-border);
   }
   .model-table tbody tr.model-row:hover {
     background: rgba(56, 189, 248, 0.04);
@@ -396,10 +392,28 @@
     border-bottom-color: rgba(56, 189, 248, 0.18);
   }
 
-  /* Model name cell on mobile: family chip drops below the name to
-     keep the row's vertical rhythm tight. */
+  /* The stat-primary cell at mobile: bigger, right-aligned, takes only
+     the width its number needs. The model name gets all leftover
+     space via flex-grow on the first cell. */
+  .model-table tbody tr.model-row td.model-row__stat-primary {
+    flex: 0 0 auto;
+    text-align: right;
+    font-size: 16px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  /* Sessions/Tokens/Cost are monochromatic; Cache % and $/1M keep
+     their dot/accent colours on mobile so the user knows which is
+     the "diagnostic" stat when expanded. */
+  .model-table tbody tr.model-row td.model-row__stat-primary.model-row__eff {
+    color: var(--info, #38bdf8);
+  }
+
+  /* Model-name cell grows to fill the row; chevron pins right. */
   .model-table .model-name-cell {
-    max-width: 0; /* allow ellipsis to take effect inside a tight cell */
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
   }
   .model-table .model-name {
@@ -412,17 +426,21 @@
   .model-table .model-family {
     display: none;
   }
+  .model-table tbody tr td.model-row__chevron-cell {
+    flex: 0 0 24px;
+    text-align: right;
+  }
 
   /* Expansion row — the detail panel that drops below the row when
      tapped. Darker surface so it reads as "supplemental" not "main"
-     content. Grid the full breakdown including the hidden-by-default
-     Cache % and $/1M. Override the desktop `display:none` with an
-     explicit `table-row`. */
+     content. Grid the full breakdown including the collapsed-by-default
+     stats. Overrides the desktop-default display:none. */
   .model-table tbody tr.model-row__detail {
-    display: table-row;
+    display: block;
     background: rgba(0, 0, 0, 0.18);
   }
   .model-table tbody tr.model-row__detail > td {
+    display: block;
     padding: 12px 14px 16px;
     border-bottom: 1px solid var(--card-border);
   }

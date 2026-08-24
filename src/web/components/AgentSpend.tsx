@@ -524,11 +524,11 @@ function ModelTable() {
                       <span className="model-family">{m.family}</span>
                     )}
                   </td>
-                  <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
-                  <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
-                  <td className="num" data-label="Cost">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</td>
-                  <td className="num model-row__cache" data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</td>
-                  <td className="num eff-cell model-row__eff" data-label="$/1M">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
+                  <td className={`num${sortKey === "sessions" || sortKey === "model" || sortKey === null ? " model-row__stat-primary" : ""}`} data-label="Sessions">{formatNumber(m.sessions)}</td>
+                  <td className={`num${sortKey === "tokens" ? " model-row__stat-primary" : ""}`} data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
+                  <td className={`num${sortKey === "cost" ? " model-row__stat-primary" : ""}`} data-label="Cost">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</td>
+                  <td className={`num model-row__cache${sortKey === "cachePct" ? " model-row__stat-primary" : ""}`} data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</td>
+                  <td className={`num eff-cell model-row__eff${sortKey === "eff" ? " model-row__stat-primary" : ""}`} data-label="$/1M">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
                   {/* Chevron column — desktop hides it via css; mobile shows it as the affordance hint. */}
                   <td className="model-row__chevron-cell" aria-hidden="true">
                     <span className="model-row__chevron">▾</span>
