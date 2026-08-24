@@ -379,13 +379,15 @@ type SortKey = "model" | "sessions" | "tokens" | "cost" | "cachePct" | "eff" | n
 type SortState = { key: SortKey; asc: boolean };
 
 /**
- * Default by-model order: tokens descending (2026-08-23 operator preference,
- * was upstream session order). The storage key is versioned per default —
- * bumping it makes a new default apply ONCE to browsers that already stored
- * the old one, without stomping an explicitly chosen sort afterwards.
+ * Default by-model order: sessions descending (2026-08-24 operator
+ * preference — readable at-a-glance and the most direct "which model
+ * is being used" signal; tokens/cost can be sorted via the pill strip).
+ * The storage key is versioned per default — bumping it makes a new
+ * default apply ONCE to browsers that already stored the old one,
+ * without stomping an explicitly chosen sort afterwards.
  */
-const DEFAULT_SORT: SortState = { key: "tokens", asc: false };
-const SORT_STORAGE_KEY = "signal-house:agent-spend-sort:cachePct:v2-tokens-desc";
+const DEFAULT_SORT: SortState = { key: "sessions", asc: false };
+const SORT_STORAGE_KEY = "signal-house:agent-spend-sort:cachePct:v3-sessions-desc";
 
 function readSortState(): SortState {
   try {

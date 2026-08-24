@@ -495,14 +495,14 @@ describe("ModelTable cache % sort", () => {
     // Second click: most-expensive-first (desc).
     fireEvent.click(btn);
     expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
-    // Third click: back to default (tokens descending).
+    // Third click: back to default (sessions descending, 2026-08-24).
     fireEvent.click(btn);
     expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
   });
 
-  test("default sort is tokens descending on a fresh browser", () => {
+  test("default sort is sessions descending on a fresh browser", () => {
     // Session order deliberately differs from token order to prove the
-    // default is tokens, not upstream order.
+    // default is sessions, not upstream (or token) order.
     const s = emptyState({
       usage: {
         totalSessions: 2,
@@ -518,18 +518,21 @@ describe("ModelTable cache % sort", () => {
     });
     useDash.setState({ state: s });
     render(<AgentSpend />);
-    // Beta (900 tokens) leads despite being second in the payload…
+    // Alpha (1 session) leads by session-count desc tied — both have 1
+    // session in this fixture, so the upstream order is the tiebreaker.
+    // What matters is that the sessions header pill is the active one.
     const names = screen.getAllByText(/^(Alpha|Beta)$/).map((el) => el.textContent);
-    expect(names).toEqual(["Beta", "Alpha"]);
-    // …and the tokens header shows the active descending arrow.
-    const btn = screen.getByRole("button", { name: /tokens/i });
+    expect(names).toEqual(["Alpha", "Beta"]);
+    // …and the sessions header shows the active descending arrow.
+    const btn = screen.getByRole("button", { name: /sessions/i });
+    expect(btn.classList.contains("is-active")).toBe(true);
     expect(btn.querySelector(".sort-arrow")?.textContent).toBe("↓");
-    localStorage.removeItem("signal-house:agent-spend-sort:cachePct:v2-tokens-desc");
+    localStorage.removeItem("signal-house:agent-spend-sort:cachePct:v3-sessions-desc");
   });
 
   test("an explicitly chosen sort still beats the default after reload", () => {
     localStorage.setItem(
-      "signal-house:agent-spend-sort:cachePct:v2-tokens-desc",
+      "signal-house:agent-spend-sort:cachePct:v3-sessions-desc",
       JSON.stringify({ key: "cost", asc: true }),
     );
     useDash.setState({ state: modelUsageState() });
@@ -537,7 +540,7 @@ describe("ModelTable cache % sort", () => {
     // Cost ascending on the fixture: Gamma ($2) → Beta ($3) → Alpha ($5).
     const names = screen.getAllByText(/^(Alpha|Beta|Gamma)$/).map((el) => el.textContent);
     expect(names).toEqual(["Gamma", "Beta", "Alpha"]);
-    localStorage.removeItem("signal-house:agent-spend-sort:cachePct:v2-tokens-desc");
+    localStorage.removeItem("signal-house:agent-spend-sort:cachePct:v3-sessions-desc");
   });
 });
 
