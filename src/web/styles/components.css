@@ -239,6 +239,22 @@
   min-width: 540px;
 }
 
+/* Desktop default — the chevron column is mobile-only. Hide both the
+   <th> header and the per-row <td> on desktop so the table stays the
+   standard 6-column rendering. The mobile media query below re-enables
+   them.
+
+   Same for the expansion row: at desktop widths the click-to-expand
+   affordance doesn't exist, so the row is unconditionally rendered as
+   display:none — visible only when state.expandedKey is set AND we're
+   in the mobile media query. (Defence-in-depth: even if state is set
+   somehow at desktop, nothing renders.) */
+.model-table thead th.model-row__chevron-cell,
+.model-table tbody tr td.model-row__chevron-cell,
+.model-table tbody tr.model-row__detail {
+  display: none;
+}
+
 /* Mobile (≤640px): the by-model table keeps a real <table> layout
     (no card-collapse gymnastics) — desktop's 6-column table stays the
     rendered DOM. Two adaptations for narrow widths:
