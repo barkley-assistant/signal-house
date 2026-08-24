@@ -5,7 +5,7 @@
  * and by-model table. Sources without cost telemetry render "—", never 0.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Fragment } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend } from "../state/store";
@@ -416,6 +416,11 @@ function ModelTable() {
   const models = usage?.byModel ?? [];
   const [sort, setSort] = useState<SortState>(readSortState);
   const { key: sortKey, asc } = sort;
+  // Mobile-only expand state: clicking a row toggles a detail panel below
+  // it showing the full breakdown (Cache %, $/1M + the cost-efficiency
+  // breakdown). Single-expand: tapping a different row collapses the
+  // previous one. Desktop hides the chevron + detail via @media <640px.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   // Persist every change; survives reloads (and the default is a no-op).
   useEffect(() => {
@@ -489,22 +494,82 @@ function ModelTable() {
               <th className="num"><button type="button" className={sortBtnClass("cost")} onClick={() => cycle("cost")}>Cost{arrow("cost")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("cachePct")} onClick={() => cycle("cachePct")}>Cache %{arrow("cachePct")}</button></th>
               <th className="num"><button type="button" className={sortBtnClass("eff")} onClick={() => cycle("eff")}>$/1M{arrow("eff")}</button></th>
+              {/* Chevron column header — empty cell on desktop (hidden by css); mobile shows the chevron col header carrying aria-sort="none" semantically. We don't render a visible <th> at desktop because the column is collapsed — but at mobile the chevron is the affordance hint, no header is needed. Hidden via css. */}
+              <th className="model-row__chevron-cell" aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
-            {sorted.map((m) => (
-              <tr key={m.model}>
-                <td>
-                  <span className="model-name">{m.model}</span>
-                  {m.family && m.family !== m.model && <span className="model-family">{m.family}</span>}
-                </td>
-                <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
-                <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
-                <td className="num" data-label="Cost">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</td>
-                <td className="num" data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</td>
-                <td className="num eff-cell" data-label="$/1M">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
-              </tr>
-            ))}
+            {sorted.map((m) => {
+              const rowKey = m.model;
+              const isExpanded = expandedKey === rowKey;
+              return (
+              <Fragment key={rowKey}>
+                <tr
+                  className={`model-row${isExpanded ? " model-row--expanded" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  aria-controls={`model-row-detail-${rowKey}`}
+                  onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setExpandedKey(isExpanded ? null : rowKey);
+                    }
+                  }}
+                >
+                  <td className="model-name-cell">
+                    <span className="model-name">{m.model}</span>
+                    {m.family && m.family !== m.model && (
+                      <span className="model-family">{m.family}</span>
+                    )}
+                  </td>
+                  <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
+                  <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
+                  <td className="num" data-label="Cost">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</td>
+                  <td className="num model-row__cache" data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</td>
+                  <td className="num eff-cell model-row__eff" data-label="$/1M">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
+                  {/* Chevron column — desktop hides it via css; mobile shows it as the affordance hint. */}
+                  <td className="model-row__chevron-cell" aria-hidden="true">
+                    <span className="model-row__chevron">▾</span>
+                  </td>
+                </tr>
+                {isExpanded && (
+                  <tr
+                    id={`model-row-detail-${rowKey}`}
+                    className="model-row__detail"
+                    role="region"
+                    aria-label={`Details for ${m.model}`}
+                  >
+                    <td colSpan={7}>
+                      <div className="model-row__detail-grid">
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Sessions</span>
+                          <span className="model-row__detail-value">{formatNumber(m.sessions)}</span>
+                        </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Tokens</span>
+                          <span className="model-row__detail-value">{formatCompact(m.tokens ?? 0)}</span>
+                        </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Cost</span>
+                          <span className="model-row__detail-value">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</span>
+                        </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Cache %</span>
+                          <span className="model-row__detail-value">{formatPercent(m.cacheHitRate ?? 0)}</span>
+                        </div>
+                        <div className="model-row__detail-stat model-row__detail-stat--eff">
+                          <span className="model-row__detail-label">$/1M</span>
+                          <span className="model-row__detail-value eff-cell">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}
