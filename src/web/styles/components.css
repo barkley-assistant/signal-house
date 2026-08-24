@@ -277,7 +277,13 @@
      flex layout (otherwise browser default display:table-cell overrides
      the parent flex children and they stack vertically). Setting
      <th> to flex itself wraps each pill as a flex item, which then
-     wraps to the next line via flex-wrap on the parent <tr>. */
+     wraps to the next line via flex-wrap on the parent <tr>.
+
+     flex-shrink:0 stops the default shrink-to-fit from forcing every
+     flex child onto its own line; combined with flex-wrap:wrap on
+     the parent, the pills flow into multiple rows as the line gets
+     filled. min-width:0 prevents intrinsic content-width from
+     pinning each pill to a wide minimum. */
   .model-table thead tr {
     display: flex;
     flex-wrap: wrap;
@@ -286,6 +292,8 @@
   }
   .model-table thead th {
     display: flex;
+    flex: 0 0 auto;
+    min-width: 0;
     border-bottom: none;
     padding: 0;
   }
