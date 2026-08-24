@@ -310,17 +310,21 @@
   /* Hide the diagnostics columns + their header at mobile width —
      they live in the expandable detail panel below each row. The
      chevron column is the only "7th column" mobile keeps. */
-  .model-table thead th:nth-child(5),  /* Cache % header */
-  .model-table thead th:nth-child(6),  /* $/1M header */
-  .model-table thead th:nth-child(7),  /* Chevron header */
+  .model-table thead th.model-row__chevron-cell {
+    display: none;
+  }
   .model-table tbody tr td.model-row__cache,
   .model-table tbody tr td.model-row__eff {
     display: none;
   }
 
   /* Chevron column on mobile: the row's affordance hint, anchored
-     at the right edge. Rotates 180° when expanded. */
+     at the right edge. Rotates 180° when expanded. We override the
+     desktop `display:none` with explicit table-cell so the column
+     renders inside the actual table layout (not the cramped flex
+     layout the data-label `display:none` would imply). */
   .model-table tbody tr td.model-row__chevron-cell {
+    display: table-cell;
     width: 28px;
     text-align: right;
     padding-left: 0 !important;
@@ -378,7 +382,8 @@
   /* Expansion row — the detail panel that drops below the row when
      tapped. Darker surface so it reads as "supplemental" not "main"
      content. Grid the full breakdown including the hidden-by-default
-     Cache % and $/1M. */
+     Cache % and $/1M. Override the desktop `display:none` with an
+     explicit `table-row`. */
   .model-table tbody tr.model-row__detail {
     display: table-row;
     background: rgba(0, 0, 0, 0.18);
