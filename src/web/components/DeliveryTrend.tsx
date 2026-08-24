@@ -112,7 +112,13 @@ export function DeliveryTrend() {
   const RES_LEGEND_STORAGE_KEY = "signal-house:resource-legend";
 
   useEffect(() => {
-    if (!resChartRef.current) return;
+    if (!ciRef.current || !barRef.current) return;
+    if (resRef.current) resChartRef.current = echarts.init(resRef.current, "dark");
+    ciChartRef.current = echarts.init(ciRef.current, "dark");
+    barChartRef.current = echarts.init(barRef.current, "dark");
+    // Persist resource legend toggles (CPU/Memory/Swap) so the choice survives
+    // reloads (issue #363). Attach AFTER the instance exists: an earlier effect
+    // with empty deps ran before init and silently no-op'd on a null ref.
     const onLegendToggle = (): void => {
       try {
         const legendOpt = resChartRef.current?.getOption().legend as Array<{ selected?: Record<string, boolean> }> | undefined;
@@ -121,17 +127,7 @@ export function DeliveryTrend() {
         /* storage unavailable — toggling still works this session */
       }
     };
-    resChartRef.current.on("legendselectchanged", onLegendToggle);
-    return () => {
-      resChartRef.current?.off("legendselectchanged", onLegendToggle);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!ciRef.current || !barRef.current) return;
-    if (resRef.current) resChartRef.current = echarts.init(resRef.current, "dark");
-    ciChartRef.current = echarts.init(ciRef.current, "dark");
-    barChartRef.current = echarts.init(barRef.current, "dark");
+    resChartRef.current?.on("legendselectchanged", onLegendToggle);
     const ro = new ResizeObserver(() => {
       resChartRef.current?.resize();
       ciChartRef.current?.resize();
@@ -219,6 +215,39 @@ export function DeliveryTrend() {
   );
 }
 
+/**
+ * Build the Host-resources tooltip HTML for an axis-trigger formatter payload.
+ *
+ * Accepts `number | null | undefined` per-series values: ECharts does not
+ * preserve the source `number | null` typing through its event layer, and for
+ * all-null days it hands the formatter `undefined` (not `null`). A strict
+ * `!== null` filter used to let `undefined` survive and detonate on
+ * `.toFixed()`, so we gate on `Number.isFinite` — false for `null`,
+ * `undefined`, and `NaN` alike — sending non-finite series to the "No data"
+ * branch instead of throwing (issue #363).
+ */
+export function formatResourceTooltip(
+  arr: Array<{ axisValue: string; seriesName: string; value: number | null | undefined; marker: string }>,
+  points: ResourcePoint[],
+): string {
+  if (!arr.length) return "";
+  const p = points.find((q) => q.date === arr[0].axisValue);
+  if (!p) return "";
+  const visible = arr.filter((row) => Number.isFinite(row.value));
+  const missing = arr.filter((row) => !Number.isFinite(row.value)).map((row) => row.seriesName);
+  const rowsHtml =
+    visible.length > 0
+      ? visible
+          .map((row) => `${row.marker} ${row.seriesName}: <b style="color:#e2e8f0">${(row.value as number).toFixed(1)}%</b>`)
+          .join("<br/>")
+      : `<div style="color:#64748b;font-style:italic">No data</div>`;
+  const extras =
+    visible.length > 0 && missing.length > 0
+      ? `<div style="margin-top:4px;color:#64748b;font-size:11px">${missing.join(" · ")}: no data</div>`
+      : "";
+  return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${fmtDayFull(arr[0].axisValue)}</div>${rowsHtml}${extras}`;
+}
+
 /** Render the per-day host-resource percentages as a 3-series line chart.
  *
  *  Memory / swap / CPU are all 0–100% on one axis, so a single shared
@@ -261,23 +290,8 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[], legendS
         ...touchAwareTooltip(),
         axisPointer: { type: "line", lineStyle: { color: "#232732" } },
         formatter: (params: unknown) => {
-          const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
-          if (!arr.length) return "";
-          const p = points.find((q) => q.date === arr[0].axisValue);
-          if (!p) return "";
-          const visible = arr.filter((row) => row.value !== null);
-          const missing = arr.filter((row) => row.value === null).map((row) => row.seriesName);
-          const rowsHtml =
-            visible.length > 0
-              ? visible
-                  .map((row) => `${row.marker} ${row.seriesName}: <b style="color:#e2e8f0">${(row.value as number).toFixed(1)}%</b>`)
-                  .join("<br/>")
-              : `<div style="color:#64748b;font-style:italic">No data</div>`;
-          const extras =
-            visible.length > 0 && missing.length > 0
-              ? `<div style="margin-top:4px;color:#64748b;font-size:11px">${missing.join(" · ")}: no data</div>`
-              : "";
-          return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${fmtDayFull(arr[0].axisValue)}</div>${rowsHtml}${extras}`;
+          const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null | undefined; marker: string }>;
+          return formatResourceTooltip(arr, points);
         },
       },
       legend: {
