@@ -9,6 +9,7 @@ import { avg, median, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { canonicalMachineKey, machineKey, modelFamily, modelLabel, stripDateSnapshot } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
+import { resolvePrivacyMap, isRepoVisible } from "../privacy/privacy";
 import type { CostEstimationOpts, CostSource, ModelRates, ModelUsageRow, UsageDay } from "../shared/types";
 
 export interface SourceUsageMetrics {
@@ -94,21 +95,32 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
   const git = states.find((s) => s.source === "git")?.data ?? null;
   const usageStates = states.filter((s) => (s.data?.usage?.byDay.length ?? 0) > 0);
 
+  // Privacy — every github-derived summary stat must respect the same
+  // visibility rule as the attention queue: when showPrivateRepoItems is
+  // off, private/unknown repos are excluded from stale counts, throughput,
+  // cycle time, and CI. Otherwise the cards leak counts the queue hides.
+  const privacyMap = resolvePrivacyMap(github?.repositories ?? []);
+  const visibleRepo = (repoKey: string): boolean =>
+    config.privacy.showPrivateRepoItems || isRepoVisible(repoKey, privacyMap, false);
+  const ghIssues = (github?.issues ?? []).filter((i) => visibleRepo(i.repoKey));
+  const ghPulls = (github?.pullRequests ?? []).filter((p) => visibleRepo(p.repoKey));
+  const ghRuns = (github?.workflowRuns ?? []).filter((w) => visibleRepo(w.repoKey));
+
   // Throughput — counts inside the window (issues/PRs from github, commits from git).
   const inWindow = (iso: string | null): boolean => !!iso && iso.slice(0, 10) >= start && iso.slice(0, 10) <= end;
   const inWindowDay = (d: UsageDay): boolean => d.date >= start && d.date <= end;
   const throughput = github
     ? {
-        issuesOpened: github.issues.filter((i) => inWindow(i.createdAt)).length,
-        issuesClosed: github.issues.filter((i) => inWindow(i.closedAt)).length,
-        prsCreated: github.pullRequests.filter((p) => inWindow(p.createdAt)).length,
-        prsMerged: github.pullRequests.filter((p) => inWindow(p.mergedAt)).length,
+        issuesOpened: ghIssues.filter((i) => inWindow(i.createdAt)).length,
+        issuesClosed: ghIssues.filter((i) => inWindow(i.closedAt)).length,
+        prsCreated: ghPulls.filter((p) => inWindow(p.createdAt)).length,
+        prsMerged: ghPulls.filter((p) => inWindow(p.mergedAt)).length,
         totalCommits: windowCommits(git, start, end),
       }
     : null;
 
   // Cycle time — merged PRs inside the window: mergedAt − createdAt (seconds).
-  const merged = (github?.pullRequests ?? []).filter((p) => p.mergedAt && p.createdAt && inWindow(p.mergedAt));
+  const merged = ghPulls.filter((p) => p.mergedAt && p.createdAt && inWindow(p.mergedAt));
   const cycleTimes = merged.map((p) => (Date.parse(p.mergedAt!) - Date.parse(p.createdAt)) / 1000);
   const cycleTime =
     merged.length > 0
@@ -121,7 +133,7 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
       : null;
 
   // CI — workflow runs inside the window.
-  const runs = (github?.workflowRuns ?? []).filter((w) => inWindow(w.createdAt));
+  const runs = ghRuns.filter((w) => inWindow(w.createdAt));
   const passCount = runs.filter((w) => w.conclusion === "success").length;
   const failCount = runs.filter((w) => w.conclusion === "failure").length;
   const ci =
@@ -134,10 +146,12 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
         }
       : null;
 
-  // Stale work — open items untouched past the threshold.
+  // Stale work — open items untouched past the threshold. Same filtered
+  // issue/PR lists as throughput/cycle-time so the card can never count
+  // items the attention queue is not allowed to show.
   const thresholdMs = Date.now() - config.staleness.staleThresholdDays * 86_400_000;
-  const staleIssues = (github?.issues ?? []).filter((i) => i.state === "open" && Date.parse(i.updatedAt) < thresholdMs).length;
-  const stalePrs = (github?.pullRequests ?? []).filter((p) => p.state === "open" && Date.parse(p.updatedAt) < thresholdMs).length;
+  const staleIssues = ghIssues.filter((i) => i.state === "open" && Date.parse(i.updatedAt) < thresholdMs).length;
+  const stalePrs = ghPulls.filter((p) => p.state === "open" && Date.parse(p.updatedAt) < thresholdMs).length;
   const staleWork =
     github !== null
       ? { staleIssues, stalePrs, thresholdDays: config.staleness.staleThresholdDays }

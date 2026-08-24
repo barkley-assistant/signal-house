@@ -140,6 +140,10 @@ describe("computeAggregates windowing", () => {
       // merged yesterday — inside both windows
       { id: "new", repoKey: "r", repo: "r", title: "new", state: "closed", url: "", author: "u", createdAt: iso(2), updatedAt: iso(1), mergedAt: iso(1), closedAt: iso(1), headSha: null, labels: [], additions: null, deletions: null, changedFiles: null, ciStatus: null },
     ];
+    // Aggregates apply the privacy filter (fail-closed): declare "r" public.
+    data.repositories = [{ repoKey: "github:r", name: "r", localPath: null, remoteUrl: null, githubOwner: "r", githubRepo: "r", source: "github", isPrivate: false, present: true, lastSeenAt: null }];
+    // ...and the PRs must reference that key to be visible.
+    for (const pr of data.pullRequests) pr.repoKey = "github:r";
     const s = state("github", data);
 
     const a7 = computeAggregates([s], config, 7);
@@ -154,13 +158,15 @@ describe("computeAggregates windowing", () => {
   test("throughput and CI are window-filtered", () => {
     const data = emptySourceData();
     const day = (daysAgo: number): string => utcDaysAgo(daysAgo);
+    // Aggregates apply the privacy filter (fail-closed): declare "r" public.
+    data.repositories = [{ repoKey: "github:r", name: "r", localPath: null, remoteUrl: null, githubOwner: "r", githubRepo: "r", source: "github", isPrivate: false, present: true, lastSeenAt: null }];
     data.issues = [
-      { id: "i1", repoKey: "r", repo: "r", title: "recent", state: "closed", url: "", createdAt: day(2), updatedAt: day(2), closedAt: day(2), labels: [], assignee: null, milestone: null },
-      { id: "i2", repoKey: "r", repo: "r", title: "old", state: "closed", url: "", createdAt: day(40), updatedAt: day(40), closedAt: day(40), labels: [], assignee: null, milestone: null },
+      { id: "i1", repoKey: "github:r", repo: "r", title: "recent", state: "closed", url: "", createdAt: day(2), updatedAt: day(2), closedAt: day(2), labels: [], assignee: null, milestone: null },
+      { id: "i2", repoKey: "github:r", repo: "r", title: "old", state: "closed", url: "", createdAt: day(40), updatedAt: day(40), closedAt: day(40), labels: [], assignee: null, milestone: null },
     ];
     data.workflowRuns = [
-      { id: "w1", name: "ci", status: "completed", conclusion: "success", createdAt: day(1), completedAt: day(1), headSha: "a", repo: "r", repoKey: "r", branch: "main", workflowName: "ci", url: "" },
-      { id: "w2", name: "ci", status: "completed", conclusion: "failure", createdAt: day(35), completedAt: day(35), headSha: "b", repo: "r", repoKey: "r", branch: "main", workflowName: "ci", url: "" },
+      { id: "w1", name: "ci", status: "completed", conclusion: "success", createdAt: day(1), completedAt: day(1), headSha: "a", repo: "r", repoKey: "github:r", branch: "main", workflowName: "ci", url: "" },
+      { id: "w2", name: "ci", status: "completed", conclusion: "failure", createdAt: day(35), completedAt: day(35), headSha: "b", repo: "r", repoKey: "github:r", branch: "main", workflowName: "ci", url: "" },
     ];
     const s = state("github", data);
 
@@ -203,5 +209,51 @@ describe("mergeModelRows cache preservation", () => {
     const merged = mergeModelRows(rows, { rates: new Map(), enabled: false });
     expect(merged[0].cacheReadTokens).toBe(100);
     expect(Object.keys(merged[0].bySource ?? {})).toContain("opencode");
+  });
+});
+
+describe("computeAggregates privacy filtering", () => {
+  const OLD = new Date(Date.now() - 40 * 86_400_000).toISOString(); // 40d ago — past any threshold
+  const RECENT = new Date(Date.now() - 2 * 86_400_000).toISOString();
+
+  /** Github fixture: one public repo with a fresh open issue, one private
+      repo with a stale open issue + an old workflow run. */
+  function ghState(): PersistedState {
+    const data = emptySourceData();
+    data.repositories = [
+      { repoKey: "github:acme/public", name: "public", localPath: null, remoteUrl: null, githubOwner: "acme", githubRepo: "public", source: "github", isPrivate: false, present: true, lastSeenAt: null },
+      { repoKey: "github:acme/secret", name: "secret", localPath: null, remoteUrl: null, githubOwner: "acme", githubRepo: "secret", source: "github", isPrivate: true, present: true, lastSeenAt: null },
+    ];
+    data.issues = [
+      { id: "1", title: "fresh public", state: "open", createdAt: RECENT, updatedAt: RECENT, closedAt: null, repo: "acme/public", repoKey: "github:acme/public", labels: [], assignee: null, milestone: null, url: "" },
+      { id: "2", title: "stale private", state: "open", createdAt: OLD, updatedAt: OLD, closedAt: null, repo: "acme/secret", repoKey: "github:acme/secret", labels: [], assignee: null, milestone: null, url: "" },
+    ];
+    data.pullRequests = [];
+    data.workflowRuns = [
+      { id: "1", name: "ci", status: "completed", conclusion: "success", createdAt: RECENT, completedAt: null, headSha: "abc", repo: "acme/secret", repoKey: "github:acme/secret", branch: "main", workflowName: "CI", url: "" },
+    ];
+    return state("github", data);
+  }
+
+  test("stale counts exclude private repos when showPrivateRepoItems is off", () => {
+    const agg = computeAggregates([ghState()], config);
+    // The private stale issue must NOT leak into the card...
+    expect(agg.staleWork?.staleIssues).toBe(0);
+    // ...but the public in-window issue still counts.
+    expect(agg.throughput?.issuesOpened ?? 0).toBe(1);
+  });
+
+  test("stale counts include private repos on the explicit operator opt-in", () => {
+    const cfg = { ...config, privacy: { showPrivateRepoItems: true } };
+    const agg = computeAggregates([ghState()], cfg);
+    expect(agg.staleWork?.staleIssues).toBe(1);
+    expect(agg.throughput?.issuesOpened ?? 0).toBe(1);
+  });
+
+  test("fail-closed: issues from repos missing from the map are excluded too", () => {
+    const s = ghState();
+    s.data!.issues.push({ id: "3", title: "ghost repo issue", state: "open", createdAt: OLD, updatedAt: OLD, closedAt: null, repo: "acme/unlisted", repoKey: "github:acme/unlisted", labels: [], assignee: null, milestone: null, url: "" });
+    const agg = computeAggregates([s], config);
+    expect(agg.staleWork?.staleIssues).toBe(0);
   });
 });
