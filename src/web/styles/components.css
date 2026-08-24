@@ -288,23 +288,31 @@
     background: var(--subtle);
   }
 
-  /* Rows → cards. The five stats sit in a single 5-across row under the
-     model name so each card stays one compact block — extra stat rows
-     would double the vertical space for no readability gain at ~63px per
-     stat column on a 375px phone. */
+  /* Rows → cards. Five stats at ~63px each is unreadable on a 375px phone;
+     restructure into three vertical sections per card, each its own
+     display:grid block:
+     (1) Header — model name + family chip on a single full-width row.
+     (2) Primary — Sessions / Tokens / Cost in a 3-column grid.
+     (3) Diagnostics — Cache % / $/1M in a 2-column grid separated
+         from the primary row by a hairline divider.
+     The 2-col / 3-col split avoids the "missing third column" look a
+     unified 3-col grid would produce on the diagnostics row. */
   .model-table tbody {
     display: grid;
-    gap: 8px;
+    gap: 10px;
   }
   .model-table table.data tbody tr:nth-child(odd),
   .model-table table.data tbody tr {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 6px 10px;
-    padding: 10px 12px;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 14px 16px 16px;
+    /* Subtle elevation lift over the page background so the card
+       boundary reads at-a-glance. */
+    background: linear-gradient(180deg, #15181f 0%, #13161c 100%);
+    border: 1px solid #2a2f3a;
+    border-radius: 12px;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
   }
   .model-table table.data tbody tr:hover {
     background: var(--card-bg);
@@ -314,19 +322,20 @@
     padding: 0;
   }
 
-  /* Model name spans the card; family chip sits right. */
+  /* (1) Header row — name + family chip on opposite ends. */
   .model-table tbody tr td:first-child {
-    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     min-width: 0;
-    margin-bottom: 4px;
+    margin-bottom: 12px;
   }
   .model-table .model-name {
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 14px;
+    font-weight: 600;
   }
   .model-table .model-family {
     display: inline-block;
@@ -344,15 +353,66 @@
     content: none;
   }
 
-  /* Stat cells: label over value (mini-kpi grammar, like the health strip). */
-  .model-table tbody tr td:not(:first-child) {
+  /* (2) Primary stats row — Sessions / Tokens / Cost in a 3-col grid. */
+  .model-table tbody tr td.model-stats-primary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 0;
+  }
+  /* (3) Diagnostics row — Cache % + $/1M in a 2-col grid with a
+     hairline divider above. Different aspect from row 2 (2-col instead
+     of 3-col) so the "missing third column" doesn't read as a bug. */
+  .model-table tbody tr td.model-stats-diag {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 12px 0 0;
+    margin-top: 12px;
+    border-top: 1px solid #232732;
+  }
+  /* Right-align the $/1M value so the cost-efficiency stat reads as a
+     different category from the primary row, anchored opposite Cache %. */
+  .model-table tbody tr td.model-stats-diag .stat-cell.eff-cell {
+    text-align: right;
+    align-items: flex-end;
+  }
+  /* Stat cell — column-flexed label over value, like the health strip. */
+  .model-table .stat-cell {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 1px;
-    text-align: left;
+    gap: 2px;
     font-variant-numeric: tabular-nums;
-    min-width: 0; /* allow the label to ellipsize instead of wrapping */
+    min-width: 0;
+  }
+  .model-table .stat-cell::before {
+    content: attr(data-label);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .model-table .stat-cell {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary, #e2e8f0);
+  }
+  .model-table .stat-cell.eff-cell {
+    font-size: 14px;
+    color: var(--info, #38bdf8);
+    font-weight: 600;
+  }
+
+  /* Drop to a tighter padding for very narrow viewports. */
+  @media (max-width: 380px) {
+    .model-table table.data tbody tr:nth-child(odd),
+    .model-table table.data tbody tr {
+      padding: 12px 12px 14px;
+    }
   }
   .model-table td.num::before {
     content: attr(data-label);
@@ -364,17 +424,18 @@
     overflow: hidden;
     white-space: nowrap;
   }
-  /* Longest label ("Cache %") is the one that wraps at ~390px and breaks
-     the card's column baseline (audit 2026-08-23). Shorten stat labels on
-     touch devices where the cards are the primary layout. */
-  @media (pointer: coarse) {
-    .model-table td.num[data-label="Cache %"]::before {
-      content: "Cach";
-    }
-    .model-table td.num[data-label="Sessions"]::before {
-      content: "Sess";
-    }
+  /* Bump the value text so decimal precision reads at thumb's length.
+     Token/cost figures are tabular-nums so columns line up across rows. */
+  .model-table td.num {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary, #e2e8f0);
   }
+  .model-table td.num.eff-cell {
+    font-size: 14px;
+  }
+  /* The previously-needed 4-letter label truncation ("Cach", "Sess") is
+     gone — the new grid has the room and the audit is closed. */
 }
 
 /* Cost-per-1M cell — blue accent so efficiency reads as a distinct, tappable

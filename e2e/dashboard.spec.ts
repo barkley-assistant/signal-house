@@ -82,14 +82,19 @@ test.describe("dashboard (desktop)", () => {
     const wrapperScrolls = await page.locator(".model-table").evaluate((el) => el.scrollWidth > el.clientWidth);
     expect(wrapperScrolls).toBe(false);
 
-    // Every stat cell carries its label (Sessions / Tokens / Cost) and none
-    // pokes out of the card bounds.
+    // Every stat cell carries its label (Sessions / Tokens / Cost) via the
+    // .stat-cell ::before pseudo-element (cards now nest stats inside
+    // colSpan td wrappers: .model-stats-primary for Sessions/Tokens/Cost,
+    // .model-stats-diag for Cache% + $/1M).
     const labels = await page.locator(".model-table tbody tr").first().evaluate((tr) =>
-      [...tr.querySelectorAll("td.num")].map((td) => getComputedStyle(td, "::before").content),
+      [...tr.querySelectorAll(".stat-cell")].map((c) => (c as HTMLElement).dataset.label || ""),
     );
     expect(labels.join(",")).toContain("Sessions");
     expect(labels.join(",")).toContain("Tokens");
     expect(labels.join(",")).toContain("Cost");
+    // Diagnostics row labels too — proves the full 5-stat coverage survives.
+    expect(labels.join(",")).toContain("Cache %");
+    expect(labels.join(",")).toContain("$/1M");
 
     // Sorting survives the card reflow: tap the Cost pill.
     await page.locator(".model-table .sort-btn", { hasText: "Cost" }).click();
