@@ -498,17 +498,11 @@ function ModelTable() {
                   <span className="model-name">{m.model}</span>
                   {m.family && m.family !== m.model && <span className="model-family">{m.family}</span>}
                 </td>
-                {/* Primary stats row — Sessions / Tokens / Cost */}
-                <td colSpan={3} className="model-stats-primary">
-                  <div className="stat-cell num" data-label="Sessions">{formatNumber(m.sessions)}</div>
-                  <div className="stat-cell num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</div>
-                  <div className="stat-cell num" data-label="Cost">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</div>
-                </td>
-                {/* Diagnostics row — Cache % / $/1M */}
-                <td colSpan={3} className="model-stats-diag">
-                  <div className="stat-cell num" data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</div>
-                  <div className="stat-cell num eff-cell" data-label="$/1M">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</div>
-                </td>
+                <td className="num" data-label="Sessions">{formatNumber(m.sessions)}</td>
+                <td className="num" data-label="Tokens">{formatCompact(m.tokens ?? 0)}</td>
+                <td className="num" data-label="Cost">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</td>
+                <td className="num" data-label="Cache %">{formatPercent(m.cacheHitRate ?? 0)}</td>
+                <td className="num eff-cell" data-label="$/1M">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</td>
               </tr>
             ))}
           </tbody>

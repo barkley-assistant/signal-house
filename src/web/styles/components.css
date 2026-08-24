@@ -289,48 +289,157 @@
   }
 
   /* Rows → cards. Five stats at ~63px each is unreadable on a 375px phone;
-     restructure into three vertical sections per card, each its own
-     display:grid block:
-     (1) Header — model name + family chip on a single full-width row.
-     (2) Primary — Sessions / Tokens / Cost in a 3-column grid.
-     (3) Diagnostics — Cache % / $/1M in a 2-column grid separated
-         from the primary row by a hairline divider.
-     The 2-col / 3-col split avoids the "missing third column" look a
-     unified 3-col grid would produce on the diagnostics row. */
+     restructure each row into a card via CSS grid on the tbody, with
+     each cell pinned to a named grid-area. No JSX reshape needed:
+     the desktop DOM (6 plain <td> per <tr>) is preserved — only the
+     layout changes at this breakpoint.
+
+     Layout:
+       name    | spans full width
+       sessions tokens cost    | 3-col primary row
+       cache %    $ / 1M         | 2-col diagnostics row (hairline divider) */
+  /* Use grid-template-areas so the diagnostics row's two stats share the
+     row evenly without overlap and without an empty middle column.
+     The 6-col grid is partitioned: primary row cells span cols 1-2 /
+     3-4 / 5-6; diagnostics cells span cols 1-3 / 4-6 (true half / half).
+     Defined once on the tbody so placements cascade cleanly. */
   .model-table tbody {
     display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-areas:
+      "name  name  name  name  name  name"
+      "sess  sess  tok   tok   cost  cost"
+      "cache cache cache eff   eff   eff";
     gap: 10px;
   }
+  /* Strip the <tr>'s own table-cell semantics so its 6 <td> children
+     flow directly into the tbody grid. `display: contents` on a <tr>
+     is supported across modern engines and the focus semantics carry
+     through to the descendant <td>s. */
   .model-table table.data tbody tr:nth-child(odd),
   .model-table table.data tbody tr {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0;
-    padding: 14px 16px 16px;
-    /* Subtle elevation lift over the page background so the card
-       boundary reads at-a-glance. */
-    background: linear-gradient(180deg, #15181f 0%, #13161c 100%);
-    border: 1px solid #2a2f3a;
-    border-radius: 12px;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+    display: contents;
   }
-  .model-table table.data tbody tr:hover {
-    background: var(--card-bg);
-  }
+  /* The original layout's per-row zebra striping (`.data tr:nth-child(odd)`)
+     plus the original border-bottom on tds become irrelevant once the
+     <tr> is `display: contents` — but the descendant <td>s may still
+     carry them, so we neutralize explicitly. */
   .model-table tbody tr td {
-    border-bottom: none;
+    border-bottom: none !important;
     padding: 0;
   }
+  /* Card surface — applied via a single box-shadow + background on the
+     first cell (model-name) which spans the full grid width. Inner
+     cells get the same background but no individual border, so they
+     appear to merge into a single card. */
+  .model-table table.data tbody tr td:first-child {
+    background: linear-gradient(180deg, #15181f 0%, #13161c 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  }
+  /* Inner stat cells share the same surface but with no border or radius
+     so they merge into the row visually. Row 2 cells carry a hairline
+     border-top so the eye reads it as "row 2 of stats", row 3 cells
+     carry a hairline border-top ("row 3 of stats") + the bottom corners. */
+  .model-table table.data tbody tr td[data-label="Sessions"],
+  .model-table table.data tbody tr td[data-label="Tokens"],
+  .model-table table.data tbody tr td[data-label="Cost"],
+  .model-table table.data tbody tr td[data-label="Cache %"],
+  .model-table table.data tbody tr td[data-label="$/1M"] {
+    background: linear-gradient(180deg, #15181f 0%, #13161c 100%);
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  }
 
-  /* (1) Header row — name + family chip on opposite ends. */
-  .model-table tbody tr td:first-child {
+  /* Place each cell on the tbody grid by its data-label so the layout
+     is data-driven (no positional guesswork). Each stat cell maps to
+     a named grid-area defined on the tbody. */
+  .model-table table.data tbody tr td:first-child {
+    grid-area: name;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     min-width: 0;
-    margin-bottom: 12px;
+    padding: 14px 16px 12px;
+    border-bottom: none !important;
   }
+  .model-table table.data tbody tr td[data-label="Sessions"] {
+    grid-area: sess;
+  }
+  .model-table table.data tbody tr td[data-label="Tokens"] {
+    grid-area: tok;
+  }
+  .model-table table.data tbody tr td[data-label="Cost"] {
+    grid-area: cost;
+  }
+  /* Diagnostics row — Cache % on the left half, $/1M on the right half. */
+  .model-table table.data tbody tr td[data-label="Cache %"] {
+    grid-area: cache;
+  }
+  .model-table table.data tbody tr td[data-label="$/1M"] {
+    grid-area: eff;
+  }
+
+  /* Card outer frame — top corners on row 1 (model-name), bottom corners
+     on row 3 leftmost/rightmost cells. Cards draw their visible border
+     via box-shadow inset so the segment borders stay crisp and the
+     hairline divider between rows 1, 2 and 3 reads as inner padding. */
+  .model-table table.data tbody tr td:first-child {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border: 1px solid #2a2f3a;
+    border-bottom: 1px solid #232732;
+  }
+  .model-table table.data tbody tr td[data-label="Sessions"] {
+    border-left: 1px solid #2a2f3a;
+    border-bottom: 1px solid #232732;
+  }
+  .model-table table.data tbody tr td[data-label="Tokens"] {
+    border-bottom: 1px solid #232732;
+  }
+  .model-table table.data tbody tr td[data-label="Cost"] {
+    border-right: 1px solid #2a2f3a;
+    border-bottom: 1px solid #232732;
+  }
+  .model-table table.data tbody tr td[data-label="Cache %"] {
+    border-left: 1px solid #2a2f3a;
+    border-bottom-left-radius: 12px;
+  }
+  .model-table table.data tbody tr td[data-label="$/1M"] {
+    border-right: 1px solid #2a2f3a;
+    border-bottom-right-radius: 12px;
+  }
+  /* Inner padding for the stat cells — uniform across rows. */
+  .model-table table.data tbody tr td[data-label="Sessions"],
+  .model-table table.data tbody tr td[data-label="Tokens"],
+  .model-table table.data tbody tr td[data-label="Cost"] {
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+  }
+  .model-table table.data tbody tr td[data-label="Cache %"],
+  .model-table table.data tbody tr td[data-label="$/1M"] {
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+  }
+  .model-table table.data tbody tr td[data-label="$/1M"] {
+    align-items: flex-end;
+    text-align: right;
+  }
+  .model-table table.data tbody tr td[data-label="Cache %"] {
+    align-items: flex-start;
+  }
+
+  /* Model name + family chip styling inside the header cell. */
   .model-table .model-name {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -353,67 +462,8 @@
     content: none;
   }
 
-  /* (2) Primary stats row — Sessions / Tokens / Cost in a 3-col grid. */
-  .model-table tbody tr td.model-stats-primary {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    padding: 0;
-  }
-  /* (3) Diagnostics row — Cache % + $/1M in a 2-col grid with a
-     hairline divider above. Different aspect from row 2 (2-col instead
-     of 3-col) so the "missing third column" doesn't read as a bug. */
-  .model-table tbody tr td.model-stats-diag {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    padding: 12px 0 0;
-    margin-top: 12px;
-    border-top: 1px solid #232732;
-  }
-  /* Right-align the $/1M value so the cost-efficiency stat reads as a
-     different category from the primary row, anchored opposite Cache %. */
-  .model-table tbody tr td.model-stats-diag .stat-cell.eff-cell {
-    text-align: right;
-    align-items: flex-end;
-  }
-  /* Stat cell — column-flexed label over value, like the health strip. */
-  .model-table .stat-cell {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    font-variant-numeric: tabular-nums;
-    min-width: 0;
-  }
-  .model-table .stat-cell::before {
-    content: attr(data-label);
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    max-width: 100%;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-  .model-table .stat-cell {
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--text-primary, #e2e8f0);
-  }
-  .model-table .stat-cell.eff-cell {
-    font-size: 14px;
-    color: var(--info, #38bdf8);
-    font-weight: 600;
-  }
-
-  /* Drop to a tighter padding for very narrow viewports. */
-  @media (max-width: 380px) {
-    .model-table table.data tbody tr:nth-child(odd),
-    .model-table table.data tbody tr {
-      padding: 12px 12px 14px;
-    }
-  }
+  /* Stat label via the existing data-label ::before trick — the original
+     desktop layout uses the same selector, kept identical. */
   .model-table td.num::before {
     content: attr(data-label);
     font-size: 10px;
@@ -424,8 +474,7 @@
     overflow: hidden;
     white-space: nowrap;
   }
-  /* Bump the value text so decimal precision reads at thumb's length.
-     Token/cost figures are tabular-nums so columns line up across rows. */
+  /* Value text size — bumped so decimal precision reads at thumb's length. */
   .model-table td.num {
     font-size: 15px;
     font-weight: 500;
@@ -433,9 +482,23 @@
   }
   .model-table td.num.eff-cell {
     font-size: 14px;
+    color: var(--info, #38bdf8);
+    font-weight: 600;
   }
-  /* The previously-needed 4-letter label truncation ("Cach", "Sess") is
-     gone — the new grid has the room and the audit is closed. */
+
+  /* Very-narrow viewport (≤380px) — keep the 3-on-top + 2-below layout but
+     ease the padding so values like "757.66M" don't truncate. */
+  @media (max-width: 380px) {
+    .model-table table.data tbody tr td:first-child,
+    .model-table table.data tbody tr td[data-label="Sessions"],
+    .model-table table.data tbody tr td[data-label="Tokens"],
+    .model-table table.data tbody tr td[data-label="Cost"],
+    .model-table table.data tbody tr td[data-label="Cache %"],
+    .model-table table.data tbody tr td[data-label="$/1M"] {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+  }
 }
 
 /* Cost-per-1M cell — blue accent so efficiency reads as a distinct, tappable
