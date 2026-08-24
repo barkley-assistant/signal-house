@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-08-20
-goal: Fix the legend colors on the "Daily cost & tokens" chart so they match the
-  colors of the corresponding lines on the chart.

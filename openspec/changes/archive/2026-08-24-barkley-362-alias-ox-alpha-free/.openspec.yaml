@@ -1,8 +1,0 @@
-schema: spec-driven
-created: 2026-08-24
-goal: Alias Ox Alpha Free to Ox Alpha so they roll up as one row in the
-  dashboard by-model table. Add an optional aliases[] field to ModelEntry in
-  src/shared/model-map.json (with ox-alpha-free pointing to ox-alpha), add a
-  resolveEntry() helper in src/shared/models.ts that consults the alias map
-  after BY_MACHINE, switch modelLabel()/modelFamily() to use it, and add a unit
-  test covering the alias positive path and the unknown-model fallback.
