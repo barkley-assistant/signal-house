@@ -22,3 +22,8 @@ test-results/
 # the start of a run, never project files)
 worker-prompt.md
 worker-result.json
+
+# SpecOps plugin scratch; never commit it. Specops writes proposal/spec/
+# design/tasks artifacts under this directory during a run; the orchestrator
+# is expected to archive them, but the bridge is the safety net.
+/openspec/
