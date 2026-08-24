@@ -273,6 +273,27 @@
     min-width: 0;
   }
 
+  /* Mobile reset — drop the table's cell layout entirely so the flex
+     wrap on thead actually works. (border-collapse: collapse plus
+     table-row-group semantics hold the children to table-cell layout
+     even when the parent has display:flex, so flex items render
+     one per line instead of wrapping.) All subsequent rules in this
+     @media block rely on the table being a block container at
+     mobile width — the structure (sort-strip up top, model rows
+     below) is preserved by the data not the table semantics.
+     A11y caveat: at desktop width, the table semantics still apply
+     (no override there). */
+  @media (max-width: 640px) {
+    .model-table table,
+    .model-table thead,
+    .model-table tbody,
+    .model-table tr,
+    .model-table th,
+    .model-table td {
+      display: block;
+    }
+  }
+
   /* Header → sort strip. The <th> elements need to participate in the
      flex layout (otherwise browser default display:table-cell overrides
      the parent flex children and they stack vertically). Setting
