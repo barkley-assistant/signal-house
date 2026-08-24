@@ -273,7 +273,11 @@
     min-width: 0;
   }
 
-  /* Header → sort strip. */
+  /* Header → sort strip. The <th> elements need to participate in the
+     flex layout (otherwise browser default display:table-cell overrides
+     the parent flex children and they stack vertically). Setting
+     <th> to flex itself wraps each pill as a flex item, which then
+     wraps to the next line via flex-wrap on the parent <tr>. */
   .model-table thead tr {
     display: flex;
     flex-wrap: wrap;
@@ -281,6 +285,7 @@
     padding-bottom: 10px;
   }
   .model-table thead th {
+    display: flex;
     border-bottom: none;
     padding: 0;
   }
