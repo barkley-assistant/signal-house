@@ -154,6 +154,68 @@ describe("AttentionQueue", () => {
     expect(screen.getByText("Fix the thing")).toBeTruthy();
     expect(screen.getByText(/stale/i)).toBeTruthy();
   });
+
+  // Brand pin (2026-08-24): stale items MUST render with the
+  // .dot--warning class (yellow token #fbbf24) and the .att-row--stale
+  // accent class. Without this test, a future refactor that swaps the
+  // conditional back to blue would ship silently. The test fails
+  // loudly instead. Failure mode caught in production: 2026-08-23 when
+  // the stale dot was 8px and the indicator never read.
+  test("stale row uses the warning dot class and the stale-row accent", () => {
+    const attention = [
+      {
+        id: "issue:1",
+        type: "issue" as const,
+        repoKey: "github:acme/thing",
+        repo: "acme/thing",
+        title: "Fresh item",
+        url: "https://github.com/acme/thing/issues/1",
+        state: "open" as const,
+        updatedAt: "2026-07-01T00:00:00Z",
+        ageDays: 1,
+        stale: false,
+        ciStatus: null,
+        labels: [],
+      },
+      {
+        id: "issue:2",
+        type: "issue" as const,
+        repoKey: "github:acme/other",
+        repo: "acme/other",
+        title: "Stale item",
+        url: "https://github.com/acme/other/issues/2",
+        state: "open" as const,
+        updatedAt: "2026-06-01T00:00:00Z",
+        ageDays: 60,
+        stale: true,
+        ciStatus: null,
+        labels: [],
+      },
+    ];
+    render(<AttentionQueue attention={attention} />);
+    // Fresh row: blue dot, no stale-row class.
+    const freshRow = screen.getByText("Fresh item").closest(".att-row");
+    expect(freshRow?.classList.contains("att-row--stale")).toBe(false);
+    const freshDot = freshRow?.querySelector(".dot");
+    expect(freshDot?.classList.contains("dot--info")).toBe(true);
+    expect(freshDot?.classList.contains("dot--warning")).toBe(false);
+    // Stale row: yellow dot (warning class) + stale accent class.
+    const staleRow = screen.getByText("Stale item").closest(".att-row");
+    expect(staleRow?.classList.contains("att-row--stale")).toBe(true);
+    const staleDot = staleRow?.querySelector(".dot");
+    expect(staleDot?.classList.contains("dot--warning")).toBe(true);
+    expect(staleDot?.classList.contains("dot--info")).toBe(false);
+    // The CSS module is pinned separately by the .dot--warning → yellow
+    // mapping defined in base.css (and the --warning token in tokens.css).
+    // We don't assert the resolved colour here because happy-dom doesn't
+    // carry the css custom property cascade; a visual smoke test on the
+    // live page is the actual proof.
+    // Stale row exposes the row-level "Stale · Nd" caption for the
+    // ageDays value and an aria-label of "Stale item" on the dot, so
+    // a screen reader also announces the stale state.
+    expect(screen.getByText(/stale · 60d old/i)).toBeTruthy();
+    expect(staleDot?.getAttribute("aria-label")).toBe("Stale item");
+  });
 });
 
 describe("RefreshStatus", () => {

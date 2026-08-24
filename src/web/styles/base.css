@@ -325,6 +325,35 @@ table.data td.num, table.data th.num {
   color: var(--text-primary);
 }
 
+/* Stale accent (2026-08-24): yellow left-border stripe on the row +
+   enlarged warning dot, so a stale item telegraphs "needs attention"
+   even on a glance at the queue. The 3px solid #fbbf24 stripe sits
+   inside the row's padding via a box-shadow inset, so the row's
+   baseline geometry (border-bottom between rows, padding rhythm)
+   stays untouched.
+   Brand intent: stale = yellow. Pin by the unit test, not by this
+   comment — see AttentionQueue.tsx tests. */
+.att-row--stale {
+  position: relative;
+  padding-left: 12px;
+  margin-left: -12px;
+  box-shadow: inset 3px 0 0 0 var(--warning);
+}
+.att-row--stale .dot {
+  width: 10px;
+  height: 10px;
+  /* Subtle outer halo so the 10px yellow dot reads even when the row
+     is parked at the top of a dense queue. Stays inside the dot's own
+     box so it doesn't push siblings around. */
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.18);
+}
+.att-row--stale .att-row__title a {
+  color: var(--text-primary);
+}
+.att-row--stale .kpi-caption {
+  color: var(--warning);
+}
+
 /* Health summary strip — the one memorable animated element (design-system §9). */
 .health-strip {
   display: grid;
