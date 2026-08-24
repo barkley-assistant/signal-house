@@ -606,6 +606,103 @@ describe("ModelTable cache % sort", () => {
   });
 });
 
+describe("ModelTable click-to-expand (mobile-only behaviour, but DOM lives at all widths)", () => {
+  function fixture() {
+    return emptyState({
+      usage: {
+        totalSessions: 6,
+        totalMessages: 4,
+        totalTokens: 1500,
+        totalCost: 12,
+        bySource: { opencode: { sessions: 6, cost: 12, tokens: 1500 } },
+        byModel: [
+          { model: "Alpha", family: null, sessions: 5, cost: 5, tokens: 500, cacheReadTokens: 100, cacheHitRate: 0.25, cacheSavings: 0.0003, effPerM: 3 },
+          { model: "Beta", family: null, sessions: 3, cost: 3, tokens: 300, cacheReadTokens: 200, cacheHitRate: 0.67, cacheSavings: 0.0006, effPerM: 2 },
+          { model: "Gamma", family: null, sessions: 2, cost: 2, tokens: 200, cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0, effPerM: 1 },
+        ],
+      },
+    });
+  }
+
+  test("every row is a button-like element with role=button + aria-expanded=false on first render", () => {
+    useDash.setState({ state: fixture() });
+    render(<AgentSpend />);
+    const rows = screen.getAllByRole("button", { hidden: true }).filter((el) =>
+      el.classList.contains("model-row"),
+    );
+    expect(rows.length).toBe(3);
+    for (const row of rows) {
+      expect(row.getAttribute("aria-expanded")).toBe("false");
+      expect(row.getAttribute("tabindex")).toBe("0");
+    }
+  });
+
+  test("clicking a row toggles a detail panel below it with all 5 stats", () => {
+    useDash.setState({ state: fixture() });
+    render(<AgentSpend />);
+    // Before: no detail rows exist.
+    expect(document.querySelectorAll(".model-row__detail").length).toBe(0);
+    // Click first row (Alpha — sessions 5).
+    const firstRow = document.querySelectorAll(".model-row")[0] as HTMLElement;
+    expect(firstRow.querySelector(".model-name")?.textContent).toBe("Alpha");
+    fireEvent.click(firstRow);
+    // Now: one detail row exists, anchored to Alpha.
+    const details = document.querySelectorAll(".model-row__detail");
+    expect(details.length).toBe(1);
+    const detailText = details[0].textContent || "";
+    // All 5 stats present in the detail panel — Sessions, Tokens, Cost,
+    // Cache %, and $/1M (the two columns hidden-by-default on mobile).
+    expect(detailText).toMatch(/sessions/i);
+    expect(detailText).toMatch(/tokens/i);
+    expect(detailText).toMatch(/cost/i);
+    expect(detailText).toMatch(/cache %/i);
+    expect(detailText).toMatch(/\$[/ ]?1m/i);
+    // The first row is now aria-expanded.
+    expect(firstRow.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("clicking a second row collapses the first (single-expand semantics)", () => {
+    useDash.setState({ state: fixture() });
+    render(<AgentSpend />);
+    const rowEls = [...document.querySelectorAll(".model-row")] as HTMLElement[];
+    fireEvent.click(rowEls[0]);
+    expect(document.querySelectorAll(".model-row__detail").length).toBe(1);
+    expect(rowEls[0].getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(rowEls[1]);
+    // Still exactly one detail row (single-expand), now anchored to row 1.
+    expect(document.querySelectorAll(".model-row__detail").length).toBe(1);
+    expect(rowEls[0].getAttribute("aria-expanded")).toBe("false");
+    expect(rowEls[1].getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("clicking the same row twice collapses the detail", () => {
+    useDash.setState({ state: fixture() });
+    render(<AgentSpend />);
+    const firstRow = document.querySelectorAll(".model-row")[0] as HTMLElement;
+    fireEvent.click(firstRow);
+    expect(document.querySelectorAll(".model-row__detail").length).toBe(1);
+    fireEvent.click(firstRow);
+    expect(document.querySelectorAll(".model-row__detail").length).toBe(0);
+    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("keyboard Enter / Space on a focused row toggles the detail", () => {
+    useDash.setState({ state: fixture() });
+    render(<AgentSpend />);
+    const firstRow = document.querySelectorAll(".model-row")[0] as HTMLElement;
+    firstRow.focus();
+    // Enter
+    fireEvent.keyDown(firstRow, { key: "Enter" });
+    expect(document.querySelectorAll(".model-row__detail").length).toBe(1);
+    expect(firstRow.getAttribute("aria-expanded")).toBe("true");
+    // Space
+    fireEvent.keyDown(firstRow, { key: " " });
+    expect(document.querySelectorAll(".model-row__detail").length).toBe(0);
+    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
 describe("DeliveryTrend", () => {
   beforeEach(() => {
     vi.spyOn(echarts, "init").mockImplementation(
