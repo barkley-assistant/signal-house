@@ -378,6 +378,12 @@
     transition: background 0.12s ease;
     border-bottom: 1px solid var(--card-border);
   }
+  /* Cell-level separators are redundant now the flex row draws its
+     own full-width border; the stray short underlines they produced
+     read as rendering artifacts. */
+  .model-table tbody tr.model-row > td {
+    border-bottom: none;
+  }
   .model-table tbody tr.model-row:hover {
     background: rgba(56, 189, 248, 0.04);
   }
