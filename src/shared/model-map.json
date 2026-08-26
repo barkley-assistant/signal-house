@@ -5,7 +5,7 @@
       "machine": "deepseek-v4-pro",
       "label": "DeepSeek V4 Pro",
       "family": "DeepSeek",
-      "aliases": ["deepseek-v4-pro-0731", "deepseek-v4-pro-0831"]
+      "aliases": ["deepseek-v4-pro-0813"]
     },
     {
       "machine": "deepseek-v4-flash",
