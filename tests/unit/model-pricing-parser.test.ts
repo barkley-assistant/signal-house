@@ -245,19 +245,20 @@ describe("parseOpenRouterPricing", () => {
     expect(parseOpenRouterPricing({ data: [null, "x", 42] })).toEqual({});
   });
 
-  test("ignores OpenRouter's off-peak overrides — uses peak/listed base rate", () => {
-    // Real tencent/hy3 response shape: pricing.overrides[] carries a
-    // cheaper 16:00–00:00 UTC window. We deliberately use the base rate
-    // (day-granular metrics can't attribute tokens to the discount window;
-    // over-estimate beats under-estimate for a cost guardrail).
+  test("resolves PEAK tier from time-varying base + overrides (stable across fetch hours)", () => {
+    // Real tencent/hy3 response shape. OpenRouter's BASE pricing field is
+    // the currently-active tier (peak before 16:00 UTC, off-peak after);
+    // overrides[] carries the other tier. We resolve the max (peak) so the
+    // dashboard's estimate doesn't drift with the refresh hour.
     const input = {
       data: [
         {
           id: "tencent/hy3",
           pricing: {
-            prompt: "0.000000132",
-            completion: "0.000000528",
-            input_cache_read: "0.000000033",
+            // Base here is the OFF-PEAK tier (served after 16:00 UTC).
+            prompt: "0.0000000825",
+            completion: "0.00000033",
+            input_cache_read: "0.000000020625",
             overrides: [
               { utc_start: 0, utc_end: 1600, prompt: "0.000000132", completion: "0.000000528", input_cache_read: "0.000000033" },
               { utc_start: 1600, utc_end: 0, prompt: "0.0000000825", completion: "0.00000033", input_cache_read: "0.000000020625" },
@@ -267,6 +268,7 @@ describe("parseOpenRouterPricing", () => {
       ],
     };
     const out = parseOpenRouterPricing(input);
+    // Peak tier: $0.132 / $0.528 / $0.033 per 1M.
     expect(out["hy3"].input).toBeCloseTo(0.132, 6);
     expect(out["hy3"].output).toBeCloseTo(0.528, 6);
     expect(out["hy3"].cacheRead).toBeCloseTo(0.033, 6);

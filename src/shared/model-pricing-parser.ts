@@ -188,6 +188,23 @@ function rateOr(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/** Resolve a field's PEAK per-token rate from an OpenRouter pricing object:
+ *  the max of the base value and every override's value for that field.
+ *  OpenRouter's base is the currently-active tier (peak or off-peak,
+ *  time-varying); overrides carry the other tier, so the max is the stable
+ *  listed/peak rate regardless of when we fetch. */
+function peakRate(pricing: Record<string, unknown>, field: string): number {
+  let peak = rateOr(pricing[field], NaN);
+  if (Array.isArray(pricing.overrides)) {
+    for (const o of pricing.overrides) {
+      if (!isPlainObject(o)) continue;
+      const r = rateOr(o[field], NaN);
+      if (Number.isFinite(r)) peak = Math.max(peak, r);
+    }
+  }
+  return peak;
+}
+
 /**
  * Parse the raw OpenRouter /api/v1/models JSON into our cache shape.
  *
@@ -202,12 +219,15 @@ function rateOr(value: unknown, fallback: number): number {
  *   pricing.completion       → output
  *   pricing.input_cache_read → cacheRead  (fallback: input, no discount listed)
  *
- * Peak/off-peak: OpenRouter's `pricing.overrides[]` encodes a cheaper
- * off-peak window (e.g. tencent/hy3 at 16:00–00:00 UTC). Intentionally
- * ignored — the dashboard's daily_metrics are day-granular, so we can't
- * know which tokens fell in the discount window; using the peak/listed
- * rate is the conservative, stable baseline (over-estimate beats
- * under-estimate for a cost guardrail).
+ * Peak/off-peak: OpenRouter's `pricing` base is TIME-VARYING — the base
+ * fields already reflect whichever tier is active at fetch time (verified
+ * 2026-08-26: tencent/hy3 served peak $0.132 before 16:00 UTC and off-peak
+ * $0.0825 after), with `pricing.overrides[]` carrying the other tier. A
+ * naive base-only parse would make the dashboard's estimate drift with the
+ * refresh hour. We resolve the PEAK tier (max of base + all overrides):
+ * stable regardless of fetch time, and the conservative listed rate for a
+ * cost guardrail (over-estimate beats under-estimate; day-granular metrics
+ * can't attribute tokens to a discount window anyway).
  *
  * Ids are already vendor-prefixed ("vendor/model"); machineKey() strips the
  * prefix + dots, so "tencent/hy3" → "hy3" — matching the dashboard's
@@ -242,20 +262,24 @@ export function parseOpenRouterPricing(json: unknown): PricingMap {
       skippedNoRates++;
       continue;
     }
-    const inputPerToken = rateOr(entry.pricing.prompt, NaN);
-    const outputPerToken = rateOr(entry.pricing.completion, NaN);
+    // OpenRouter's base pricing is time-varying (peak vs off-peak active
+    // tier); overrides[] carries the OTHER tier. Resolve the PEAK tier so
+    // the cache is stable across fetch hours — see module doc.
+    const inputPerToken = peakRate(entry.pricing, "prompt");
+    const outputPerToken = peakRate(entry.pricing, "completion");
     if (!Number.isFinite(inputPerToken) || !Number.isFinite(outputPerToken)) {
       skippedNoRates++;
       continue;
     }
     // OpenRouter's discounted cache-read rate; absent → charge cached
     // tokens at the fresh-input rate (locked decision #2 convention).
-    const cacheReadPerToken = rateOr(entry.pricing.input_cache_read, inputPerToken);
+    const cacheReadPerToken = peakRate(entry.pricing, "input_cache_read");
+    const cacheReadFinal = Number.isFinite(cacheReadPerToken) ? cacheReadPerToken : inputPerToken;
 
     out[key] = {
       input: inputPerToken * 1_000_000,
       output: outputPerToken * 1_000_000,
-      cacheRead: cacheReadPerToken * 1_000_000,
+      cacheRead: cacheReadFinal * 1_000_000,
       // OpenRouter entries are always "vendor/model" routed listings — there
       // is no provider-native/native vs routed collision to resolve, so mark
       // them routed for parity with the litellm cache shape.
