@@ -386,15 +386,17 @@ type SortState = { key: SortKey; asc: boolean };
  *  peak-anchoring rule (niceCeil once per open).
  *
  *  Series: this model's cost (left axis) + this model's tokens (right
- *  axis) + ALL MODELS' TOKENS that day as a dotted comparison line on the
- *  SAME right axis. The dotted line is the operator's context: how much of
- *  the day's total token volume this model accounted for. Cost has no
- *  comparison line — the total dwarfs any single model (8.6x at current
- *  peaks), so a shared cost axis flattens the model line and a hidden
- *  second scale makes heights lie (shipped both ways on 2026-08-26; the
- *  operator rejected each). Tokens DO share one axis honestly: the model's
- *  tokens are a subset of the total, so the dotted line is always at or
- *  above the yellow line, and the gap between them IS the share. */
+ *  axis) + BOTH window totals as dotted comparison lines — all-models
+ *  tokens on the token axis, all-models cost on the cost axis. Visual
+ *  grammar: SOLID = this model, DOTTED = all models, HUE = metric
+ *  (blue cost / yellow tokens), so each dotted line is directly
+ *  comparable to its solid sibling on a shared axis. For tokens the
+ *  model line is a subset of the total (dotted always at-or-above
+ *  yellow). For cost the total dwarfs the model at 30d scale (8.6x at
+ *  current peaks) — the model line hugging the floor IS the truth, and
+ *  the operator explicitly chose this after seeing both (2026-08-26):
+ *  "the graph will give a better representation of the model vs the
+ *  totals on both aspects". */
 function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel: string }) {
   const days = useDash((s) => s.days);
   const ref = useRef<HTMLDivElement>(null);
@@ -423,9 +425,15 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
   useEffect(() => {
     if (!ref.current || !points || points.length === 0 || !overall) return;
     const pts = points;
-    // All-models tokens per day, aligned to the model series' x-axis.
+    // Window totals per day (cost + tokens), aligned to the model series'
+    // x-axis. Both dotted comparisons read against their solid sibling.
     const totalTokensByDate = new Map(overall.map((p) => [p.date, p.tokens]));
+    const totalCostByDate = new Map(overall.map((p) => [p.date, p.cost]));
     const totalTokensSeries = pts.map((p) => totalTokensByDate.get(p.date) ?? null);
+    const totalCostSeries = pts.map((p) => {
+      const c = totalCostByDate.get(p.date);
+      return c === undefined || c === null ? null : Number(c.toFixed(2));
+    });
     chartRef.current = echarts.init(ref.current, "dark");
     const ro = new ResizeObserver(() => chartRef.current?.resize());
     ro.observe(ref.current);
@@ -435,9 +443,13 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
       return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     };
     // Same peak-anchor contract as the main chart: computed once per mount,
-    // never rescaled by polls within the same open. The token axis peak is
-    // the max of (model tokens, all-models tokens) so the dotted total fits.
-    const costPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)));
+    // never rescaled by polls within the same open. Each axis peak is the
+    // max of (model, all-models) so the dotted total always fits.
+    const costPeak = Math.max(
+      1,
+      niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)),
+      niceCeil(totalCostSeries.reduce((m: number, v: number | null) => Math.max(m, v ?? 0), 0)),
+    );
     const tokenPeak = Math.max(
       1,
       niceCeil(pts.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0)),
@@ -447,11 +459,10 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
       animationDuration: 400,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
-      // Top-level palette indexes by series order: All models (slate),
-      // Cost (blue), Tokens (yellow). ECharts uses THESE for the tooltip
-      // markers — without it, the default palette leaks wrong colours in
-      // (the main chart sets this; the mini chart must too).
-      color: ["#94a3b8", "#38bdf8", "#facc15"],
+      // Top-level palette indexes by series order — ECharts uses THESE for
+      // the tooltip markers. Dotted totals reuse their metric's hue so the
+      // marker colour pairs the dotted line with its solid sibling.
+      color: ["#38bdf8", "#facc15", "#94a3b8", "#60a5fa"],
       grid: { left: 2, right: 2, top: 14, bottom: 22, containLabel: true },
       tooltip: {
         trigger: "axis",
@@ -472,8 +483,8 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           });
           const rows = arr
             .filter((p) => p.value !== null)
-            // "All models" tokens last: context, the model's own numbers lead.
-            .sort((a, b) => (a.seriesName === "All models" ? 1 : b.seriesName === "All models" ? -1 : 0))
+            // Model's numbers first, dotted totals after as context.
+            .sort((a, b) => (a.seriesName.startsWith("All models") ? 1 : b.seriesName.startsWith("All models") ? -1 : 0))
             .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.includes("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
           return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
         },
@@ -507,18 +518,27 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
         },
       ],
       series: [
-        // All-models tokens FIRST in the array (z-painting: earlier series
-        // paint below) so the model's own lines stay on top. Same visible
-        // token axis as the model's tokens — heights comparable, dotted.
+        // Dotted totals FIRST in the array (z-painting: earlier series
+        // paint below) so the model's own solid lines stay on top.
+        // Grammar: dotted + metric hue = all-models total for that metric,
+        // always on the same axis as its solid sibling.
         {
-          name: "All models",
+          name: "All models cost",
+          type: "line",
+          data: totalCostSeries,
+          smooth: 0.3,
+          showSymbol: false,
+          lineStyle: { color: "#60a5fa", width: 1.5, type: [2, 4] },
+          emphasis: { lineStyle: { width: 1.5 } },
+        },
+        {
+          name: "All models tokens",
           type: "line",
           yAxisIndex: 1,
           data: totalTokensSeries,
           smooth: 0.3,
           showSymbol: false,
           lineStyle: { color: "#94a3b8", width: 1.5, type: [2, 4] },
-          // No area fill: the model's token line owns the fill language.
           emphasis: { lineStyle: { width: 1.5 } },
         },
         {
@@ -557,7 +577,8 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
         <span className="model-row__detail-caption">
           <span className="model-row__legend-dot model-row__legend-dot--cost" aria-hidden="true" /> cost
           <span className="model-row__legend-dot model-row__legend-dot--tokens" aria-hidden="true" /> tokens
-          <span className="model-row__legend-dot model-row__legend-dot--overall" aria-hidden="true" /> all models
+          <span className="model-row__legend-dot model-row__legend-dot--overall-cost" aria-hidden="true" /> all cost
+          <span className="model-row__legend-dot model-row__legend-dot--overall" aria-hidden="true" /> all tokens
         </span>
       </div>
       {points === undefined ? (
