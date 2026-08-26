@@ -233,7 +233,7 @@ export async function queryDailyModelTrend(
   from: string,
   to: string,
   costOpts: CostEstimationOpts,
-): Promise<Array<{ date: string; cost: number | null; tokens: number | null }>> {
+): Promise<Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }>> {
   // Per-(date, raw-model) token sums; the canonical-key filter happens in
   // JS because SQLite has no access to shared/models' alias tables.
   const rows = db
@@ -327,7 +327,14 @@ export async function queryDailyModelTrend(
         resolvedRates
           ? (t.input * resolvedRates.input + t.output * resolvedRates.output + t.cacheRead * resolvedRates.cacheRead) / 1_000_000
           : upstreamCostByDate.get(date) ?? null;
-      return { date, cost, tokens: tokensSum > 0 ? tokensSum : null };
+      return {
+        date,
+        cost,
+        tokens: tokensSum > 0 ? tokensSum : null,
+        // Cache-read series mirrors the main chart's gap semantics: a day
+        // with no cache activity is a gap, not a zero baseline.
+        cacheRead: t.cacheRead > 0 ? t.cacheRead : null,
+      };
     });
 }
 

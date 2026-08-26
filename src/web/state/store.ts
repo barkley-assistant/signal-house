@@ -192,6 +192,7 @@ export interface ModelTrendPoint {
   date: string;
   cost: number | null;
   tokens: number | null;
+  cacheRead: number | null;
 }
 
 /** Load ONE model's daily trend (canonical machine key from byModel[]) for

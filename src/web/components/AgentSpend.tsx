@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, Fragment } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
-import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint, type TrendPoint } from "../state/store";
+import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint } from "../state/store";
 import type { WindowDays } from "../../shared/window";
 import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
@@ -385,18 +385,19 @@ type SortState = { key: SortKey; asc: boolean };
  *  lines with flush edges (boundaryGap: false), same tooltip shell, same
  *  peak-anchoring rule (niceCeil once per open).
  *
- *  Series: this model's cost (left axis) + this model's tokens (right
- *  axis) + BOTH window totals as dotted comparison lines — all-models
- *  tokens on the token axis, all-models cost on the cost axis. Visual
- *  grammar: SOLID = this model, DOTTED = all models, HUE = metric
- *  (blue cost / yellow tokens), so each dotted line is directly
- *  comparable to its solid sibling on a shared axis. For tokens the
- *  model line is a subset of the total (dotted always at-or-above
- *  yellow). For cost the total dwarfs the model at 30d scale (8.6x at
- *  current peaks) — the model line hugging the floor IS the truth, and
- *  the operator explicitly chose this after seeing both (2026-08-26):
- *  "the graph will give a better representation of the model vs the
- *  totals on both aspects". */
+/** Mini daily cost+tokens+cache-read chart for ONE model, shown inside the
+ *  expanded by-model row. Deliberately the main DailyUsageChart's EXACT
+ *  series grammar at reduced size: same three series, same palette
+ *  (#38bdf8 cost / #facc15 tokens / #4ade80 cache read), same smooth
+ *  flush-edge lines, same dual y-axes (cost left / tokens+cache right),
+ *  same tooltip shell, same niceCeil peak-anchoring once per open.
+ *
+ *  No all-models comparison lines: three variants shipped and were
+ *  rejected on 2026-08-26 — hidden-axis totals made heights lie, shared
+ *  -axis totals rescaled the axes so the model's own lines flattened
+ *  into the floor and the chart stopped showing its data. The expanded
+ *  chart is FOR one model; the main chart above already shows the total
+ *  picture for the same window. */
 function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel: string }) {
   const days = useDash((s) => s.days);
   const ref = useRef<HTMLDivElement>(null);
@@ -404,18 +405,15 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
   // Loading is derived, not stored: results for the CURRENT (days, key) pair.
   // A window switch renders the previous result as stale until the new one
   // lands (undefined for this pair = skeleton), so no setState-in-effect.
-  // The model trend and the all-models comparison land together (single
-  // Promise.all) so the chart initialises once, with both scales known.
-  const [loaded, setLoaded] = useState<Array<{ windowDays: WindowDays; key: string; points: ModelTrendPoint[]; overall: TrendPoint[] }>>([]);
+  const [loaded, setLoaded] = useState<Array<{ windowDays: WindowDays; key: string; points: ModelTrendPoint[] }>>([]);
   const entry = loaded.find((e) => e.windowDays === days && e.key === modelKey);
   const points = entry?.points;
-  const overall = entry?.overall;
 
   useEffect(() => {
     if (entry) return; // already have this window's data
     let disposed = false;
-    void Promise.all([loadModelTrend(days, modelKey), loadTrend(days)]).then(([pts, allPts]) => {
-      if (!disposed) setLoaded((prev) => [...prev, { windowDays: days, key: modelKey, points: pts, overall: allPts }]);
+    void loadModelTrend(days, modelKey).then((pts) => {
+      if (!disposed) setLoaded((prev) => [...prev, { windowDays: days, key: modelKey, points: pts }]);
     });
     return () => {
       disposed = true;
@@ -423,17 +421,8 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
   }, [days, modelKey, entry]);
 
   useEffect(() => {
-    if (!ref.current || !points || points.length === 0 || !overall) return;
+    if (!ref.current || !points || points.length === 0) return;
     const pts = points;
-    // Window totals per day (cost + tokens), aligned to the model series'
-    // x-axis. Both dotted comparisons read against their solid sibling.
-    const totalTokensByDate = new Map(overall.map((p) => [p.date, p.tokens]));
-    const totalCostByDate = new Map(overall.map((p) => [p.date, p.cost]));
-    const totalTokensSeries = pts.map((p) => totalTokensByDate.get(p.date) ?? null);
-    const totalCostSeries = pts.map((p) => {
-      const c = totalCostByDate.get(p.date);
-      return c === undefined || c === null ? null : Number(c.toFixed(2));
-    });
     chartRef.current = echarts.init(ref.current, "dark");
     const ro = new ResizeObserver(() => chartRef.current?.resize());
     ro.observe(ref.current);
@@ -443,26 +432,18 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
       return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     };
     // Same peak-anchor contract as the main chart: computed once per mount,
-    // never rescaled by polls within the same open. Each axis peak is the
-    // max of (model, all-models) so the dotted total always fits.
-    const costPeak = Math.max(
-      1,
-      niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)),
-      niceCeil(totalCostSeries.reduce((m: number, v: number | null) => Math.max(m, v ?? 0), 0)),
-    );
-    const tokenPeak = Math.max(
-      1,
-      niceCeil(pts.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0)),
-      niceCeil(totalTokensSeries.reduce((m: number, v: number | null) => Math.max(m, v ?? 0), 0)),
-    );
+    // never rescaled by polls within the same open. Token axis peak includes
+    // cache reads so the third series never overflows it (matches the main
+    // chart's rule).
+    const costPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)));
+    const tokenPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.tokens ?? 0, p.cacheRead ?? 0), 0)));
     const option: echarts.EChartsOption = {
       animationDuration: 400,
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
       // Top-level palette indexes by series order — ECharts uses THESE for
-      // the tooltip markers. Both dotted totals stay grey (#94a3b8) per
-      // operator preference; hue stays owned by the solid model lines.
-      color: ["#94a3b8", "#94a3b8", "#38bdf8", "#facc15"],
+      // the tooltip markers. Mirrors the main chart's SERIES_COLORS.
+      color: ["#38bdf8", "#facc15", "#4ade80"],
       grid: { left: 2, right: 2, top: 14, bottom: 22, containLabel: true },
       tooltip: {
         trigger: "axis",
@@ -483,9 +464,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           });
           const rows = arr
             .filter((p) => p.value !== null)
-            // Model's numbers first, dotted totals after as context.
-            .sort((a, b) => (a.seriesName.startsWith("All models") ? 1 : b.seriesName.startsWith("All models") ? -1 : 0))
-            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.includes("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
+            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.startsWith("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
           return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
         },
       },
@@ -518,29 +497,6 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
         },
       ],
       series: [
-        // Dotted totals FIRST in the array (z-painting: earlier series
-        // paint below) so the model's own solid lines stay on top.
-        // Grammar: dotted + metric hue = all-models total for that metric,
-        // always on the same axis as its solid sibling.
-        {
-          name: "All models cost",
-          type: "line",
-          data: totalCostSeries,
-          smooth: 0.3,
-          showSymbol: false,
-          lineStyle: { color: "#94a3b8", width: 1.5, type: [2, 4] },
-          emphasis: { lineStyle: { width: 1.5 } },
-        },
-        {
-          name: "All models tokens",
-          type: "line",
-          yAxisIndex: 1,
-          data: totalTokensSeries,
-          smooth: 0.3,
-          showSymbol: false,
-          lineStyle: { color: "#94a3b8", width: 1.5, type: [2, 4] },
-          emphasis: { lineStyle: { width: 1.5 } },
-        },
         {
           name: "Cost ($)",
           type: "line",
@@ -560,6 +516,16 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           lineStyle: { color: "#facc15", width: 2 },
           areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
         },
+        {
+          name: "Cache read",
+          type: "line",
+          yAxisIndex: 1,
+          data: pts.map((p) => p.cacheRead),
+          smooth: 0.3,
+          showSymbol: false,
+          lineStyle: { color: "#4ade80", width: 2 },
+          areaStyle: { color: "rgba(74, 222, 128, 0.08)" },
+        },
       ],
     };
     chartRef.current.setOption(option, true);
@@ -577,8 +543,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
         <span className="model-row__detail-caption">
           <span className="model-row__legend-dot model-row__legend-dot--cost" aria-hidden="true" /> cost
           <span className="model-row__legend-dot model-row__legend-dot--tokens" aria-hidden="true" /> tokens
-          <span className="model-row__legend-dot model-row__legend-dot--overall-cost" aria-hidden="true" /> all cost
-          <span className="model-row__legend-dot model-row__legend-dot--overall" aria-hidden="true" /> all tokens
+          <span className="model-row__legend-dot model-row__legend-dot--cache" aria-hidden="true" /> cache read
         </span>
       </div>
       {points === undefined ? (

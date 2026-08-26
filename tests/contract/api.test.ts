@@ -351,6 +351,7 @@ describe("daily model trend contract", () => {
     const d1 = utcDaysAgo(1);
     insert.run(d1, "opencode", "model.tokens_input", 1_000_000, JSON.stringify({ model: "Claude Sonnet" }), Date.now());
     insert.run(d1, "opencode", "model.tokens_output", 500_000, JSON.stringify({ model: "Claude Sonnet" }), Date.now());
+    insert.run(d1, "opencode", "model.tokens_cache_read", 400_000, JSON.stringify({ model: "Claude Sonnet" }), Date.now());
     insert.run(d1, "hermes", "model.tokens_input", 250_000, JSON.stringify({ model: "claude-sonnet" }), Date.now());
     insert.run(d1, "opencode", "model.cost", 12.5, JSON.stringify({ model: "Claude Sonnet" }), Date.now());
     insert.run(d1, "hermes", "model.cost", 3.5, JSON.stringify({ model: "claude-sonnet" }), Date.now());
@@ -361,13 +362,14 @@ describe("daily model trend contract", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       key: string; days: number;
-      points: Array<{ date: string; cost: number | null; tokens: number | null }>;
+      points: Array<{ date: string; cost: number | null; tokens: number | null; cacheRead: number | null }>;
     };
     expect(body.key).toBe("claude-sonnet");
     expect(body.days).toBe(7);
     const d1points = body.points.filter((p) => p.date === d1);
     expect(d1points).toHaveLength(1);
-    expect(d1points[0].tokens).toBe(1_750_000);
+    expect(d1points[0].tokens).toBe(2_150_000);
+    expect(d1points[0].cacheRead).toBe(400_000);
     // estimateCosts=false in the contract server → persisted upstream sum.
     expect(d1points[0].cost).toBe(16);
 

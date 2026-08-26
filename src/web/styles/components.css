@@ -331,13 +331,8 @@
 .model-row__legend-dot--tokens {
   background: #facc15;
 }
-.model-row__legend-dot--overall {
-  background: transparent;
-  border: 1.5px dashed #94a3b8;
-}
-.model-row__legend-dot--overall-cost {
-  background: transparent;
-  border: 1.5px dashed #94a3b8;
+.model-row__legend-dot--cache {
+  background: #4ade80;
 }
 /* Desktop rows get the same interactive affordance as mobile now that
    clicking actually does something: pointer cursor, hover tint, focus
