@@ -10,6 +10,7 @@
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts, DailyWrite } from "../shared/types";
 import { canonicalMachineKey, machineKey, stripDateSnapshot } from "../shared/models";
+import { utcDayRange } from "../shared/dates";
 import { fetchAllRates, type ModelRates } from "../server/model-pricing";
 
 export interface DailyMetricRow {
@@ -221,11 +222,17 @@ export async function queryDailyTrend(
  * grouping), so dated variants and source spelling differences collapse
  * into a single series, matching how byModel rolls up on /api/state.
  *
+ * The series spans the FULL requested window (every day from `from` to
+ * `to`), not just days with rows: for a single model a missing day means
+ * zero activity, so the graph shows 0 on those days — operator preference
+ * (2026-08-26) so the chart visually covers the whole selected period
+ * instead of collapsing empty days out of the x-axis.
+ *
  * Cost follows the SAME estimator contract as queryDailyTrend: when
  * `costOpts.enabled`, per-(date, model) tokens are priced from resolver
  * rates (per-1M semantics); models with no resolvable rate contribute no
- * cost for days where they're the only activity → null day (gap), never 0.
- * When disabled, the persisted `model.cost` passthrough sum is used.
+ * cost (0 on days where they're the only activity). When disabled, the
+ * persisted `model.cost` passthrough sum is used.
  */
 export async function queryDailyModelTrend(
   db: Database,
@@ -319,6 +326,18 @@ export async function queryDailyModelTrend(
     }
   }
 
+  // No rows for this key in the window → nothing to chart (the caller's
+  // empty state). A known model with empty days gets the FULL window back
+  // below, zeros where it was inactive.
+  if (matchedSpellings.size === 0) return [];
+
+  // The series must cover the whole requested period, not just active
+  // days — an inactive model day is a genuine 0 for a single model.
+  const zero = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 };
+  for (const day of utcDayRange(from, to)) {
+    if (!tokenByDate.has(day)) tokenByDate.set(day, { ...zero });
+  }
+
   return [...tokenByDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, t]) => {
@@ -326,14 +345,14 @@ export async function queryDailyModelTrend(
       const cost =
         resolvedRates
           ? (t.input * resolvedRates.input + t.output * resolvedRates.output + t.cacheRead * resolvedRates.cacheRead) / 1_000_000
-          : upstreamCostByDate.get(date) ?? null;
+          : upstreamCostByDate.get(date) ?? 0;
       return {
         date,
         cost,
-        tokens: tokensSum > 0 ? tokensSum : null,
-        // Cache-read series mirrors the main chart's gap semantics: a day
-        // with no cache activity is a gap, not a zero baseline.
-        cacheRead: t.cacheRead > 0 ? t.cacheRead : null,
+        tokens: tokensSum,
+        // Mirror the main chart's series semantics at model granularity:
+        // a day with no cache reads is a 0, not a gap.
+        cacheRead: t.cacheRead,
       };
     });
 }

@@ -373,6 +373,17 @@ describe("daily model trend contract", () => {
     // estimateCosts=false in the contract server → persisted upstream sum.
     expect(d1points[0].cost).toBe(16);
 
+    // The series spans the FULL window: all days in the inclusive
+    // from..to range present (days=7 → 8 calendar days), inactive days as
+    // genuine zeros (operator preference — a model with no activity on a
+    // day shows 0, not a missing point).
+    expect(body.points).toHaveLength(8);
+    const quiet = body.points.find((p) => p.date === utcDaysAgo(3));
+    expect(quiet).toBeDefined();
+    expect(quiet!.cost).toBe(0);
+    expect(quiet!.tokens).toBe(0);
+    expect(quiet!.cacheRead).toBe(0);
+
     // Unknown key → empty points, not an error.
     const empty = await authed(`/api/daily/model?key=no-such-model&days=7`);
     expect(empty.status).toBe(200);
