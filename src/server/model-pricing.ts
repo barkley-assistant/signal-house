@@ -1,12 +1,15 @@
 /**
- * Model pricing resolver — priority chain litellm → local → empty.
+ * Model pricing resolver — priority chain openrouter → local → empty.
  *
  * Public surface for the rest of signal-house. Single async function,
  * `getModelPricing(model)`, that resolves to per-1M-token rates.
  *
- * Priority chain (locked decision):
- *   1. litellm cache (in-memory, populated by the fetcher on startup +
- *      per refresh). Filtered to litellm_provider === "openai" at fetch time.
+ * Priority chain (locked decision, 2026-08-26 — litellm replaced by
+ * OpenRouter as the cache source):
+ *   1. OpenRouter cache (in-memory, populated by the fetcher on startup +
+ *      per refresh). /api/v1/models is free + keyless, covers every
+ *      dashboard model via machine-key normalisation (vendor/model → model),
+ *      and ships per-token rates in the same unit litellm used.
  *   2. Operator's local rates from ~/.config/opencode/opencode.jsonc,
  *      read via the existing `getInputCostPerMillion()` / `getCacheReadCostPerMillion()`
  *      helpers in `src/server/cost-input.ts`. Output rate is NOT exposed
@@ -72,7 +75,7 @@ export function buildRatesMap(entries: Iterable<readonly [string, ModelRates]>):
 
 /**
  * Resolve per-1M-token rates for `model` (any human-readable form — the
- * resolver normalises). Tries litellm first, then operator's local
+ * resolver normalises). Tries OpenRouter first, then operator's local
  * opencode.jsonc, then returns all zeros.
  *
  * The dashboard doesn't distinguish litellm-source from local-source rows
@@ -87,8 +90,8 @@ export async function getModelPricing(model: string): Promise<ModelRates> {
   const key = stripDateSnapshot(machineKey(model));
   if (!key) return zero();
 
-  // 1. litellm cache — query with the stripped key so date-snapshot variants
-  //    ("gpt-5.6-luna-20250815") resolve to the same row as the base model.
+  // 1. OpenRouter cache — query with the stripped key so date-snapshot
+  //    variants ("gpt-5.6-luna-20250815") resolve to the same row as the base model.
   const cacheRow = await getModelPricingFromCache(key);
   if (nonZero(cacheRow)) {
     return {

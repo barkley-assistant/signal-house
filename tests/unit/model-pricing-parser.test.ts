@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseLitellmPricing } from "../../src/shared/model-pricing-parser";
+import { parseLitellmPricing, parseOpenRouterPricing } from "../../src/shared/model-pricing-parser";
 
 describe("parseLitellmPricing", () => {
   test("accepts any provider with finite rates (openai, anthropic, gemini, …)", () => {
@@ -182,5 +182,93 @@ describe("parseLitellmPricing", () => {
     const out = parseLitellmPricing(input);
     expect(out["gpt-5"].input).toBe(1.25);
     expect(out["gpt-5"].output).toBe(10);
+  });
+});
+
+describe("parseOpenRouterPricing", () => {
+  test("maps vendor/model ids to machine keys (tencent/hy3 → hy3), per-token → per-1M", () => {
+    const input = {
+      data: [
+        { id: "tencent/hy3", pricing: { prompt: "0.000000132", completion: "0.000000528", input_cache_read: "0.000000033" } },
+        { id: "z-ai/glm-5.2", pricing: { prompt: "0.00000119", completion: "0.00000374", input_cache_read: "0.000000221" } },
+      ],
+    };
+    const out = parseOpenRouterPricing(input);
+    expect(Object.keys(out).sort()).toEqual(["glm-52", "hy3"]);
+    expect(out["hy3"].input).toBeCloseTo(0.132, 6);
+    expect(out["hy3"].output).toBeCloseTo(0.528, 6);
+    expect(out["hy3"].cacheRead).toBeCloseTo(0.033, 6);
+    expect(out["hy3"].sourceKey).toBe("tencent/hy3");
+    expect(out["glm-52"].input).toBeCloseTo(1.19, 6);
+    expect(out["glm-52"].output).toBeCloseTo(3.74, 6);
+    expect(out["glm-52"].cacheRead).toBeCloseTo(0.221, 6);
+  });
+
+  test("falls back cacheRead to input when input_cache_read is absent", () => {
+    const input = {
+      data: [{ id: "openai/gpt-5", pricing: { prompt: "0.00000125", completion: "0.00001" } }],
+    };
+    const out = parseOpenRouterPricing(input);
+    expect(out["gpt-5"].cacheRead).toBeCloseTo(1.25, 6);
+  });
+
+  test("skips entries without finite rates or missing pricing; keeps zero rates (free models)", () => {
+    const input = {
+      data: [
+        { id: "a/good", pricing: { prompt: "0.000001", completion: "0.000002" } },
+        { id: "a/no-pricing" },
+        { id: "a/no-output", pricing: { prompt: "0.000001" } },
+        { id: "a/zero-output", pricing: { prompt: "0.000001", completion: "0" } },
+        { id: "a/free", pricing: { prompt: "0", completion: "0" } },
+      ],
+    };
+    const out = parseOpenRouterPricing(input);
+    // Zero rates are valid — OpenRouter :free models price at $0. Only
+    // missing/non-numeric rates are skipped.
+    expect(Object.keys(out).sort()).toEqual(["free", "good", "zero-output"]);
+    expect(out["free"].input).toBe(0);
+    expect(out["free"].output).toBe(0);
+  });
+
+  test("date-snapshot variants collapse into their base key", () => {
+    const input = {
+      data: [{ id: "deepseek/deepseek-v4-flash-0731", pricing: { prompt: "0.00000014", completion: "0.00000028" } }],
+    };
+    const out = parseOpenRouterPricing(input);
+    expect(Object.keys(out)).toEqual(["deepseek-v4-flash"]);
+  });
+
+  test("handles malformed inputs without throwing", () => {
+    expect(parseOpenRouterPricing(null)).toEqual({});
+    expect(parseOpenRouterPricing({})).toEqual({});
+    expect(parseOpenRouterPricing({ data: "nope" })).toEqual({});
+    expect(parseOpenRouterPricing({ data: [null, "x", 42] })).toEqual({});
+  });
+
+  test("ignores OpenRouter's off-peak overrides — uses peak/listed base rate", () => {
+    // Real tencent/hy3 response shape: pricing.overrides[] carries a
+    // cheaper 16:00–00:00 UTC window. We deliberately use the base rate
+    // (day-granular metrics can't attribute tokens to the discount window;
+    // over-estimate beats under-estimate for a cost guardrail).
+    const input = {
+      data: [
+        {
+          id: "tencent/hy3",
+          pricing: {
+            prompt: "0.000000132",
+            completion: "0.000000528",
+            input_cache_read: "0.000000033",
+            overrides: [
+              { utc_start: 0, utc_end: 1600, prompt: "0.000000132", completion: "0.000000528", input_cache_read: "0.000000033" },
+              { utc_start: 1600, utc_end: 0, prompt: "0.0000000825", completion: "0.00000033", input_cache_read: "0.000000020625" },
+            ],
+          },
+        },
+      ],
+    };
+    const out = parseOpenRouterPricing(input);
+    expect(out["hy3"].input).toBeCloseTo(0.132, 6);
+    expect(out["hy3"].output).toBeCloseTo(0.528, 6);
+    expect(out["hy3"].cacheRead).toBeCloseTo(0.033, 6);
   });
 });

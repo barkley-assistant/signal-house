@@ -53,7 +53,7 @@ export function healthHandler(_deps: ApiDeps, req: Request): Response {
  *  `?days=7|30|90` picks the window (default 30).
  *
  *  When `SIGNAL_HOUSE_ESTIMATE_COSTS=true` (the default), per-day costs are
- *  recomputed from tokens × litellm rates so the chart matches the by-model
+ *  recomputed from tokens × openrouter rates so the chart matches the by-model
  *  rollup in `/api/state`. When false, falls through to the upstream-reported
  *  `cost.total` per day (today's behavior).
  *

@@ -13,21 +13,25 @@ import {
   type PricingIO,
 } from "../../src/server/model-pricing-fetcher";
 
-const LITELLM_FIXTURE: unknown = {
-  sample_spec: "ignored — not an object",
-  "claude-opus-4-7": { litellm_provider: "anthropic", input_cost_per_token: 1e-5, output_cost_per_token: 5e-5 },
-  "gpt-5": {
-    litellm_provider: "openai",
-    input_cost_per_token: 1.25e-6,
-    output_cost_per_token: 1e-5,
-    cache_read_input_token_cost: 1.25e-7,
-  },
-  "gpt-5.6-luna": {
-    litellm_provider: "openai",
-    input_cost_per_token: 1e-6,
-    output_cost_per_token: 6e-6,
-  },
-  "gpt-missing-output": { litellm_provider: "openai", input_cost_per_token: 1e-6 },
+const OPENROUTER_FIXTURE: unknown = {
+  data: [
+    {
+      id: "anthropic/claude-opus-4-7",
+      pricing: { prompt: "0.00001", completion: "0.00005" },
+    },
+    {
+      id: "openai/gpt-5",
+      pricing: { prompt: "0.00000125", completion: "0.00001", input_cache_read: "0.000000125" },
+    },
+    {
+      id: "openai/gpt-5.6-luna",
+      pricing: { prompt: "0.000001", completion: "0.000006" },
+    },
+    {
+      id: "openai/gpt-missing-output",
+      pricing: { prompt: "0.000001" },
+    },
+  ],
 };
 
 let workDir: string;
@@ -76,7 +80,7 @@ function mockFetchNoNetwork(): typeof fetch {
 
 describe("model-pricing-fetcher", () => {
   test("cold start: in-memory empty + disk empty → fetcher hits network, parses, writes disk, populates in-memory", async () => {
-    globalThis.fetch = mockFetch(LITELLM_FIXTURE);
+    globalThis.fetch = mockFetch(OPENROUTER_FIXTURE);
 
     await ensurePricingCacheFresh();
 
@@ -133,7 +137,7 @@ describe("model-pricing-fetcher", () => {
       }),
     );
 
-    globalThis.fetch = mockFetch(LITELLM_FIXTURE);
+    globalThis.fetch = mockFetch(OPENROUTER_FIXTURE);
 
     await ensurePricingCacheFresh();
 
@@ -201,7 +205,7 @@ describe("model-pricing-fetcher", () => {
     };
     writeFileSync(cacheFile, JSON.stringify(good));
 
-    globalThis.fetch = mockFetch(LITELLM_FIXTURE);
+    globalThis.fetch = mockFetch(OPENROUTER_FIXTURE);
 
     // Inject an I/O seam where write throws.
     const failingIO: PricingIO = {
@@ -232,7 +236,7 @@ describe("model-pricing-fetcher", () => {
     };
     writeFileSync(cacheFile, JSON.stringify(good));
 
-    globalThis.fetch = mockFetch(LITELLM_FIXTURE);
+    globalThis.fetch = mockFetch(OPENROUTER_FIXTURE);
 
     // Inject an I/O seam where write succeeds but rename throws.
     let renameCalled = false;
@@ -271,7 +275,7 @@ describe("model-pricing-fetcher", () => {
 
     // New fetch returns very few entries.
     globalThis.fetch = mockFetch({
-      "gpt-5": { litellm_provider: "openai", input_cost_per_token: 1e-6, output_cost_per_token: 1e-6 },
+      data: [{ id: "openai/gpt-5", pricing: { prompt: "0.000001", completion: "0.000001" } }],
     });
 
     await refreshFromNetwork();
@@ -284,7 +288,7 @@ describe("model-pricing-fetcher", () => {
     // the fetch completed.)
   });
 
-  test("HTTP 500 from litellm → fetcher logs warning, leaves disk cache intact", async () => {
+  test("HTTP 500 from openrouter → fetcher logs warning, leaves disk cache intact", async () => {
     const good = {
       fetchedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       source: "https://example.invalid/seed",
@@ -306,7 +310,7 @@ describe("model-pricing-fetcher", () => {
   test("disk cache malformed (bad JSON) → fetcher ignores disk, falls through to network", async () => {
     writeFileSync(cacheFile, "{not json");
 
-    globalThis.fetch = mockFetch(LITELLM_FIXTURE);
+    globalThis.fetch = mockFetch(OPENROUTER_FIXTURE);
 
     await ensurePricingCacheFresh();
 
@@ -318,7 +322,7 @@ describe("model-pricing-fetcher", () => {
   test("disk cache has wrong shape (missing models field) → ignored, falls through to network", async () => {
     writeFileSync(cacheFile, JSON.stringify({ fetchedAt: new Date().toISOString() }));
 
-    globalThis.fetch = mockFetch(LITELLM_FIXTURE);
+    globalThis.fetch = mockFetch(OPENROUTER_FIXTURE);
 
     await ensurePricingCacheFresh();
 

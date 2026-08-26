@@ -1,5 +1,5 @@
 /**
- * Litellm pricing fetcher — daily refresh with disk cache + atomic write.
+ * OpenRouter pricing fetcher — daily refresh with disk cache + atomic write.
  *
  * Architecture:
  *   - In-memory cache: process-lifetime map of machine key → per-1M rates.
@@ -7,8 +7,14 @@
  *   - Disk cache: ~/.local/share/signal-house-v2/runtime/.data/model-pricing.json
  *     Written atomically (temp file → Bun.write fsync → rename) so a process
  *     kill mid-write never corrupts the cache. The previous-good version survives.
- *   - Network fetch: litellm's model_prices_and_context_window.json, filtered
- *     to openai by the parser. Refreshed at most every 24h.
+ *   - Network fetch: OpenRouter's /api/v1/models (free, no key), parsed by
+ *     the shared OpenRouter parser. Refreshed at most every 24h.
+ *   - Source decision (2026-08-26): litellm's model_prices JSON was
+ *     replaced by OpenRouter as the pricing source — OpenRouter covers all
+ *     dashboard models by machine-key (vendor/model → model, no alias
+ *     table needed), ships per-token rates in the same unit litellm used,
+ *     and exposes per-model cache-read rates. Fallback chain is now
+ *     OpenRouter cache → local opencode.jsonc → zeros.
  *   - Failure modes (every one preserves the previous-good cache):
  *       - fetch fails AND disk cache exists   → use disk cache, log warning
  *       - fetch fails AND disk cache missing  → in-memory stays empty,
@@ -30,16 +36,15 @@ import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { log } from "../shared/logger";
-import { parseLitellmPricing, type PricingMap } from "../shared/model-pricing-parser";
+import { parseOpenRouterPricing, type PricingMap } from "../shared/model-pricing-parser";
 
-const LITELLM_URL =
-  "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/models";
 const CACHE_FILENAME = "model-pricing.json";
 /** Refresh at most hourly, aligned to the top of the hour: ensurePricingCacheFresh()
  *  treats a cache as fresh only within the current clock hour (sameClockHour).
  *  The poller calls it on its own cadence (every 2 min); this gate collapses
- *  those calls into at most one network fetch per hour. Litellm's file is
- *  community-updated and ETag-stable for days — hourly is generous; the
+ *  those calls into at most one network fetch per hour. OpenRouter's
+ *  catalog is community-updated and stable for days — hourly is generous; the
  *  alignment just makes refresh timing predictable. */
 const SCHEMA_DRIFT_THRESHOLD = 0.3; // warn if model count drops > 30%
 
@@ -67,7 +72,7 @@ let lastStatus: PricingCacheStatus = {
   lastFetchedAt: null,
   lastFetchStatus: "empty",
   modelCount: 0,
-  source: LITELLM_URL,
+  source: OPENROUTER_URL,
 };
 
 /**
@@ -135,14 +140,14 @@ function sameClockHour(a: Date, b: Date): boolean {
  *  sanity step in the verification plan. */
 export async function refreshFromNetwork(): Promise<void> {
   try {
-    const response = await fetch(LITELLM_URL);
+    const response = await fetch(OPENROUTER_URL);
     if (!response.ok) {
       log.warn("model-pricing-fetcher", `network fetch failed: HTTP ${response.status}`);
       lastStatus = { ...lastStatus, lastFetchStatus: "stale" };
       return;
     }
     const json: unknown = await response.json();
-    const map = parseLitellmPricing(json);
+    const map = parseOpenRouterPricing(json);
 
     // Schema-drift heuristic: warn if model count dropped > 30% from last fetch.
     if (inMemory && inMemory.modelCount > 0) {
@@ -150,21 +155,21 @@ export async function refreshFromNetwork(): Promise<void> {
       if (actualRatio < 1 - SCHEMA_DRIFT_THRESHOLD) {
         log.warn(
           "model-pricing-fetcher",
-          `model count dropped ${((1 - actualRatio) * 100) | 0}% (was ${inMemory.modelCount}, now ${Object.keys(map).length}) — possible schema drift in litellm`,
+          `model count dropped ${((1 - actualRatio) * 100) | 0}% (was ${inMemory.modelCount}, now ${Object.keys(map).length}) — possible schema drift in openrouter`,
         );
       }
     }
 
     const fetchedAt = new Date().toISOString();
     const modelCount = Object.keys(map).length;
-    await writeCacheAtomic({ fetchedAt, source: LITELLM_URL, providerFilter: "openai", modelCount, models: map });
+    await writeCacheAtomic({ fetchedAt, source: OPENROUTER_URL, providerFilter: "openrouter", modelCount, models: map });
 
-    inMemory = { map, fetchedAt, source: LITELLM_URL, modelCount };
+    inMemory = { map, fetchedAt, source: OPENROUTER_URL, modelCount };
     lastStatus = {
       lastFetchedAt: fetchedAt,
       lastFetchStatus: "ok",
       modelCount,
-      source: LITELLM_URL,
+      source: OPENROUTER_URL,
     };
   } catch (err) {
     log.warn("model-pricing-fetcher", `network fetch failed: ${(err as Error).message}`);
@@ -242,7 +247,7 @@ export function setPricingCachePath(path: string): void {
     lastFetchedAt: null,
     lastFetchStatus: "empty",
     modelCount: 0,
-    source: LITELLM_URL,
+    source: OPENROUTER_URL,
   };
 }
 
@@ -253,6 +258,6 @@ export function resetPricingCache(): void {
     lastFetchedAt: null,
     lastFetchStatus: "empty",
     modelCount: 0,
-    source: LITELLM_URL,
+    source: OPENROUTER_URL,
   };
 }

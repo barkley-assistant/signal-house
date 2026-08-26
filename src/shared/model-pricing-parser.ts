@@ -1,15 +1,19 @@
 /**
- * Litellm pricing-table parser.
+ * Model pricing-table parsers (litellm + OpenRouter).
  *
- * Pure: no I/O. Takes the raw JSON response from litellm's
- * `model_prices_and_context_window.json`, returns a normalised
- * { input, output, cacheRead } per 1M tokens for every entry
- * that has usable rates. Entries with missing or non-finite
- * rates are skipped with a debug log line so future "why isn't
- * model X showing up?" investigations have a starting point.
+ * Pure: no I/O. Takes the raw JSON response from a pricing source and
+ * returns a normalised { input, output, cacheRead } per 1M tokens for
+ * every entry that has usable rates. Entries with missing or non-finite
+ * rates are skipped with a debug log line so future "why isn't model X
+ * showing up?" investigations have a starting point.
  *
- * Pricing source:
- * https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
+ * Two parsers share one output shape (PricingMap) and the same
+ * per-1M convention:
+ *   - parseLitellmPricing — litellm's model_prices_and_context_window.json
+ *     (historical source; kept for tests + fallback).
+ *   - parseOpenRouterPricing — OpenRouter's /api/v1/models (the current
+ *     source since 2026-08-26; free + keyless, covers every dashboard
+ *     model by machine-key).
  *
  * Litellm stores per-token rates; signal-house displays per-1M. We
  * multiply by 1_000_000 here so the rest of the codebase never has
@@ -21,7 +25,9 @@
  * (DeepSeek-style). Both are read; when neither exists the entry
  * has no discounted cache tier, and `cacheRead` falls back to
  * `input` (locked decision #2) — charging cached tokens at the
- * fresh-input rate rather than inventing a discount.
+ * fresh-input rate rather than inventing a discount. OpenRouter
+ * exposes the discount directly as `pricing.input_cache_read`; absent
+ * that, the same input fallback applies.
  *
  * Collision policy (why "last writer wins" is not enough): litellm
  * lists the same model under many provider routes
@@ -168,6 +174,104 @@ interface Candidate {
 /** Returns value if it's a finite number, else fallback. */
 function numberOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Returns a finite number from a number OR a numeric string ("0.000000132"),
+ *  else fallback. OpenRouter's /api/v1/models ships pricing values as
+ *  strings; litellm ships numbers. */
+function rateOr(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+}
+
+/**
+ * Parse the raw OpenRouter /api/v1/models JSON into our cache shape.
+ *
+ * OpenRouter returns a flat array under `data`, each entry shaped like:
+ *   { id: "tencent/hy3", name: "Tencent: Hy3", pricing: { prompt, completion,
+ *     input_cache_read, request, ... } }
+ * Pricing values are USD **per token** (0.000000132 = $0.132/M), so the
+ * same ×1_000_000 normalization applies as in parseLitellmPricing.
+ *
+ * Field mapping:
+ *   pricing.prompt           → input
+ *   pricing.completion       → output
+ *   pricing.input_cache_read → cacheRead  (fallback: input, no discount listed)
+ *
+ * Peak/off-peak: OpenRouter's `pricing.overrides[]` encodes a cheaper
+ * off-peak window (e.g. tencent/hy3 at 16:00–00:00 UTC). Intentionally
+ * ignored — the dashboard's daily_metrics are day-granular, so we can't
+ * know which tokens fell in the discount window; using the peak/listed
+ * rate is the conservative, stable baseline (over-estimate beats
+ * under-estimate for a cost guardrail).
+ *
+ * Ids are already vendor-prefixed ("vendor/model"); machineKey() strips the
+ * prefix + dots, so "tencent/hy3" → "hy3" — matching the dashboard's
+ * machine-key lookups with no extra alias table.
+ *
+ * @param json - The result of JSON.parse on the OpenRouter response.
+ * @returns A map of machine key → per-1M-token rates. Empty `{}` on any
+ *          parse failure or malformed input — never throws.
+ */
+export function parseOpenRouterPricing(json: unknown): PricingMap {
+  if (!isPlainObject(json) || !Array.isArray(json.data)) return {};
+
+  const out: PricingMap = {};
+  let skippedNoRates = 0;
+  let skippedEmptyKey = 0;
+
+  for (const entry of json.data) {
+    if (!isPlainObject(entry)) continue;
+    const rawKey = typeof entry.id === "string" ? entry.id : "";
+    if (!rawKey) {
+      skippedEmptyKey++;
+      continue;
+    }
+    // Collapse date-snapshot variants into their base key at parse time,
+    // matching the resolver's lookup key exactly (same rule as litellm).
+    const key = stripDateSnapshot(machineKey(rawKey));
+    if (!key) {
+      skippedEmptyKey++;
+      continue;
+    }
+    if (!isPlainObject(entry.pricing)) {
+      skippedNoRates++;
+      continue;
+    }
+    const inputPerToken = rateOr(entry.pricing.prompt, NaN);
+    const outputPerToken = rateOr(entry.pricing.completion, NaN);
+    if (!Number.isFinite(inputPerToken) || !Number.isFinite(outputPerToken)) {
+      skippedNoRates++;
+      continue;
+    }
+    // OpenRouter's discounted cache-read rate; absent → charge cached
+    // tokens at the fresh-input rate (locked decision #2 convention).
+    const cacheReadPerToken = rateOr(entry.pricing.input_cache_read, inputPerToken);
+
+    out[key] = {
+      input: inputPerToken * 1_000_000,
+      output: outputPerToken * 1_000_000,
+      cacheRead: cacheReadPerToken * 1_000_000,
+      // OpenRouter entries are always "vendor/model" routed listings — there
+      // is no provider-native/native vs routed collision to resolve, so mark
+      // them routed for parity with the litellm cache shape.
+      sourceKey: rawKey,
+      route: "routed",
+    };
+  }
+
+  log.debug(
+    "model-pricing-parser",
+    `openrouter parsed ${Object.keys(out).length} entries` +
+      (skippedNoRates > 0 || skippedEmptyKey > 0
+        ? `, skipped ${skippedNoRates} without finite rates + ${skippedEmptyKey} with empty keys`
+        : ""),
+  );
+  return out;
 }
 
 /** Narrow `unknown` to a plain object record. Returns false for

@@ -362,10 +362,10 @@ export function mergeModelRows(
 
     // Cost derivation:
     //   - estimateCosts=true:  recompute cost from tokens × rates.
-    //                           "estimated" if litellm or local had the model,
+    //                           "estimated" if openrouter or local had the model,
     //                           "unknown" if no rate was found anywhere,
     //                           "skipped" if the row has no tokens.
-    //                           (For v1 we don't distinguish litellm-source from
+    //                           (For v1 we don't distinguish openrouter-source from
     //                           local-source in costSource; both are "estimated".
     //                           Future: per-row provenance via the resolver.)
     //   - estimateCosts=false: passthrough — use the upstream cost as-is.

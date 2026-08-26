@@ -37,7 +37,7 @@ afterEach(() => {
  * so we trigger that via getModelPricingFromCache() before the resolver
  * test runs.
  */
-async function seedLitellmCache(models: Record<string, { input: number; output: number; cacheRead: number }>) {
+async function seedPricingCache(models: Record<string, { input: number; output: number; cacheRead: number }>) {
   const cachePath = join(workDir, "model-pricing.json");
   writeFileSync(
     cachePath,
@@ -55,8 +55,8 @@ async function seedLitellmCache(models: Record<string, { input: number; output: 
 }
 
 describe("model-pricing resolver", () => {
-  test("litellm hit returns litellm rates as-is", async () => {
-    await seedLitellmCache({
+  test("cache hit returns cached rates as-is", async () => {
+    await seedPricingCache({
       "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
     });
 
@@ -66,12 +66,12 @@ describe("model-pricing resolver", () => {
     expect(rates.cacheRead).toBe(0.125);
   });
 
-  test("litellm hit takes precedence over local opencode.jsonc rates", async () => {
-    await seedLitellmCache({
+  test("cache hit takes precedence over local opencode.jsonc rates", async () => {
+    await seedPricingCache({
       "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
     });
     // Local has a higher (stale, wrong) input rate. Resolver should
-    // still prefer litellm.
+    // still prefer the cache.
     writeFileSync(
       join(workDir, "opencode.jsonc"),
       JSON.stringify({
@@ -86,10 +86,10 @@ describe("model-pricing resolver", () => {
     expect(rates.input).toBe(1.25);
   });
 
-  test("litellm miss + local hit → falls back to local, output defaults to input × 4", async () => {
-    await seedLitellmCache({
+  test("cache miss + local hit → falls back to local, output defaults to input × 4", async () => {
+    await seedPricingCache({
       "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
-      // "deepseek-v4-pro" intentionally NOT in litellm cache
+      // "deepseek-v4-pro" intentionally NOT in cache
     });
     writeFileSync(
       join(workDir, "opencode.jsonc"),
@@ -107,8 +107,8 @@ describe("model-pricing resolver", () => {
     expect(rates.cacheRead).toBe(0.07);
   });
 
-  test("litellm miss + local miss → returns all zeros", async () => {
-    await seedLitellmCache({
+  test("cache miss + local miss → returns all zeros", async () => {
+    await seedPricingCache({
       "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
     });
 
@@ -117,7 +117,7 @@ describe("model-pricing resolver", () => {
   });
 
   test("machineKey normalisation: GPT 5.6 Luna and gpt-5.6-luna resolve to same entry", async () => {
-    await seedLitellmCache({
+    await seedPricingCache({
       "gpt-56-luna": { input: 1.25, output: 10, cacheRead: 0.125 },
     });
 
@@ -128,7 +128,7 @@ describe("model-pricing resolver", () => {
   });
 
   test("date-snapshot suffix stripping: gpt-5.6-luna-20250815 resolves as gpt-5.6-luna", async () => {
-    await seedLitellmCache({
+    await seedPricingCache({
       "gpt-56-luna": { input: 1.25, output: 10, cacheRead: 0.125 },
     });
 
@@ -138,7 +138,7 @@ describe("model-pricing resolver", () => {
   });
 
   test("empty / malformed model name → returns zeros (no throw)", async () => {
-    await seedLitellmCache({
+    await seedPricingCache({
       "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
     });
 
@@ -147,11 +147,11 @@ describe("model-pricing resolver", () => {
     expect((await resolveModelPricing("   ")).input).toBe(0);
   });
 
-  test("non-finite litellm rates (parser skip) → falls through to local", async () => {
-    // The parser skips non-finite rates, so this model isn't in the litellm cache.
-    await seedLitellmCache({
+  test("non-finite cached rates (parser skip) → falls through to local", async () => {
+    // The parser skips non-finite rates, so this model isn't in the cache.
+    await seedPricingCache({
       "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
-      // "broken-model" omitted because parseLitellmPricing would skip it
+      // "broken-model" omitted because the parser would skip it
     });
     writeFileSync(
       join(workDir, "opencode.jsonc"),
@@ -172,10 +172,10 @@ describe("model-pricing resolver", () => {
   test("local hit: cache_read=0 still produces a non-empty result (input×4 default)", async () => {
     // opencode.jsonc has input but no cache_read. Locked decision #2 says
     // cache_read falls back to input when missing — but that rule is for the
-    // litellm parser. For the local source, getCacheReadCostPerMillion
+    // cache parser. For the local source, getCacheReadCostPerMillion
     // returns 0 when the field is absent. The resolver should still report
     // the input/output rates.
-    await seedLitellmCache({}); // no litellm entries
+    await seedPricingCache({}); // no cached entries
     writeFileSync(
       join(workDir, "opencode.jsonc"),
       JSON.stringify({
@@ -195,7 +195,7 @@ describe("model-pricing resolver", () => {
 
 describe("fetchAllRates", () => {
   test("returns a map keyed by machine key, dedupes by key", async () => {
-    await seedLitellmCache({
+    await seedPricingCache({
       "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
       "deepseek-v4-pro": { input: 0.35, output: 1.4, cacheRead: 0.07 },
     });
