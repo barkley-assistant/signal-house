@@ -8,7 +8,8 @@
 import { useEffect, useRef, useState, Fragment } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
-import { useDash, loadTrend } from "../state/store";
+import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint } from "../state/store";
+import type { WindowDays } from "../../shared/window";
 import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
@@ -378,6 +379,157 @@ function DailyUsageChart() {
 type SortKey = "model" | "sessions" | "tokens" | "cost" | "cachePct" | "eff" | null;
 type SortState = { key: SortKey; asc: boolean };
 
+/** Mini daily cost+tokens chart for ONE model, shown inside the expanded
+ *  by-model row. Deliberately the main DailyUsageChart's visual language at
+ *  reduced size: same palette (#38bdf8 cost / #facc15 tokens), same smooth
+ *  lines with flush edges (boundaryGap: false), same tooltip shell, same
+ *  peak-anchoring rule (niceCeil once per open). No legend — two series in
+ *  fixed colours don't need one at this size; the axis labels + tooltip
+ *  disambiguate. */
+function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel: string }) {
+  const days = useDash((s) => s.days);
+  const ref = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<echarts.ECharts | null>(null);
+  // Loading is derived, not stored: points for the CURRENT (days, key) pair.
+  // A window switch renders the previous result as stale until the new one
+  // lands (undefined for this pair = skeleton), so no setState-in-effect.
+  const [loaded, setLoaded] = useState<Array<{ windowDays: WindowDays; key: string; points: ModelTrendPoint[] }>>([]);
+  const entry = loaded.find((e) => e.windowDays === days && e.key === modelKey);
+  const points = entry?.points;
+
+  useEffect(() => {
+    if (entry) return; // already have this window's data
+    let disposed = false;
+    void loadModelTrend(days, modelKey).then((pts) => {
+      if (!disposed) setLoaded((prev) => [...prev, { windowDays: days, key: modelKey, points: pts }]);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [days, modelKey, entry]);
+
+  useEffect(() => {
+    if (!ref.current || !points || points.length === 0) return;
+    const pts = points;
+    chartRef.current = echarts.init(ref.current, "dark");
+    const ro = new ResizeObserver(() => chartRef.current?.resize());
+    ro.observe(ref.current);
+    const dates = pts.map((p) => p.date);
+    const fmtDay = (d: string) => {
+      const [y, m, day] = d.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    };
+    // Same peak-anchor contract as the main chart: computed once per mount,
+    // never rescaled by polls within the same open.
+    const costPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)));
+    const tokenPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0)));
+    const option: echarts.EChartsOption = {
+      animationDuration: 400,
+      animationEasing: "cubicOut",
+      backgroundColor: "transparent",
+      grid: { left: 2, right: 2, top: 14, bottom: 22, containLabel: true },
+      tooltip: {
+        trigger: "axis",
+        ...touchAwareTooltip(),
+        confine: true,
+        backgroundColor: "rgba(17, 19, 24, 0.96)",
+        borderColor: "#232732",
+        borderWidth: 1,
+        padding: [8, 10],
+        textStyle: { color: "#94a3b8", fontSize: 11 },
+        axisPointer: { lineStyle: { color: "#2c3038" } },
+        formatter: (params: unknown) => {
+          const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
+          if (!arr.length) return "";
+          const [y, m, day] = arr[0].axisValue.split("-").map(Number);
+          const full = new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", {
+            weekday: "short", day: "numeric", month: "long",
+          });
+          const rows = arr
+            .filter((p) => p.value !== null)
+            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.startsWith("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
+          return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
+        },
+      },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: dates,
+        axisLabel: { color: "#64748b", fontSize: 9, formatter: fmtDay },
+        axisLine: { lineStyle: { color: "#232732" } },
+        axisTick: { show: false },
+      },
+      yAxis: [
+        {
+          type: "value",
+          min: 0,
+          max: costPeak,
+          axisLabel: { color: "#64748b", fontSize: 9, formatter: (v: number) => `$${Math.round(v * 100) / 100}` },
+          splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+        },
+        {
+          type: "value",
+          min: 0,
+          max: tokenPeak,
+          axisLabel: {
+            color: "#64748b",
+            fontSize: 9,
+            formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
+          },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: "Cost ($)",
+          type: "line",
+          data: pts.map((p) => (p.cost === null ? null : Number(p.cost.toFixed(2)))),
+          smooth: 0.3,
+          showSymbol: false,
+          lineStyle: { color: "#38bdf8", width: 2 },
+          areaStyle: { color: "rgba(56, 189, 248, 0.12)" },
+        },
+        {
+          name: "Tokens",
+          type: "line",
+          yAxisIndex: 1,
+          data: pts.map((p) => p.tokens),
+          smooth: 0.3,
+          showSymbol: false,
+          lineStyle: { color: "#facc15", width: 2 },
+          areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
+        },
+      ],
+    };
+    chartRef.current.setOption(option, true);
+    return () => {
+      ro.disconnect();
+      chartRef.current?.dispose();
+      chartRef.current = null;
+    };
+  }, [points]);
+
+  return (
+    <div className="model-row__detail-trend">
+      <div className="model-row__detail-trend-head">
+        <span className="model-row__detail-label">{modelLabel} · daily trend</span>
+        <span className="model-row__detail-caption">
+          <span className="model-row__legend-dot model-row__legend-dot--cost" aria-hidden="true" /> cost
+          <span className="model-row__legend-dot model-row__legend-dot--tokens" aria-hidden="true" /> tokens
+        </span>
+      </div>
+      {points === undefined ? (
+        <div className="skeleton" style={{ height: 120 }} />
+      ) : points.length === 0 ? (
+        <p className="state-label">No daily history for this model in the selected window</p>
+      ) : (
+        <div ref={ref} style={{ width: "100%", height: 130 }} aria-label={`Daily spend trend for ${modelLabel}`} />
+      )}
+    </div>
+  );
+}
+
+
 /**
  * Default by-model order: sessions descending (2026-08-24 operator
  * preference — readable at-a-glance and the most direct "which model
@@ -542,6 +694,9 @@ function ModelTable() {
                     aria-label={`Details for ${m.model}`}
                   >
                     <td colSpan={7}>
+                      {typeof m.machineKey === "string" && m.machineKey !== "" ? (
+                        <ModelRowDetail modelKey={m.machineKey} modelLabel={m.model} />
+                      ) : null}
                       <div className="model-row__detail-grid">
                         <div className="model-row__detail-stat">
                           <span className="model-row__detail-label">Sessions</span>

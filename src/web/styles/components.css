@@ -244,15 +244,75 @@
    standard 6-column rendering. The mobile media query below re-enables
    them.
 
-   Same for the expansion row: at desktop widths the click-to-expand
-   affordance doesn't exist, so the row is unconditionally rendered as
-   display:none — visible only when state.expandedKey is set AND we're
-   in the mobile media query. (Defence-in-depth: even if state is set
-   somehow at desktop, nothing renders.) */
+   Unlike the chevron, the expansion row IS enabled at desktop now:
+   clicking a row opens the per-model daily trend (the row is a real
+   button with aria-expanded, so the click must pay off on every
+   surface). Only its inner stat grid is mobile-specific. */
 .model-table thead th.model-row__chevron-cell,
-.model-table tbody tr td.model-row__chevron-cell,
-.model-table tbody tr.model-row__detail {
+.model-table tbody tr td.model-row__chevron-cell {
   display: none;
+}
+
+/* Expanded-row detail (desktop): darker supplemental surface under the
+   clicked row, chart above the full stat breakdown. */
+.model-table tbody tr.model-row__detail > td {
+  display: block;
+  padding: 12px 14px 16px;
+  background: rgba(0, 0, 0, 0.18);
+  border-bottom: 1px solid var(--card-border);
+}
+.model-row__detail-trend {
+  margin-bottom: 14px;
+}
+.model-row__detail-trend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.model-row__detail-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.model-row__legend-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 8px;
+}
+.model-row__legend-dot:first-child {
+  margin-left: 0;
+}
+.model-row__legend-dot--cost {
+  background: #38bdf8;
+}
+.model-row__legend-dot--tokens {
+  background: #facc15;
+}
+/* Desktop rows get the same interactive affordance as mobile now that
+   clicking actually does something: pointer cursor, hover tint, focus
+   ring. Kept subtle so the table doesn't read as all-buttons. */
+.model-table tbody tr.model-row {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.model-table tbody tr.model-row:hover {
+  background: rgba(56, 189, 248, 0.04);
+}
+.model-table tbody tr.model-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.model-table tbody tr.model-row--expanded {
+  background: rgba(56, 189, 248, 0.06);
 }
 
 /* Mobile (≤640px): the by-model table keeps a real <table> layout

@@ -188,6 +188,24 @@ export async function loadTrend(days: WindowDays): Promise<TrendPoint[]> {
   }
 }
 
+export interface ModelTrendPoint {
+  date: string;
+  cost: number | null;
+  tokens: number | null;
+}
+
+/** Load ONE model's daily trend (canonical machine key from byModel[]) for
+ *  the expanded by-model row. Empty array on failure — the panel renders
+ *  its no-history state rather than an error. */
+export async function loadModelTrend(days: WindowDays, key: string): Promise<ModelTrendPoint[]> {
+  try {
+    const res = await fetchJson<{ points: ModelTrendPoint[] }>(`/api/daily/model?days=${days}&key=${encodeURIComponent(key)}`);
+    return res.points;
+  } catch {
+    return [];
+  }
+}
+
 export interface DeliveryPoint {
   date: string;
   ci: {
