@@ -47,6 +47,10 @@ export interface ModelUsageMetrics {
   sessions: number;
   cost: number | null;
   tokens: number | null;
+  /** Additive token breakdown — always populated by the server aggregate
+   *  layer, surfaced for the expanded by-model panel. */
+  inputTokens?: number;
+  outputTokens?: number;
   /** Additive cache metrics — always populated by the server aggregate layer. */
   cacheReadTokens?: number;
   cacheHitRate?: number;
@@ -511,6 +515,8 @@ export function mergeModelRows(
       return {
         ...m,
         machineKey: key,
+        inputTokens,
+        outputTokens,
         cacheHitRate: denom > 0 ? m.cacheReadTokens / denom : 0,
         effPerM,
       };

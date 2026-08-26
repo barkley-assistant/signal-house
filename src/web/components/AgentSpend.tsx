@@ -735,18 +735,54 @@ function ModelTable() {
                           <span className="model-row__detail-value">{formatCompact(m.tokens ?? 0)}</span>
                         </div>
                         <div className="model-row__detail-stat">
-                          <span className="model-row__detail-label">Cost</span>
-                          <span className="model-row__detail-value">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</span>
+                          <span className="model-row__detail-label">Input</span>
+                          <span className="model-row__detail-value">{formatCompact(m.inputTokens ?? 0)}</span>
+                        </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Output</span>
+                          <span className="model-row__detail-value">{formatCompact(m.outputTokens ?? 0)}</span>
+                        </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Cache read</span>
+                          <span className="model-row__detail-value">{formatCompact(m.cacheReadTokens ?? 0)}</span>
                         </div>
                         <div className="model-row__detail-stat">
                           <span className="model-row__detail-label">Cache %</span>
                           <span className="model-row__detail-value">{formatPercent(m.cacheHitRate ?? 0)}</span>
                         </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Cache saved</span>
+                          <span className="model-row__detail-value">{(m.cacheReadTokens ?? 0) > 0 ? formatCost(m.cacheSavings ?? 0) : "—"}</span>
+                        </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Cost</span>
+                          <span className="model-row__detail-value">{m.costSource === "unknown" ? "—" : formatCost(m.cost)}</span>
+                        </div>
                         <div className="model-row__detail-stat model-row__detail-stat--eff">
                           <span className="model-row__detail-label">$/1M</span>
                           <span className="model-row__detail-value eff-cell">{m.costSource === "unknown" ? "—" : m.effPerM != null ? formatEffPerM(m.effPerM) : "—"}</span>
                         </div>
+                        <div className="model-row__detail-stat">
+                          <span className="model-row__detail-label">Tokens/session</span>
+                          <span className="model-row__detail-value">{(m.sessions ?? 0) > 0 && (m.tokens ?? 0) > 0 ? formatCompact(Math.round((m.tokens ?? 0) / m.sessions)) : "—"}</span>
+                        </div>
                       </div>
+                      {m.bySource && Object.keys(m.bySource).length > 0 && (
+                        <div className="model-row__detail-sources">
+                          <span className="model-row__detail-label">By source</span>
+                          <div className="model-row__detail-sources-list">
+                            {Object.entries(m.bySource).map(([src, s]) => (
+                              <span key={src} className="model-row__source">
+                                <span className="model-row__source-name">{src}</span>
+                                <span>{formatCompact(s.inputTokens ?? 0)} in</span>
+                                <span>{formatCompact(s.outputTokens ?? 0)} out</span>
+                                <span>{formatCompact(s.cacheReadTokens ?? 0)} cached</span>
+                                <span>{m.costSource === "unknown" ? "—" : formatCost(s.cost ?? 0)}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}

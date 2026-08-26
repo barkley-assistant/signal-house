@@ -262,11 +262,12 @@
   background: rgba(0, 0, 0, 0.18);
   border-bottom: 1px solid var(--card-border);
 }
-/* Stat breakdown under the chart — two-column grid, label-over-value.
-   Shared by desktop expansion and the mobile expand panel. */
+/* Stat breakdown under the chart — label-over-value grid.
+   Desktop: 4 columns across the full-width panel; mobile media query
+   drops to 2. Shared by desktop expansion and the mobile expand panel. */
 .model-row__detail-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px 16px;
 }
 .model-row__detail-stat {
@@ -294,6 +295,41 @@
 }
 .model-row__detail-trend {
   margin-bottom: 14px;
+}
+/* Per-source attribution strip under the stat grid — one compact row per
+   source (opencode / hermes), wrapping on narrow screens. */
+.model-row__detail-sources {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.model-row__detail-sources-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.model-row__source {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.model-row__source-name {
+  color: var(--text-primary, #e2e8f0);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.model-row__source strong {
+  color: var(--text-primary, #e2e8f0);
+  font-weight: 500;
 }
 .model-row__detail-trend-head {
   display: flex;
@@ -544,6 +580,27 @@
   }
   .model-table tbody tr.model-row__detail > td {
     display: block;
+    padding: 12px 14px 16px;
+  }
+  /* Narrow screens: the stat grid drops from 4 to 2 columns so each
+     cell keeps breathing room. */
+  .model-row__detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* Source chips stack full-width so each can hold its metrics without
+     overflowing the 375px viewport. min-width:0 lets the chip shrink
+     below its intrinsic content width; the inner metrics wrap to a
+     second line inside the chip instead of overflowing its box. */
+  .model-row__detail-sources-list {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .model-row__source {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    white-space: normal;
+    justify-content: flex-start;
   }
 }
 
