@@ -12,7 +12,7 @@ import { json, jsonError } from "../shared/http";
 import { buildState } from "./build-state";
 import { buildDiagnostics } from "../diagnostics/sources";
 import { setRefreshMeta } from "../db/refresh-meta";
-import { queryDailyTrend } from "../db/daily-metrics";
+import { queryDailyTrend, queryDailyModelTrend } from "../db/daily-metrics";
 import { utcDay, utcDaysAgo } from "../shared/dates";
 import { buildDeliveryTrend } from "../metrics/delivery";
 import { ensureHostMetricsFresh, getHostMetricsPoints } from "../server/host-metrics-fetcher";
@@ -70,6 +70,26 @@ export async function dailyTrendHandler(deps: ApiDeps, req: Request): Promise<Re
   };
   const points = await queryDailyTrend(deps.db, from, to, costOpts);
   return json(req, { from, to, days, points });
+}
+
+/** GET /api/daily/model — per-day cost+tokens for ONE model (canonical
+ *  machine key from /api/state's byModel[].machineKey). Powers the expanded
+ *  by-model row's trend chart. Same window semantics as /api/daily/spend;
+ *  same estimator contract for `cost`. Unknown/absent key → empty points. */
+export async function dailyModelTrendHandler(deps: ApiDeps, req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const days = parseWindowDays(url.searchParams.get("days"));
+  const to = url.searchParams.get("to") ?? utcDay();
+  const from = url.searchParams.get("from") ?? utcDaysAgo(days);
+  const key = (url.searchParams.get("key") ?? "").trim().toLowerCase();
+  const costOpts: CostEstimationOpts = {
+    rates: new Map(),
+    enabled: deps.config.estimateCosts,
+  };
+  const points = key
+    ? await queryDailyModelTrend(deps.db, key, from, to, costOpts)
+    : [];
+  return json(req, { key, from, to, days, points });
 }
 
 /** GET /api/daily/delivery — per-day CI pass-rate + commits + PRs-merged for the

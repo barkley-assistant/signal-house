@@ -340,6 +340,49 @@ describe("cache savings API shape", () => {
   });
 });
 
+describe("daily model trend contract", () => {
+  test("per-model points for a seeded canonical key, passthrough cost", async () => {
+    const db = server.app.owner.db;
+    const insert = db.query(
+      "INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+    );
+    // Two spellings of the same canonical model (alias group), two sources,
+    // same day — must collapse into ONE point summing both.
+    const d1 = utcDaysAgo(1);
+    insert.run(d1, "opencode", "model.tokens_input", 1_000_000, JSON.stringify({ model: "Claude Sonnet" }), Date.now());
+    insert.run(d1, "opencode", "model.tokens_output", 500_000, JSON.stringify({ model: "Claude Sonnet" }), Date.now());
+    insert.run(d1, "hermes", "model.tokens_input", 250_000, JSON.stringify({ model: "claude-sonnet" }), Date.now());
+    insert.run(d1, "opencode", "model.cost", 12.5, JSON.stringify({ model: "Claude Sonnet" }), Date.now());
+    insert.run(d1, "hermes", "model.cost", 3.5, JSON.stringify({ model: "claude-sonnet" }), Date.now());
+    // A different model on the same day — must NOT leak into the series.
+    insert.run(d1, "opencode", "model.tokens_input", 999_999_999, JSON.stringify({ model: "Other Model" }), Date.now());
+
+    const res = await authed(`/api/daily/model?key=claude-sonnet&days=7`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      key: string; days: number;
+      points: Array<{ date: string; cost: number | null; tokens: number | null }>;
+    };
+    expect(body.key).toBe("claude-sonnet");
+    expect(body.days).toBe(7);
+    const d1points = body.points.filter((p) => p.date === d1);
+    expect(d1points).toHaveLength(1);
+    expect(d1points[0].tokens).toBe(1_750_000);
+    // estimateCosts=false in the contract server → persisted upstream sum.
+    expect(d1points[0].cost).toBe(16);
+
+    // Unknown key → empty points, not an error.
+    const empty = await authed(`/api/daily/model?key=no-such-model&days=7`);
+    expect(empty.status).toBe(200);
+    expect(((await empty.json()) as { points: unknown[] }).points).toEqual([]);
+
+    // Missing key param → empty points, not an error.
+    const blank = await authed(`/api/daily/model?days=7`);
+    expect(blank.status).toBe(200);
+    expect(((await blank.json()) as { points: unknown[] }).points).toEqual([]);
+  });
+});
+
 describe("unknown endpoints", () => {
   test("unknown api path → 404 JSON", async () => {
     const res = await authed("/api/nope");

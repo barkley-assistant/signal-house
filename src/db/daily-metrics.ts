@@ -9,8 +9,8 @@
 
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts, DailyWrite } from "../shared/types";
-import { machineKey, stripDateSnapshot } from "../shared/models";
-import { fetchAllRates } from "../server/model-pricing";
+import { canonicalMachineKey, machineKey, stripDateSnapshot } from "../shared/models";
+import { fetchAllRates, type ModelRates } from "../server/model-pricing";
 
 export interface DailyMetricRow {
   date: string;
@@ -212,6 +212,123 @@ export async function queryDailyTrend(
     const cost = costByDate.has(r.date) ? costByDate.get(r.date)! : null;
     return { date: r.date, cost, tokens: r.tokens, cacheRead: r.cacheRead };
   });
+}
+
+/**
+ * Per-model daily cost + token trend — one model's slice of the same
+ * daily_metrics history that feeds /api/daily/spend, addressed by canonical
+ * machine key. Rows are grouped by canonicalMachineKey (the aggregator's
+ * grouping), so dated variants and source spelling differences collapse
+ * into a single series, matching how byModel rolls up on /api/state.
+ *
+ * Cost follows the SAME estimator contract as queryDailyTrend: when
+ * `costOpts.enabled`, per-(date, model) tokens are priced from resolver
+ * rates (per-1M semantics); models with no resolvable rate contribute no
+ * cost for days where they're the only activity → null day (gap), never 0.
+ * When disabled, the persisted `model.cost` passthrough sum is used.
+ */
+export async function queryDailyModelTrend(
+  db: Database,
+  key: string,
+  from: string,
+  to: string,
+  costOpts: CostEstimationOpts,
+): Promise<Array<{ date: string; cost: number | null; tokens: number | null }>> {
+  // Per-(date, raw-model) token sums; the canonical-key filter happens in
+  // JS because SQLite has no access to shared/models' alias tables.
+  const rows = db
+    .query(
+      `SELECT date,
+              json_extract(tags, '$.model') AS model,
+              SUM(CASE WHEN metric = 'model.tokens_input'       THEN value END) AS inputTokens,
+              SUM(CASE WHEN metric = 'model.tokens_output'      THEN value END) AS outputTokens,
+              SUM(CASE WHEN metric = 'model.tokens_cache_read'  THEN value END) AS cacheReadTokens,
+              SUM(CASE WHEN metric = 'model.tokens_cache_write' THEN value END) AS cacheWriteTokens,
+              SUM(CASE WHEN metric = 'model.tokens_reasoning'   THEN value END) AS reasoningTokens
+       FROM daily_metrics
+       WHERE date >= ? AND date <= ?
+         AND source IN ('opencode', 'hermes')
+         AND metric LIKE 'model.tokens_%'
+       GROUP BY date, json_extract(tags, '$.model')`,
+    )
+    .all(from, to) as Array<{
+    date: string;
+    model: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cacheReadTokens: number | null;
+    cacheWriteTokens: number | null;
+    reasoningTokens: number | null;
+  }>;
+
+  // Per-date accumulator; built from rows that actually match the key so
+  // neither tokens nor passthrough costs leak in from other models.
+  const tokenByDate = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number }>();
+
+  // Same-day rows from both sources under different spellings of one model
+  // must merge into ONE series keyed by canonicalMachineKey.
+  const matchedSpellings = new Set<string>();
+  for (const row of rows) {
+    if (!row.model || canonicalMachineKey(row.model) !== key) continue;
+    matchedSpellings.add(row.model);
+    let acc = tokenByDate.get(row.date);
+    if (!acc) {
+      acc = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 };
+      tokenByDate.set(row.date, acc);
+    }
+    acc.input += row.inputTokens ?? 0;
+    acc.output += row.outputTokens ?? 0;
+    acc.cacheRead += row.cacheReadTokens ?? 0;
+    acc.cacheWrite += row.cacheWriteTokens ?? 0;
+    acc.reasoning += row.reasoningTokens ?? 0;
+  }
+
+  // Passthrough mode: persisted per-(date, spelling) upstream cost summed
+  // per day, restricted to the spellings that belong to this key.
+  const upstreamCostByDate = new Map<string, number>();
+  if (!costOpts.enabled && matchedSpellings.size > 0) {
+    const placeholders = [...matchedSpellings].map(() => "?").join(", ");
+    const costRows = db
+      .query(
+        `SELECT date, SUM(value) AS cost
+         FROM daily_metrics
+         WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+           AND metric = 'model.cost'
+           AND json_extract(tags, '$.model') IN (${placeholders})
+         GROUP BY date`,
+      )
+      .all(from, to, ...matchedSpellings) as Array<{ date: string; cost: number | null }>;
+    for (const r of costRows) {
+      if (r.cost !== null) upstreamCostByDate.set(r.date, r.cost);
+    }
+  }
+
+  // Estimator mode: resolve rates once for this key. Spellings share the
+  // canonical group but may normalise differently, so try each until one
+  // hits the resolver's stripped-key map.
+  let resolvedRates: ModelRates | undefined;
+  if (costOpts.enabled && matchedSpellings.size > 0) {
+    const rates = await fetchAllRates([...matchedSpellings]);
+    for (const spelling of matchedSpellings) {
+      const mk = machineKey(spelling);
+      const r = rates.get(stripDateSnapshot(mk)) ?? rates.get(mk);
+      if (r && (r.input > 0 || r.output > 0)) {
+        resolvedRates = r;
+        break;
+      }
+    }
+  }
+
+  return [...tokenByDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, t]) => {
+      const tokensSum = t.input + t.output + t.cacheRead + t.cacheWrite + t.reasoning;
+      const cost =
+        resolvedRates
+          ? (t.input * resolvedRates.input + t.output * resolvedRates.output + t.cacheRead * resolvedRates.cacheRead) / 1_000_000
+          : upstreamCostByDate.get(date) ?? null;
+      return { date, cost, tokens: tokensSum > 0 ? tokensSum : null };
+    });
 }
 
 /** All distinct (date, source) pairs that have ANY rows in range. */

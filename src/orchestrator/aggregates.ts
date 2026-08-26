@@ -40,6 +40,10 @@ export interface ModelSourceCacheMetrics {
 export interface ModelUsageMetrics {
   model: string;
   family: string | null;
+  /** Canonical grouping key (shared/models.canonicalMachineKey). Lets the
+   *  UI address this row's per-day history on /api/daily/model with the
+   *  same key the aggregator grouped it under. */
+  machineKey?: string;
   sessions: number;
   cost: number | null;
   tokens: number | null;
@@ -490,8 +494,8 @@ export function mergeModelRows(
     }
   }
 
-  return [...map.values()]
-    .map(({ best: _best, inputTokens, outputTokens, rates, ...m }) => {
+  return [...map.entries()]
+    .map(([key, { best: _best, inputTokens, outputTokens, rates, ...m }]) => {
       const denom = m.cacheReadTokens + inputTokens;
       // Effective cost per 1M tokens: output tokens count at face value,
       // cache reads are discounted by the model's cache-read-vs-input price
@@ -506,6 +510,7 @@ export function mergeModelRows(
         m.cost !== null && m.cost > 0 && effTokens > 0 && m.sessions >= 3 ? (m.cost / (effTokens / 1_000_000)) : null;
       return {
         ...m,
+        machineKey: key,
         cacheHitRate: denom > 0 ? m.cacheReadTokens / denom : 0,
         effPerM,
       };
