@@ -383,12 +383,19 @@ type SortState = { key: SortKey; asc: boolean };
  *  by-model row. Deliberately the main DailyUsageChart's visual language at
  *  reduced size: same palette (#38bdf8 cost / #facc15 tokens), same smooth
  *  lines with flush edges (boundaryGap: false), same tooltip shell, same
- *  peak-anchoring rule (niceCeil once per open). A third series — all-models
- *  cost from /api/daily/spend — overlays as a muted dashed line on its own
- *  hidden y-axis so the operator sees one model's spend against the overall
- *  shape for the same window (its peak dwarfs any single model's, so a
- *  shared axis would flatten the model line into invisibility). No legend —
- *  fixed colours + the caption dots disambiguate. */
+ *  peak-anchoring rule (niceCeil once per open).
+ *
+ *  The dashed comparison series is ALL OTHER MODELS (window total − this
+ *  model), NOT the all-models total, and both cost lines share ONE visible
+ *  axis. Reason: the operator reads the comparison as line HEIGHTS, and
+ *  heights are only comparable on a shared scale. The original all-models-
+ *  total overlay used a second hidden axis (the total dwarfs a single
+ *  model, so sharing would flatten the model line) — but then the dashed
+ *  line could render BELOW the model line on days the model dominated,
+ *  even though its true value was higher. Different scales = the classic
+ *  dual-axis lie. "Everything else" on a shared axis is honest: dashed
+ *  above blue genuinely means the rest outspent this model that day, and
+ *  a small model's line hugging the floor is the truth, not a bug. */
 function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel: string }) {
   const days = useDash((s) => s.days);
   const ref = useRef<HTMLDivElement>(null);
@@ -417,13 +424,14 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
   useEffect(() => {
     if (!ref.current || !points || points.length === 0 || !overall) return;
     const pts = points;
-    // The overall series is keyed by date; align it to the model series'
-    // x-axis (identical window → identical date set in practice, but a
-    // date the model lacks must not shift the comparison line).
+    // "All other models" = window total − this model, per day, aligned to
+    // the model series' x-axis. Clamped at 0 so toFixed rounding can't
+    // produce a negative day; null (gap) when the window total is unknown.
     const overallByDate = new Map(overall.map((p) => [p.date, p.cost]));
-    const overallSeries = pts.map((p) => {
-      const c = overallByDate.get(p.date);
-      return c === undefined || c === null ? null : Number(c.toFixed(2));
+    const othersSeries = pts.map((p) => {
+      const total = overallByDate.get(p.date);
+      if (total === undefined || total === null) return null;
+      return Number(Math.max(0, total - (p.cost ?? 0)).toFixed(2));
     });
     chartRef.current = echarts.init(ref.current, "dark");
     const ro = new ResizeObserver(() => chartRef.current?.resize());
@@ -434,13 +442,15 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
       return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     };
     // Same peak-anchor contract as the main chart: computed once per mount,
-    // never rescaled by polls within the same open. The overall line gets a
-    // THIRD axis (hidden) scaled to its own peak — sharing the model's cost
-    // axis would flatten it (overall dwarfs any single model), and sharing
-    // the overall's axis would flatten the model line instead.
-    const costPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)));
+    // never rescaled by polls within the same open. Both cost series share
+    // the ONE visible left axis (peak = max of the two); tokens keep the
+    // right axis. No hidden axes — heights must be comparable.
+    const costPeak = Math.max(
+      1,
+      niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)),
+      niceCeil(othersSeries.reduce((m: number, v: number | null) => Math.max(m, v ?? 0), 0)),
+    );
     const tokenPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0)));
-    const overallPeak = Math.max(1, niceCeil(overall.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)));
     const option: echarts.EChartsOption = {
       animationDuration: 400,
       animationEasing: "cubicOut",
@@ -465,9 +475,9 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           });
           const rows = arr
             .filter((p) => p.value !== null)
-            // Overall last: it's context, the model's own numbers lead.
-            .sort((a, b) => (a.seriesName === "All models" ? 1 : b.seriesName === "All models" ? -1 : 0))
-            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.includes("Cost") || p.seriesName === "All models" ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
+            // "All other models" last: it's context, the model's own numbers lead.
+            .sort((a, b) => (a.seriesName === "All other models" ? 1 : b.seriesName === "All other models" ? -1 : 0))
+            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.includes("Cost") || p.seriesName === "All other models" ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
           return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
         },
       },
@@ -498,23 +508,15 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           },
           splitLine: { show: false },
         },
-        // Hidden scale for the all-models comparison line (see series note).
-        {
-          type: "value",
-          min: 0,
-          max: overallPeak,
-          axisLabel: { show: false },
-          splitLine: { show: false },
-        },
       ],
       series: [
-        // All-models context line FIRST in the array (z-painting: earlier
-        // series paint below) so the model's own lines stay on top.
+        // "All other models" context line FIRST in the array (z-painting:
+        // earlier series paint below) so the model's own lines stay on top.
+        // Same visible cost axis as the model line — heights comparable.
         {
-          name: "All models",
+          name: "All other models",
           type: "line",
-          yAxisIndex: 2,
-          data: overallSeries,
+          data: othersSeries,
           smooth: 0.3,
           showSymbol: false,
           lineStyle: { color: "#94a3b8", width: 1.5, type: "dashed" },
@@ -557,7 +559,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
         <span className="model-row__detail-caption">
           <span className="model-row__legend-dot model-row__legend-dot--cost" aria-hidden="true" /> cost
           <span className="model-row__legend-dot model-row__legend-dot--tokens" aria-hidden="true" /> tokens
-          <span className="model-row__legend-dot model-row__legend-dot--overall" aria-hidden="true" /> all models
+          <span className="model-row__legend-dot model-row__legend-dot--overall" aria-hidden="true" /> all other models
         </span>
       </div>
       {points === undefined ? (
