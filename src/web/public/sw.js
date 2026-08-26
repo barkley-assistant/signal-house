@@ -13,7 +13,7 @@
  *    has per-panel loading/error states.
  */
 
-const VERSION = "v1";
+const VERSION = "v2"; // v2: chunk URLs are ./chunk-*.js, not /assets/ — cache rule updated to match
 const SHELL_CACHE = `sh-shell-${VERSION}`;
 const ASSET_CACHE = `sh-assets-${VERSION}`;
 
@@ -33,9 +33,11 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-/** True for content-hashed build outputs — safe to cache forever. */
+/** True for content-hashed build outputs — safe to cache forever.
+ *  Vite's default output here is ./chunk-<hash>.js at the web root
+ *  (not /assets/), so match the hash pattern itself. */
 function isHashedAsset(url) {
-  return url.pathname.startsWith("/assets/");
+  return /^\/(assets\/)?(chunk|asset)-[A-Za-z0-9_-]+\.\w+$/.test(url.pathname);
 }
 
 self.addEventListener("fetch", (event) => {
