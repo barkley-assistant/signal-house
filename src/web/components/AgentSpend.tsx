@@ -460,9 +460,9 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
       // Top-level palette indexes by series order — ECharts uses THESE for
-      // the tooltip markers. Dotted totals reuse their metric's hue so the
-      // marker colour pairs the dotted line with its solid sibling.
-      color: ["#38bdf8", "#facc15", "#94a3b8", "#60a5fa"],
+      // the tooltip markers. Both dotted totals stay grey (#94a3b8) per
+      // operator preference; hue stays owned by the solid model lines.
+      color: ["#94a3b8", "#94a3b8", "#38bdf8", "#facc15"],
       grid: { left: 2, right: 2, top: 14, bottom: 22, containLabel: true },
       tooltip: {
         trigger: "axis",
@@ -528,7 +528,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           data: totalCostSeries,
           smooth: 0.3,
           showSymbol: false,
-          lineStyle: { color: "#60a5fa", width: 1.5, type: [2, 4] },
+          lineStyle: { color: "#94a3b8", width: 1.5, type: [2, 4] },
           emphasis: { lineStyle: { width: 1.5 } },
         },
         {
