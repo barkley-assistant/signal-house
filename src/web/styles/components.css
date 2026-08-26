@@ -299,7 +299,10 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  /* Narrow screens: the caption wraps below the title instead of
+     squeezing — intentional two-line stack, not an overflow accident. */
+  flex-wrap: wrap;
+  gap: 4px 12px;
   margin-bottom: 6px;
 }
 .model-row__detail-caption {
@@ -327,6 +330,10 @@
 }
 .model-row__legend-dot--tokens {
   background: #facc15;
+}
+.model-row__legend-dot--overall {
+  background: transparent;
+  border: 1.5px dashed #94a3b8;
 }
 /* Desktop rows get the same interactive affordance as mobile now that
    clicking actually does something: pointer cursor, hover tint, focus

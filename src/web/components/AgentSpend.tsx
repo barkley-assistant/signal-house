@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, Fragment } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
-import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint } from "../state/store";
+import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint, type TrendPoint } from "../state/store";
 import type { WindowDays } from "../../shared/window";
 import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
@@ -383,25 +383,31 @@ type SortState = { key: SortKey; asc: boolean };
  *  by-model row. Deliberately the main DailyUsageChart's visual language at
  *  reduced size: same palette (#38bdf8 cost / #facc15 tokens), same smooth
  *  lines with flush edges (boundaryGap: false), same tooltip shell, same
- *  peak-anchoring rule (niceCeil once per open). No legend — two series in
- *  fixed colours don't need one at this size; the axis labels + tooltip
- *  disambiguate. */
+ *  peak-anchoring rule (niceCeil once per open). A third series — all-models
+ *  cost from /api/daily/spend — overlays as a muted dashed line on its own
+ *  hidden y-axis so the operator sees one model's spend against the overall
+ *  shape for the same window (its peak dwarfs any single model's, so a
+ *  shared axis would flatten the model line into invisibility). No legend —
+ *  fixed colours + the caption dots disambiguate. */
 function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel: string }) {
   const days = useDash((s) => s.days);
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
-  // Loading is derived, not stored: points for the CURRENT (days, key) pair.
+  // Loading is derived, not stored: results for the CURRENT (days, key) pair.
   // A window switch renders the previous result as stale until the new one
   // lands (undefined for this pair = skeleton), so no setState-in-effect.
-  const [loaded, setLoaded] = useState<Array<{ windowDays: WindowDays; key: string; points: ModelTrendPoint[] }>>([]);
+  // The model trend and the all-models comparison land together (single
+  // Promise.all) so the chart initialises once, with both scales known.
+  const [loaded, setLoaded] = useState<Array<{ windowDays: WindowDays; key: string; points: ModelTrendPoint[]; overall: TrendPoint[] }>>([]);
   const entry = loaded.find((e) => e.windowDays === days && e.key === modelKey);
   const points = entry?.points;
+  const overall = entry?.overall;
 
   useEffect(() => {
     if (entry) return; // already have this window's data
     let disposed = false;
-    void loadModelTrend(days, modelKey).then((pts) => {
-      if (!disposed) setLoaded((prev) => [...prev, { windowDays: days, key: modelKey, points: pts }]);
+    void Promise.all([loadModelTrend(days, modelKey), loadTrend(days)]).then(([pts, allPts]) => {
+      if (!disposed) setLoaded((prev) => [...prev, { windowDays: days, key: modelKey, points: pts, overall: allPts }]);
     });
     return () => {
       disposed = true;
@@ -409,8 +415,16 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
   }, [days, modelKey, entry]);
 
   useEffect(() => {
-    if (!ref.current || !points || points.length === 0) return;
+    if (!ref.current || !points || points.length === 0 || !overall) return;
     const pts = points;
+    // The overall series is keyed by date; align it to the model series'
+    // x-axis (identical window → identical date set in practice, but a
+    // date the model lacks must not shift the comparison line).
+    const overallByDate = new Map(overall.map((p) => [p.date, p.cost]));
+    const overallSeries = pts.map((p) => {
+      const c = overallByDate.get(p.date);
+      return c === undefined || c === null ? null : Number(c.toFixed(2));
+    });
     chartRef.current = echarts.init(ref.current, "dark");
     const ro = new ResizeObserver(() => chartRef.current?.resize());
     ro.observe(ref.current);
@@ -420,9 +434,13 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
       return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     };
     // Same peak-anchor contract as the main chart: computed once per mount,
-    // never rescaled by polls within the same open.
+    // never rescaled by polls within the same open. The overall line gets a
+    // THIRD axis (hidden) scaled to its own peak — sharing the model's cost
+    // axis would flatten it (overall dwarfs any single model), and sharing
+    // the overall's axis would flatten the model line instead.
     const costPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)));
     const tokenPeak = Math.max(1, niceCeil(pts.reduce((m, p) => Math.max(m, p.tokens ?? 0), 0)));
+    const overallPeak = Math.max(1, niceCeil(overall.reduce((m, p) => Math.max(m, p.cost ?? 0), 0)));
     const option: echarts.EChartsOption = {
       animationDuration: 400,
       animationEasing: "cubicOut",
@@ -447,7 +465,9 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           });
           const rows = arr
             .filter((p) => p.value !== null)
-            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.startsWith("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
+            // Overall last: it's context, the model's own numbers lead.
+            .sort((a, b) => (a.seriesName === "All models" ? 1 : b.seriesName === "All models" ? -1 : 0))
+            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.includes("Cost") || p.seriesName === "All models" ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
           return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
         },
       },
@@ -478,8 +498,29 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           },
           splitLine: { show: false },
         },
+        // Hidden scale for the all-models comparison line (see series note).
+        {
+          type: "value",
+          min: 0,
+          max: overallPeak,
+          axisLabel: { show: false },
+          splitLine: { show: false },
+        },
       ],
       series: [
+        // All-models context line FIRST in the array (z-painting: earlier
+        // series paint below) so the model's own lines stay on top.
+        {
+          name: "All models",
+          type: "line",
+          yAxisIndex: 2,
+          data: overallSeries,
+          smooth: 0.3,
+          showSymbol: false,
+          lineStyle: { color: "#94a3b8", width: 1.5, type: "dashed" },
+          // No area fill: the model's cost line owns the fill language.
+          emphasis: { lineStyle: { width: 1.5 } },
+        },
         {
           name: "Cost ($)",
           type: "line",
@@ -516,6 +557,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
         <span className="model-row__detail-caption">
           <span className="model-row__legend-dot model-row__legend-dot--cost" aria-hidden="true" /> cost
           <span className="model-row__legend-dot model-row__legend-dot--tokens" aria-hidden="true" /> tokens
+          <span className="model-row__legend-dot model-row__legend-dot--overall" aria-hidden="true" /> all models
         </span>
       </div>
       {points === undefined ? (
