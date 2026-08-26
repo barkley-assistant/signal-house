@@ -27,3 +27,4 @@ worker-result.json
 # design/tasks artifacts under this directory during a run; the orchestrator
 # is expected to archive them, but the bridge is the safety net.
 /openspec/
+.codegraph/
