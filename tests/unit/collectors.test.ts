@@ -5,7 +5,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HermesCollector } from "../../src/collectors/hermes/collector";
@@ -185,6 +185,123 @@ describe("hermes collector", () => {
     // carry its per-day model breakdown.
     expect(byDay.length).toBeGreaterThan(0);
     expect(byDay.every((d) => d.byModel !== undefined && d.byModel!.length > 0)).toBe(true);
+  });
+
+  test("merges per-profile state.dbs and skips dot-named stale copies", async () => {
+    // Subagent/kanban-worker sessions live in per-profile state.dbs
+    // (~/.hermes/profiles/<profile>/state.db), never in the primary db.
+    // The collector must sum both, and must NOT include dot-named profile
+    // dirs ("builder.pre-repair") — those are copied DBs that would
+    // double-count every session.
+    const mainDb = join(dir, "hermes-multi-main.db");
+    const profilesDir = join(dir, "hermes-profiles");
+    const archDir = join(profilesDir, "architect");
+    const staleDir = join(profilesDir, "builder.pre-repair");
+    mkdirSync(archDir, { recursive: true });
+    mkdirSync(staleDir, { recursive: true });
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const schema = `
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY, started_at REAL, ended_at REAL, model TEXT, billing_provider TEXT,
+        message_count INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER, reasoning_tokens INTEGER, estimated_cost_usd REAL, actual_cost_usd REAL
+      );
+      CREATE TABLE session_model_usage (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        billing_provider TEXT NOT NULL DEFAULT '',
+        api_call_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        actual_cost_usd REAL NOT NULL DEFAULT 0
+      );
+    `;
+
+    const main = new Database(mainDb);
+    main.exec(schema);
+    main.exec(`INSERT INTO sessions VALUES ('main1', ${nowSec - 3600}, NULL, 'DeepSeek-V4-Flash-0731', 'custom', 10, 1000, 100, 0, 0, 0, 0.5, NULL);`);
+    main.exec(`INSERT INTO session_model_usage VALUES ('main1', 'DeepSeek-V4-Flash-0731', 'custom', 10, 1000, 100, 0, 0, 0, 0.5, 0);`);
+    main.close();
+
+    const arch = new Database(join(archDir, "state.db"));
+    arch.exec(schema);
+    arch.exec(`INSERT INTO sessions VALUES ('arch1', ${nowSec - 1800}, NULL, 'GLM-5.3', 'custom', 5, 500, 50, 0, 0, 0, 0.25, NULL);`);
+    arch.exec(`INSERT INTO session_model_usage VALUES ('arch1', 'GLM-5.3', 'custom', 5, 500, 50, 0, 0, 0, 0.25, 0);`);
+    arch.close();
+
+    // Same session id as architect — a copied DB must NOT be merged in.
+    const stale = new Database(join(staleDir, "state.db"));
+    stale.exec(schema);
+    stale.exec(`INSERT INTO sessions VALUES ('arch1', ${nowSec - 1800}, NULL, 'GLM-5.3', 'custom', 5, 500, 50, 0, 0, 0, 0.25, NULL);`);
+    stale.exec(`INSERT INTO session_model_usage VALUES ('arch1', 'GLM-5.3', 'custom', 5, 500, 50, 0, 0, 0, 0.25, 0);`);
+    stale.close();
+
+    const collector = new HermesCollector(mainDb, 30, profilesDir);
+    const result = await collector.collect(new AbortController().signal);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const today = new Date(nowSec * 1000).toISOString().slice(0, 10);
+    const day = result.data!.usage!.byDay.find((d) => d.date === today);
+    expect(day).toBeDefined();
+    expect(day!.sessions).toBe(2); // main1 + arch1, NOT the stale copy
+    expect(day!.cost).toBeCloseTo(0.75, 5);
+
+    const glm = result.data!.usage!.byModel.find((m) => m.model === "GLM-5.3");
+    expect(glm).toBeDefined();
+    expect(glm!.cost).toBeCloseTo(0.25, 5); // counted exactly once
+    expect(glm!.provider).toBe("custom");
+
+    const mainModel = result.data!.usage!.byModel.find((m) => m.model === "DeepSeek-V4-Flash-0731");
+    expect(mainModel!.cost).toBeCloseTo(0.5, 5);
+  });
+
+  test("a broken profile db degrades to warnings, not a source failure", async () => {
+    const mainDb = join(dir, "hermes-degraded-main.db");
+    const profilesDir = join(dir, "hermes-degraded-profiles");
+    mkdirSync(profilesDir, { recursive: true });
+    mkdirSync(join(profilesDir, "architect"), { recursive: true });
+    // A corrupt/non-DB file where the profile state.db should be.
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(profilesDir, "architect", "state.db"), "this is not a sqlite database");
+
+    const db = new Database(mainDb);
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY, started_at REAL, ended_at REAL, model TEXT, billing_provider TEXT,
+        message_count INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER, reasoning_tokens INTEGER, estimated_cost_usd REAL, actual_cost_usd REAL
+      );
+      CREATE TABLE session_model_usage (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        billing_provider TEXT NOT NULL DEFAULT '',
+        api_call_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        actual_cost_usd REAL NOT NULL DEFAULT 0
+      );
+    `);
+    const nowSec = Math.floor(Date.now() / 1000);
+    db.exec(`INSERT INTO sessions VALUES ('s1', ${nowSec - 3600}, NULL, 'MiniMax M3', 'custom', 10, 1000, 100, 0, 0, 0, 0.5, NULL);`);
+    db.exec(`INSERT INTO session_model_usage VALUES ('s1', 'MiniMax M3', 'custom', 10, 1000, 100, 0, 0, 0, 0.5, 0);`);
+    db.close();
+
+    const collector = new HermesCollector(mainDb, 30, profilesDir);
+    const result = await collector.collect(new AbortController().signal);
+    expect(result.ok).toBe(true);
+    expect(result.unavailable).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0); // the corrupt profile db
+    expect(result.data!.usage!.byModel.some((m) => m.model === "MiniMax M3")).toBe(true); // main db still merged
   });
 });
 

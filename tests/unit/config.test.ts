@@ -75,6 +75,15 @@ describe("config", () => {
     expect(c.hermes.dbPath).toBe(`${process.env.HOME}/custom/state.db`);
   });
 
+  test("expands SECRET_HOUSE_HERMES_PROFILES_DIR", () => {
+    const c = readConfig({
+      env: envOf({ SECRET_HOUSE_HERMES_PROFILES_DIR: "~/hermes-profiles" }),
+      cwd: "/tmp",
+      dev: false,
+    });
+    expect(c.hermes.profilesDir).toBe(`${process.env.HOME}/hermes-profiles`);
+  });
+
   test("supports documented legacy aliases, preferred name wins", () => {
     expect(legacyAliasNames()).toContain("GITHUB_TOKEN");
     const viaLegacy = readConfig({
@@ -96,6 +105,7 @@ describe("config", () => {
   test("defaults hermes/opencode db paths to the real local sources", () => {
     const c = readConfig({ env: envOf({}), cwd: "/tmp", dev: false });
     expect(c.hermes.dbPath).toBe(`${process.env.HOME}/.hermes/state.db`);
+    expect(c.hermes.profilesDir).toBe(`${process.env.HOME}/.hermes/profiles`);
     expect(c.opencode.dbPath).toBe(`${process.env.HOME}/.local/share/opencode/opencode.db`);
   });
 

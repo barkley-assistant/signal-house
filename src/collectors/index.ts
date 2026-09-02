@@ -16,7 +16,7 @@ export function createCollectors(config: RuntimeConfig): Collector[] {
   return [
     createGithubCollector(config),
     createGitCollector(config),
-    new HermesCollector(config.hermes.dbPath, config.usage.periodDays),
+    new HermesCollector(config.hermes.dbPath, config.usage.periodDays, config.hermes.profilesDir),
     new OpencodeCollector(config.opencode.dbPath, config.usage.periodDays),
   ];
 }

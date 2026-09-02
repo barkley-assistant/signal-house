@@ -182,6 +182,7 @@ export function readConfig(options: ConfigOptions): RuntimeConfig {
     },
     hermes: {
       dbPath: p.path("SECRET_HOUSE_HERMES_DB_PATH") ?? resolve(homedir(), ".hermes/state.db"),
+      profilesDir: p.path("SECRET_HOUSE_HERMES_PROFILES_DIR") ?? resolve(homedir(), ".hermes/profiles"),
     },
     opencode: {
       dbPath: p.path("SECRET_HOUSE_OPENCODE_DB_PATH") ?? resolve(homedir(), ".local/share/opencode/opencode.db"),

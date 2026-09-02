@@ -22,7 +22,7 @@ const baseConfig: RuntimeConfig = {
   auth: { username: "signal-house", password: "", enabled: false },
   github: { token: null, owner: null, repo: null },
   git: { repos: [], roots: [], globs: ["*"], maxDepth: 3, excludes: ["node_modules"] },
-  hermes: { dbPath: "/tmp/hermes.db" },
+  hermes: { dbPath: "/tmp/hermes.db", profilesDir: null },
   opencode: { dbPath: "/tmp/opencode.db" },
   usage: { periodDays: 30 },
   poller: { enabled: false, intervalSeconds: 300, startupDelaySeconds: 5, runOnStartup: true },

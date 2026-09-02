@@ -21,7 +21,7 @@ export interface RuntimeConfig {
     maxDepth: number;
     excludes: string[];
   };
-  hermes: { dbPath: string };
+  hermes: { dbPath: string; profilesDir: string | null };
   opencode: { dbPath: string };
   usage: { periodDays: number };
   poller: {

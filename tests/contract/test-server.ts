@@ -31,7 +31,7 @@ export async function startServer(opts: { dbPath: string; port?: number; auth?: 
     },
     github: { token: null, owner: null, repo: null },
     git: { repos: [], roots: [], globs: ["*"], maxDepth: 3, excludes: [] },
-    hermes: { dbPath: "/nonexistent/hermes.db" },
+    hermes: { dbPath: "/nonexistent/hermes.db", profilesDir: null },
     opencode: { dbPath: "/nonexistent/opencode.db" },
     usage: { periodDays: 30 },
     poller: { enabled: false, intervalSeconds: 300, startupDelaySeconds: 0, runOnStartup: false },
