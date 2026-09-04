@@ -15,6 +15,13 @@
  *     source since 2026-08-26; free + keyless, covers every dashboard
  *     model by machine-key).
  *
+ * Date-snapshot variants: entries with a trailing date suffix
+ * ("…-0731", "…-20250815") keep their own machine key so the resolver
+ * can price each variant with its own rates. Two-pass base-claim rule:
+ * a dated-only listing (no base listing for its stripped key) ALSO lands
+ * under the stripped base key, keeping stripped-key fallback lookups
+ * working; a base listing always wins its own key.
+ *
  * Litellm stores per-token rates; signal-house displays per-1M. We
  * multiply by 1_000_000 here so the rest of the codebase never has
  * to think about the unit difference.
@@ -102,14 +109,12 @@ export function parseLitellmPricing(json: unknown): PricingMap {
       cacheReadPerToken = deepseekStyle;
     }
 
-    // Collapse date-snapshot variants ("…-0731", "…-20250815") into their
-    // base key at parse time, matching the resolver's lookup key exactly.
-    // Without this the cache grows dead entries (a dated variant with no
-    // base listing keeps a reseller's sheet under a key nothing ever
-    // looks up) and the cache file misleads audits. A dated variant that
-    // is the ONLY listing still lands under its base key — which is the
-    // key the dashboard queries.
-    const key = stripDateSnapshot(machineKey(rawKey));
+    // Keep date-snapshot variants ("…-0731", "…-20250815") under their own
+    // machine key so the resolver can price each variant with its own rates.
+    // A dated entry whose stripped base key has no base listing additionally
+    // claims the base key (base-claim pass below) so stripped-key fallback
+    // lookups still resolve — see the module doc for the two-pass rule.
+    const key = machineKey(rawKey);
     if (!key) {
       skippedEmptyKey++;
       continue;
@@ -151,6 +156,10 @@ export function parseLitellmPricing(json: unknown): PricingMap {
       route: winner.route,
     };
   }
+
+  // Dated-only listings also claim their stripped base key (two-pass rule).
+  applyBaseClaimFallback(out);
+
   log.debug(
     "model-pricing-parser",
     `parsed ${out.length} entries` +
@@ -169,6 +178,36 @@ interface Candidate {
   input: number;
   output: number;
   cacheRead: number;
+}
+
+/**
+ * Base-claim fallback (two-pass rule, D2): after the main parse pass every
+ * dated entry lives under its full machine key. A dated entry whose stripped
+ * base key was NOT claimed by a base listing also lands under the stripped
+ * base key, so the resolver's stripped-key fallback still resolves for
+ * models with no base listing (e.g. "gpt-56-luna-20250815" with no
+ * "gpt-56-luna"). Base listings always win their own key. When multiple
+ * dated variants share a base with no base listing, the cheapest-input one
+ * claims it — the same tie-break rule the litellm collision resolver uses.
+ */
+function applyBaseClaimFallback(out: PricingMap): void {
+  const baseKeys = new Set<string>();
+  const datedByBase = new Map<string, Array<[string, LitellmPricing]>>();
+  for (const [key, entry] of Object.entries(out)) {
+    const base = stripDateSnapshot(key);
+    if (base === key) {
+      baseKeys.add(key);
+    } else {
+      const list = datedByBase.get(base) ?? [];
+      list.push([key, entry]);
+      datedByBase.set(base, list);
+    }
+  }
+  for (const [base, variants] of datedByBase) {
+    if (baseKeys.has(base)) continue;
+    const [, winner] = variants.reduce((a, b) => (b[1].input < a[1].input ? b : a));
+    out[base] = { ...winner };
+  }
 }
 
 /** Returns value if it's a finite number, else fallback. */
@@ -251,9 +290,10 @@ export function parseOpenRouterPricing(json: unknown): PricingMap {
       skippedEmptyKey++;
       continue;
     }
-    // Collapse date-snapshot variants into their base key at parse time,
-    // matching the resolver's lookup key exactly (same rule as litellm).
-    const key = stripDateSnapshot(machineKey(rawKey));
+    // Keep date-snapshot variants under their own machine key (same rule
+    // as litellm); the base-claim pass below restores the stripped fallback
+    // for dated-only listings.
+    const key = machineKey(rawKey);
     if (!key) {
       skippedEmptyKey++;
       continue;
@@ -287,6 +327,9 @@ export function parseOpenRouterPricing(json: unknown): PricingMap {
       route: "routed",
     };
   }
+
+  // Dated-only listings also claim their stripped base key (two-pass rule).
+  applyBaseClaimFallback(out);
 
   log.debug(
     "model-pricing-parser",

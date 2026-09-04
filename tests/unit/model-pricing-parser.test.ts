@@ -135,7 +135,7 @@ describe("parseLitellmPricing", () => {
     expect(out["deepseek-chat"].cacheRead).toBeCloseTo(0.014, 5);
   });
 
-  test("date-snapshot variants collapse into their base key at parse time", () => {
+  test("dated listing survives under its own key alongside the base listing", () => {
     const input = {
       "deepseek-v4-flash": { litellm_provider: "deepseek", input_cost_per_token: 4.4e-7, output_cost_per_token: 1.32e-6 },
       // Dated variant listed by a reseller with different prices.
@@ -146,10 +146,41 @@ describe("parseLitellmPricing", () => {
       },
     };
     const out = parseLitellmPricing(input);
-    // Both entries land under the base key; the variant is never a
-    // separate cache entry. The resolver queries base keys only, so a
-    // reseller-only dated sheet can't sit in the cache looking authoritative.
-    expect(Object.keys(out)).toEqual(["deepseek-v4-flash"]);
+    // The dated variant keeps its own cache key so the resolver can price
+    // it with the variant's own rates instead of the base model's.
+    expect(Object.keys(out).sort()).toEqual(["deepseek-v4-flash", "deepseek-v4-flash-0731"]);
+    expect(out["deepseek-v4-flash"].input).toBeCloseTo(0.44, 5); // base stays base
+    expect(out["deepseek-v4-flash-0731"].input).toBeCloseTo(0.13, 5); // dated stays dated
+  });
+
+  test("dated-only listing still lands under its base key (stripped fallback keeps working)", () => {
+    const input = {
+      "perplexity/perplexity/deepseek-v4-flash-0731": {
+        litellm_provider: "perplexity",
+        input_cost_per_token: 1.3e-7,
+        output_cost_per_token: 2.6e-7,
+      },
+    };
+    const out = parseLitellmPricing(input);
+    // No base listing exists, so the dated entry claims the stripped base
+    // key as a fallback — the resolver's stripped lookup still resolves.
+    expect(Object.keys(out).sort()).toEqual(["deepseek-v4-flash", "deepseek-v4-flash-0731"]);
+    expect(out["deepseek-v4-flash"].input).toBeCloseTo(0.13, 5);
+  });
+
+  test("base listing wins its own key even when a dated listing also exists (order-independent)", () => {
+    const input = {
+      // Dated FIRST in the array — the two-pass rule must not depend on order.
+      "perplexity/perplexity/deepseek-v4-flash-0731": {
+        litellm_provider: "perplexity",
+        input_cost_per_token: 1.3e-7,
+        output_cost_per_token: 2.6e-7,
+      },
+      "deepseek-v4-flash": { litellm_provider: "deepseek", input_cost_per_token: 4.4e-7, output_cost_per_token: 1.32e-6 },
+    };
+    const out = parseLitellmPricing(input);
+    expect(out["deepseek-v4-flash"].input).toBeCloseTo(0.44, 5);
+    expect(out["deepseek-v4-flash"].sourceKey).toBe("deepseek-v4-flash");
   });
 
   test("handles malformed top-level inputs without throwing", () => {
@@ -230,12 +261,38 @@ describe("parseOpenRouterPricing", () => {
     expect(out["free"].output).toBe(0);
   });
 
-  test("date-snapshot variants collapse into their base key", () => {
+  test("dated listing survives under its own key alongside the base listing", () => {
     const input = {
-      data: [{ id: "deepseek/deepseek-v4-flash-0731", pricing: { prompt: "0.00000014", completion: "0.00000028" } }],
+      data: [
+        { id: "deepseek/deepseek-v4-flash", pricing: { prompt: "0.00000007938", completion: "0.00000015876", input_cache_read: "0.000000015876" } },
+        { id: "deepseek/deepseek-v4-flash-0731", pricing: { prompt: "0.000000065", completion: "0.00000018", input_cache_read: "0.000000016" } },
+      ],
     };
     const out = parseOpenRouterPricing(input);
-    expect(Object.keys(out)).toEqual(["deepseek-v4-flash"]);
+    expect(Object.keys(out).sort()).toEqual(["deepseek-v4-flash", "deepseek-v4-flash-0731"]);
+    expect(out["deepseek-v4-flash"].input).toBeCloseTo(0.07938, 6); // base stays base
+    expect(out["deepseek-v4-flash-0731"].input).toBeCloseTo(0.065, 6); // dated stays dated
+  });
+
+  test("dated-only listing still lands under its base key (stripped fallback keeps working)", () => {
+    const input = {
+      data: [{ id: "openai/gpt-5.6-luna-20250815", pricing: { prompt: "0.000001", completion: "0.000006" } }],
+    };
+    const out = parseOpenRouterPricing(input);
+    expect(Object.keys(out).sort()).toEqual(["gpt-56-luna", "gpt-56-luna-20250815"]);
+    expect(out["gpt-56-luna"].input).toBeCloseTo(1, 6);
+  });
+
+  test("base listing wins its own key even when a dated listing also exists (order-independent)", () => {
+    // dated FIRST in the array — the two-pass rule must not depend on array order.
+    const input = {
+      data: [
+        { id: "deepseek/deepseek-v4-flash-0731", pricing: { prompt: "0.000000065", completion: "0.00000018" } },
+        { id: "deepseek/deepseek-v4-flash", pricing: { prompt: "0.00000007938", completion: "0.00000015876" } },
+      ],
+    };
+    const out = parseOpenRouterPricing(input);
+    expect(out["deepseek-v4-flash"].input).toBeCloseTo(0.07938, 6);
   });
 
   test("handles malformed inputs without throwing", () => {
