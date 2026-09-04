@@ -11,12 +11,18 @@ import { getRefreshMeta } from "../db/refresh-meta";
 import { resolvePrivacyMap, visibleRepoKeys, uncoveredRepos } from "../privacy/privacy";
 import { redactConfig } from "../config/redact";
 import type { Collector } from "../collectors";
-import { getPricingCacheStatus } from "../server/model-pricing-fetcher";
+import { getPricingCacheStatus, getOpenferenceCacheStatus } from "../server/model-pricing-fetcher";
 import { getHostMetricsStatus } from "../server/host-metrics-fetcher";
 
 export interface DiagnosticsPayload {
   generatedAt: string;
   pricingCache: {
+    lastFetchedAt: string | null;
+    lastFetchStatus: "ok" | "failed" | "stale" | "empty";
+    modelCount: number;
+    source: string;
+  };
+  openferenceCache: {
     lastFetchedAt: string | null;
     lastFetchStatus: "ok" | "failed" | "stale" | "empty";
     modelCount: number;
@@ -74,6 +80,15 @@ export function buildDiagnostics(db: Database, config: RuntimeConfig, collectors
     generatedAt: new Date(now).toISOString(),
     pricingCache: (() => {
       const status = getPricingCacheStatus();
+      return {
+        lastFetchedAt: status.lastFetchedAt,
+        lastFetchStatus: status.lastFetchStatus,
+        modelCount: status.modelCount,
+        source: status.source,
+      };
+    })(),
+    openferenceCache: (() => {
+      const status = getOpenferenceCacheStatus();
       return {
         lastFetchedAt: status.lastFetchedAt,
         lastFetchStatus: status.lastFetchStatus,

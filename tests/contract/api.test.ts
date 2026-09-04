@@ -213,6 +213,14 @@ describe("daily resource contract", () => {
     expect(body.hostMetrics.enabled).toBe(false);
     expect(body.hostMetrics.lastFetchStatus).toBe("disabled");
   });
+
+  test("diagnostics surface the openference pricing cache block", async () => {
+    const res = await authed("/api/diagnostics");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { openferenceCache: { lastFetchStatus: string; source: string } };
+    expect(["ok", "failed", "stale", "empty"]).toContain(body.openferenceCache.lastFetchStatus);
+    expect(body.openferenceCache.source).toContain("openference");
+  });
 });
 
 describe("refresh + lock", () => {

@@ -92,13 +92,14 @@ Everything is environment variables, all read once at startup, all validated wit
 | `SECRET_HOUSE_ACCESS_PASSWORD` | empty | Set it → the whole dashboard requires Basic auth |
 | `SECRET_HOUSE_POLLER_ENABLED` | `false` | Background refresh loop (off by default; refresh manually or via the button) |
 | `SECRET_HOUSE_SHOW_PRIVATE_REPO_ITEMS` | `false` | Show private-repo items in the Attention Queue (the deliberate opt-in) |
-| `SIGNAL_HOUSE_ESTIMATE_COSTS` | `true` | Estimate every cost figure from public list pricing (litellm) + local rates instead of trusting upstream-reported values. Set `false` for upstream passthrough — see [Cost estimation](docs/operations.md#cost-estimation) |
+| `SIGNAL_HOUSE_ESTIMATE_COSTS` | `true` | Estimate every cost figure from openference + OpenRouter list pricing + local rates instead of trusting upstream-reported values. Set `false` for upstream passthrough — see [Cost estimation](docs/operations.md#cost-estimation) |
+| `OPENFERENCE_API_KEY` | empty | Authenticated openference `/v1/models` pricing source (preferred — the dashboard bills through openference). Fetch is skipped without a key; OpenRouter then remains the source. Never commit the real value |
 
 Missing sources degrade gracefully: the collector reports `unavailable` with a warning, the refresh still succeeds, and the dashboard tells you what's missing instead of pretending.
 
 ### Cost estimation
 
-By default every dollar number on the dashboard is **estimated at read time**: `(tokens × model rate) / 1M`, with rates resolved per model from litellm's community-maintained pricing table (refreshed daily into a local cache), falling back to any rates you've set in your OpenCode config. Nothing estimated is ever written to the database — flip `SIGNAL_HOUSE_ESTIMATE_COSTS=false` and the very next refresh shows upstream-reported values again. Full details, including the cache location and diagnostics fields, live in [docs/operations.md](docs/operations.md#cost-estimation).
+By default every dollar number on the dashboard is **estimated at read time**: `(tokens × model rate) / 1M`, with rates resolved per model from openference's authenticated `/v1/models` catalog first (the operator bills through openference, so its rates win), then OpenRouter's public `/api/v1/models` catalog, then any rates you've set in your OpenCode config. Each source refreshes hourly into its own local cache. Nothing estimated is ever written to the database — flip `SIGNAL_HOUSE_ESTIMATE_COSTS=false` and the very next refresh shows upstream-reported values again. Full details, including the cache locations and diagnostic fields, in [docs/operations.md §Cost estimation](docs/operations.md#cost-estimation).
 
 ## Testing
 
