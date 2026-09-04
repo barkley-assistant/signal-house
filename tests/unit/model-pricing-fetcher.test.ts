@@ -9,6 +9,7 @@ import {
   refreshFromNetwork,
   getModelPricing,
   getPricingCacheStatus,
+  getOpenferenceCacheStatus,
   setIOForTesting,
   type PricingIO,
 } from "../../src/server/model-pricing-fetcher";
@@ -43,6 +44,10 @@ beforeEach(() => {
   cacheFile = join(workDir, "model-pricing.json");
   setPricingCachePath(cacheFile);
   originalFetch = globalThis.fetch;
+  // Hermeticity: the openference fetch is auth-only and would otherwise hit
+  // the REAL authenticated endpoint when the parent shell exports the key.
+  // Tests that exercise the openference tier set the key explicitly.
+  delete process.env.OPENFERENCE_API_KEY;
 });
 
 afterEach(() => {
@@ -328,5 +333,93 @@ describe("model-pricing-fetcher", () => {
 
     const status = getPricingCacheStatus();
     expect(status.modelCount).toBe(3);
+  });
+
+  test("openference fetched with Authorization header and preferred over openrouter", async () => {
+    let authHeader: string | null = null;
+    // Read through a closure so TS doesn't narrow `authHeader` to null at the
+    // assertion site (the assignment happens inside the fetch mock).
+    const authHeaderSeen = (): string | null => authHeader;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      if (String(url).includes("openference")) {
+        authHeader = init?.headers ? (init.headers as Record<string, string>)["Authorization"] ?? null : null;
+        return new Response(
+          JSON.stringify({
+            object: "list",
+            data: [
+              { id: "DeepSeek-V4-Flash-0731", pricing: { prompt: "0.00000014", completion: "0.00000028", cache_read: "0.000000014" } },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify(OPENROUTER_FIXTURE), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    process.env.OPENFERENCE_API_KEY = "test-key";
+
+    await refreshFromNetwork();
+    expect(authHeaderSeen()).toBe("Bearer test-key");
+
+    const flash = await getModelPricing("deepseek-v4-flash-0731");
+    expect(flash.input).toBeCloseTo(0.14, 6); // openference wins over openrouter
+    delete process.env.OPENFERENCE_API_KEY;
+  });
+
+  test("no key → openference skipped entirely (never unauthenticated), openrouter still works", async () => {
+    delete process.env.OPENFERENCE_API_KEY;
+    let openferenceCalled = false;
+    globalThis.fetch = (async (url: unknown) => {
+      if (String(url).includes("openference")) {
+        openferenceCalled = true;
+      }
+      return new Response(JSON.stringify(OPENROUTER_FIXTURE), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+
+    await refreshFromNetwork();
+    expect(openferenceCalled).toBe(false); // skipped, not attempted bare
+    expect((await getModelPricing("gpt-5")).input).toBe(1.25);
+    expect(getOpenferenceCacheStatus().lastFetchStatus).toBe("empty");
+  });
+
+  test("openference failure does not take down the openrouter fetch (and vice versa)", async () => {
+    process.env.OPENFERENCE_API_KEY = "test-key";
+    globalThis.fetch = (async (url: unknown) => {
+      if (String(url).includes("openference")) throw new Error("openference down");
+      return new Response(JSON.stringify(OPENROUTER_FIXTURE), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+
+    await refreshFromNetwork();
+    expect(getOpenferenceCacheStatus().lastFetchStatus).toBe("failed");
+    expect(getPricingCacheStatus().lastFetchStatus).toBe("ok");
+    expect((await getModelPricing("gpt-5")).input).toBe(1.25);
+    delete process.env.OPENFERENCE_API_KEY;
+  });
+
+  test("two independent disk caches: openference failure preserves previous-good openference cache", async () => {
+    process.env.OPENFERENCE_API_KEY = "test-key";
+    // Seed the openference disk cache (own filename beside model-pricing.json).
+    const openferenceCacheFile = join(workDir, "openference-pricing.json");
+    writeFileSync(
+      openferenceCacheFile,
+      JSON.stringify({
+        fetchedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // stale → triggers a refresh attempt
+        source: "https://api.openference.com/v1/models",
+        providerFilter: "openference",
+        modelCount: 1,
+        models: {
+          "deepseek-v4-flash-0731": { input: 0.14, output: 0.28, cacheRead: 0.014 },
+        },
+      }),
+    );
+    globalThis.fetch = (async (url: unknown) => {
+      if (String(url).includes("openference")) throw new Error("openference down");
+      return new Response(JSON.stringify(OPENROUTER_FIXTURE), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+
+    await ensurePricingCacheFresh();
+    expect(getOpenferenceCacheStatus().lastFetchStatus).toBe("stale");
+    const flash = await getModelPricing("deepseek-v4-flash-0731");
+    expect(flash.input).toBeCloseTo(0.14, 6); // previous-good openference cache survived
+    delete process.env.OPENFERENCE_API_KEY;
   });
 });
