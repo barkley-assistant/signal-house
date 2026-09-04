@@ -14,6 +14,8 @@
  *   - parseOpenRouterPricing — OpenRouter's /api/v1/models (the current
  *     source since 2026-08-26; free + keyless, covers every dashboard
  *     model by machine-key).
+ *   - parseOpenferencePricing — openference's /v1/models (the preferred
+ *     source since 2026-09-04; authenticated, dated ids kept verbatim).
  *
  * Date-snapshot variants: entries with a trailing date suffix
  * ("…-0731", "…-20250815") keep their own machine key so the resolver
@@ -334,6 +336,85 @@ export function parseOpenRouterPricing(json: unknown): PricingMap {
   log.debug(
     "model-pricing-parser",
     `openrouter parsed ${Object.keys(out).length} entries` +
+      (skippedNoRates > 0 || skippedEmptyKey > 0
+        ? `, skipped ${skippedNoRates} without finite rates + ${skippedEmptyKey} with empty keys`
+        : ""),
+  );
+  return out;
+}
+
+/**
+ * Parse the raw openference /v1/models JSON into our cache shape.
+ *
+ * openference returns a flat array under `data`, each entry shaped like:
+ *   { id: "DeepSeek-V4-Flash-0731", pricing: { prompt, completion, cache_read } }
+ * Pricing values are USD **per token** strings, so the same ×1_000_000
+ * normalization applies as in the other parsers.
+ *
+ * Field mapping:
+ *   pricing.prompt      → input
+ *   pricing.completion  → output
+ *   pricing.cache_read  → cacheRead  (fallback: prompt, no discount listed)
+ *
+ * Ids are NOT vendor-prefixed; machineKey() normalises them verbatim, so
+ * dated variants like "DeepSeek-V4-Flash-0731" keep their own key — no
+ * strip, no base aliasing (aliasing would wrongly price the bare model at
+ * the dated rate, violating the resolution-order decision D1). Zero rates
+ * are kept (free models; the resolver's nonZero gate falls through to
+ * OpenRouter anyway). quota_multiplier / promo fields are ignored —
+ * pricing.prompt is already the billed per-token rate.
+ *
+ * @param json - The result of JSON.parse on the openference response.
+ * @returns A map of machine key → per-1M-token rates. Empty `{}` on any
+ *          parse failure or malformed input — never throws.
+ */
+export function parseOpenferencePricing(json: unknown): PricingMap {
+  if (!isPlainObject(json) || !Array.isArray(json.data)) return {};
+
+  const out: PricingMap = {};
+  let skippedNoRates = 0;
+  let skippedEmptyKey = 0;
+
+  for (const entry of json.data) {
+    if (!isPlainObject(entry)) continue;
+    const rawKey = typeof entry.id === "string" ? entry.id : "";
+    if (!rawKey) {
+      skippedEmptyKey++;
+      continue;
+    }
+    // Verbatim machine key — dated variants keep their own key (D2).
+    const key = machineKey(rawKey);
+    if (!key) {
+      skippedEmptyKey++;
+      continue;
+    }
+    if (!isPlainObject(entry.pricing)) {
+      skippedNoRates++;
+      continue;
+    }
+    const inputPerToken = rateOr(entry.pricing.prompt, NaN);
+    const outputPerToken = rateOr(entry.pricing.completion, NaN);
+    if (!Number.isFinite(inputPerToken) || !Number.isFinite(outputPerToken)) {
+      skippedNoRates++;
+      continue;
+    }
+    // Discounted cache-read rate; absent → charge cached tokens at the
+    // fresh-input rate (locked decision #2 convention).
+    const cacheReadPerToken = rateOr(entry.pricing.cache_read, inputPerToken);
+
+    out[key] = {
+      input: inputPerToken * 1_000_000,
+      output: outputPerToken * 1_000_000,
+      cacheRead: cacheReadPerToken * 1_000_000,
+      // openference ids carry no vendor prefix — native by construction.
+      sourceKey: rawKey,
+      route: "native",
+    };
+  }
+
+  log.debug(
+    "model-pricing-parser",
+    `openference parsed ${Object.keys(out).length} entries` +
       (skippedNoRates > 0 || skippedEmptyKey > 0
         ? `, skipped ${skippedNoRates} without finite rates + ${skippedEmptyKey} with empty keys`
         : ""),

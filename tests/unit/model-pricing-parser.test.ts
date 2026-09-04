@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseLitellmPricing, parseOpenRouterPricing } from "../../src/shared/model-pricing-parser";
+import { parseLitellmPricing, parseOpenRouterPricing, parseOpenferencePricing } from "../../src/shared/model-pricing-parser";
 
 describe("parseLitellmPricing", () => {
   test("accepts any provider with finite rates (openai, anthropic, gemini, …)", () => {
@@ -329,5 +329,45 @@ describe("parseOpenRouterPricing", () => {
     expect(out["hy3"].input).toBeCloseTo(0.132, 6);
     expect(out["hy3"].output).toBeCloseTo(0.528, 6);
     expect(out["hy3"].cacheRead).toBeCloseTo(0.033, 6);
+  });
+});
+
+// Real shape from the live authenticated endpoint (values are per-token STRINGS).
+const OPENFERENCE_FIXTURE = {
+  object: "list",
+  data: [
+    { id: "DeepSeek-V4-Flash-0731", pricing: { prompt: "0.00000014", completion: "0.00000028", cache_read: "0.000000014" } },
+    { id: "DeepSeek-V4-Pro-0813", pricing: { prompt: "0.00000132", completion: "0.00000396", cache_read: "0.000000044" } },
+    { id: "GLM-4.7-Flash", pricing: { prompt: "0.00000006", completion: "0.0000004" } }, // no cache_read
+    { id: "Llama 3.2 3B", pricing: { prompt: "0", completion: "0" } }, // free
+    { id: "Broken", pricing: { prompt: "nope", completion: "0.0000001" } }, // non-numeric → skip
+  ],
+};
+
+describe("parseOpenferencePricing", () => {
+  test("maps ids verbatim through machineKey, per-token strings × 1M", () => {
+    const out = parseOpenferencePricing(OPENFERENCE_FIXTURE);
+    expect(out["deepseek-v4-flash-0731"].input).toBeCloseTo(0.14, 6);
+    expect(out["deepseek-v4-flash-0731"].output).toBeCloseTo(0.28, 6);
+    expect(out["deepseek-v4-flash-0731"].cacheRead).toBeCloseTo(0.014, 6);
+    expect(out["deepseek-v4-pro-0813"].cacheRead).toBeCloseTo(0.044, 6);
+  });
+
+  test("does NOT strip date suffixes or alias to base keys", () => {
+    const out = parseOpenferencePricing(OPENFERENCE_FIXTURE);
+    expect(out["deepseek-v4-flash"]).toBeUndefined(); // bare stays unpriced by openference
+  });
+
+  test("cache_read falls back to prompt when absent; zero rates kept; bad rates skipped", () => {
+    const out = parseOpenferencePricing(OPENFERENCE_FIXTURE);
+    expect(out["glm-47-flash"].cacheRead).toBeCloseTo(0.06, 6); // = input (locked decision #2)
+    expect(out["llama-32-3b"].input).toBe(0); // free model kept
+    expect(out["broken"]).toBeUndefined();
+  });
+
+  test("never throws on malformed input", () => {
+    expect(parseOpenferencePricing(null)).toEqual({});
+    expect(parseOpenferencePricing({ data: "nope" })).toEqual({});
+    expect(parseOpenferencePricing({ data: [null, 42] })).toEqual({});
   });
 });
