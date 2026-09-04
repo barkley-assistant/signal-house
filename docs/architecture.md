@@ -41,7 +41,8 @@ Collectors (explicit registry — four sources)
    ▼
 Refresh runner (src/orchestrator/refresh.ts)
    │  concurrency-guarded by a persisted lock (crash-safe)
-   │  per-source: write snapshot → upsert latest_state → derive daily metrics
+   │  per-source: upsert latest_state → derive daily metrics → snapshot
+   │  history (github excluded — ~850KB/pass, no readers; t_2c7b3493)
    ▼
 SQLite (V2 schema, user_version=1)
    │  snapshots / latest_state / daily_metrics / refresh_meta

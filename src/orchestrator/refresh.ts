@@ -46,6 +46,16 @@ function stripUsageDayModels(data: SourceData): SourceData {
   };
 }
 
+/** Null out per-pass timestamps before the SNAPSHOT write. lastSeenAt is
+ *  stamped fresh on every git pass, so byte-compare change detection never
+ *  fired and git wrote ~720 rows/day of identical-meaning history. The
+ *  snapshot row's own captured_at already records when we saw the repo;
+ *  latest_state keeps the live value for diagnostics. */
+function stripSnapshotVolatility(data: SourceData): SourceData {
+  if (!data.localGit.some((r) => r.lastSeenAt !== null)) return data;
+  return { ...data, localGit: data.localGit.map((r) => ({ ...r, lastSeenAt: null })) };
+}
+
 export interface RefreshContext {
   owner: DatabaseOwner;
   config: RuntimeConfig;
@@ -151,7 +161,14 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
         setLatestState(ctx.owner.db, result.source, state, nowMs);
         // Append-only history: skip the row when nothing changed (issue
         // #361 phase 2) — an absent snapshot means "identical to previous".
-        insertSnapshotIfChanged(ctx.owner.db, result.source, nowMs, persisted);
+        // GitHub raw history is NOT persisted (t_2c7b3493): the payload is
+        // ~850KB of workflow runs/issues/PRs per changed pass, nothing in
+        // production reads the snapshots table (dashboard = latest_state +
+        // daily_metrics), and 30 days of it grew the live DB to 13.4GB.
+        // latest_state above and the daily_metrics derivation are unaffected.
+        if (result.source !== "github") {
+          insertSnapshotIfChanged(ctx.owner.db, result.source, nowMs, stripSnapshotVolatility(persisted));
+        }
 
         // Same-day metrics replace; earlier days upsert (refresh rows whose
         // values changed, leave pruned-upstream days untouched).

@@ -205,4 +205,68 @@ describe("refresh runner", () => {
     expect(out.status).toBe("success");
     owner.close();
   });
+
+  test("github refresh persists latest_state + daily metrics but no snapshots", async () => {
+    const owner = openMemoryDatabase();
+    const run = {
+      id: "w1", name: "ci", status: "completed", conclusion: "success",
+      createdAt: "2026-09-01T00:00:00Z", completedAt: "2026-09-01T00:01:00Z",
+      headSha: "a".repeat(40), repo: "o/r", repoKey: "github:o/r",
+      branch: "main", workflowName: "ci", url: "https://example.com/w1",
+    };
+    const github = stubCollector("github", {
+      data: {
+        repositories: [
+          { repoKey: "github:o/r", name: "r", localPath: null, remoteUrl: null,
+            githubOwner: "o", githubRepo: "r", source: "github",
+            isPrivate: false, present: true, lastSeenAt: null },
+        ],
+        workflowRuns: [run],
+      },
+    });
+    const out = await runRefresh(ctx(owner, [github]), "manual");
+    expect(out.status).toBe("success");
+    // latest_state + daily metrics still written
+    expect(getLatestState(owner.db, "github")).not.toBeNull();
+    expect(queryDailyMetrics(owner.db, { from: "2026-09-01", to: "2026-09-01" }).length).toBeGreaterThan(0);
+    // …but no snapshot row for github
+    const n = (owner.db.query("SELECT COUNT(*) AS n FROM snapshots WHERE source='github'").get() as { n: number }).n;
+    expect(n).toBe(0);
+    owner.close();
+  });
+
+  test("non-github sources still write snapshots", async () => {
+    const owner = openMemoryDatabase();
+    const hermes = stubCollector("hermes", { data: { usage: null } });
+    await runRefresh(ctx(owner, [hermes]), "manual");
+    const n = (owner.db.query("SELECT COUNT(*) AS n FROM snapshots WHERE source='hermes'").get() as { n: number }).n;
+    expect(n).toBe(1);
+    owner.close();
+  });
+
+  test("git snapshots dedupe across passes; latest_state keeps live lastSeenAt", async () => {
+    const owner = openMemoryDatabase();
+    // The real git collector stamps lastSeenAt per pass — simulate that,
+    // otherwise the dedupe under test never gets a chance to fail.
+    const git: Collector = {
+      id: "git", tier: "core", title: "git",
+      async collect() {
+        const data = emptySourceData();
+        data.localGit.push({
+          repoKey: "github:o/r", path: "/tmp/r", repoName: "r", remoteUrl: null,
+          githubOwner: "o", githubRepo: "r", defaultBranch: "main", isGitRepo: true,
+          recentCommits: 1, authors: ["a"], latestCommitAt: "2026-09-01T00:00:00Z",
+          error: null, present: true, lastSeenAt: new Date().toISOString(),
+        });
+        return { source: "git", ok: true, data, durationMs: 1, warnings: [], errors: [], unavailable: false };
+      },
+    };
+    await runRefresh(ctx(owner, [git]), "manual");
+    await runRefresh(ctx(owner, [git]), "poller");
+    const n = (owner.db.query("SELECT COUNT(*) AS n FROM snapshots WHERE source='git'").get() as { n: number }).n;
+    expect(n).toBe(1); // second pass deduped — volatility no longer defeats change detection
+    const state = JSON.parse(getLatestState(owner.db, "git")!.data) as { data: { localGit: Array<{ lastSeenAt: string | null }> } };
+    expect(state.data.localGit[0].lastSeenAt).not.toBeNull(); // diagnostics keep the live value
+    owner.close();
+  });
 });

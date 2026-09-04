@@ -42,8 +42,11 @@ let pollerStop: (() => void) | null = null;
 
 // First-run backfill: a fresh DB gets one automatic refresh so the last
 // 30 days of usage history populate immediately (user requirement 2026-07-31).
-const snapshotCount = (owner.db.query("SELECT COUNT(*) AS n FROM snapshots").get() as { n: number }).n;
-const isFreshDb = snapshotCount === 0;
+// Fresh-db check keys on latest_state, not snapshots: github no longer
+// writes snapshot rows (t_2c7b3493), so a github-only config would
+// otherwise look "fresh" on every startup.
+const stateCount = (owner.db.query("SELECT COUNT(*) AS n FROM latest_state").get() as { n: number }).n;
+const isFreshDb = stateCount === 0;
 const startupRefresh = (): void => void runRefresh({ owner, config, collectors, lock }, "poller");
 
 if (config.poller.enabled) {
