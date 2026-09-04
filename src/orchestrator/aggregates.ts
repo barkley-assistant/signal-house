@@ -380,13 +380,11 @@ export function mergeModelRows(
     // price sheet per row, not a mix of estimator + legacy local rates.
     let rowRates: ModelRates | undefined;
     if (costOpts.enabled) {
-      // Strip date-snapshot suffixes before lookup so variants like
-      // 'DeepSeek V4 Flash 0731' or 'gpt-5.6-luna-20250815' resolve
-      // against the same rate entry as their base model. Mirrors the
-      // resolver's own logic; necessary because the rates map keys are
-      // already stripped at fetch time.
-      const lookupKey = stripDateSnapshot(rawKey);
-      const rates = costOpts.rates.get(lookupKey);
+      // Dated variant first, stripped base as a fallback — mirrors the
+      // resolver's lookup order (D1). The rates map is keyed by FULL
+      // machine key (dated keys survive the parser), so a dated row must
+      // hit its own dated entry before the base.
+      const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
       if (rates && (rates.input > 0 || rates.output > 0)) {
         rowRates = rates;
         rowCost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
@@ -439,8 +437,7 @@ export function mergeModelRows(
       // (so it lines up with the estimator's own number on the row); passthrough
       // distributes the row's upstream cost by per-source token share.
       if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-        const lookupKey = stripDateSnapshot(rawKey);
-        const rates = costOpts.rates.get(lookupKey);
+        const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
         if (rates && (rates.input > 0 || rates.output > 0)) {
           src.cost += (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
         }
@@ -483,8 +480,7 @@ export function mergeModelRows(
             cost: 0,
           };
           if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-            const lookupKey = stripDateSnapshot(rawKey);
-            const rates = costOpts.rates.get(lookupKey);
+            const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
             if (rates && (rates.input > 0 || rates.output > 0)) {
               entry.cost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
             }

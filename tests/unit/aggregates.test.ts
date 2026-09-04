@@ -210,6 +210,19 @@ describe("mergeModelRows cache preservation", () => {
     expect(merged[0].cacheReadTokens).toBe(100);
     expect(Object.keys(merged[0].bySource ?? {})).toContain("opencode");
   });
+
+  test("per-variant estimator math: 0731 row priced with dated rates, bare row with base rates", () => {
+    const rates = new Map([
+      ["deepseek-v4-flash", { input: 0.07938, output: 0.15876, cacheRead: 0.015876 }],
+      ["deepseek-v4-flash-0731", { input: 0.14, output: 0.28, cacheRead: 0.014 }],
+    ]);
+    const rows = [
+      { model: "DeepSeek-V4-Flash-0731", provider: null, source: "hermes", sessions: 1, messages: null,
+        inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+    ];
+    const merged = mergeModelRows(rows, { rates, enabled: true });
+    expect(merged[0].cost).toBeCloseTo(0.14 + 0.28 + 0.014, 6); // exactly (in·1M + out·1M + cache·1M)/1M
+  });
 });
 
 describe("computeAggregates privacy filtering", () => {

@@ -17,6 +17,12 @@ beforeEach(() => {
   setPricingCachePath(join(workDir, "model-pricing.json"));
   setCostConfigPath(join(workDir, "opencode.jsonc"));
   resetPricingCache();
+  // Hermeticity: the openference fetch is auth-only; when the parent shell
+  // exports the key it would hit the REAL authenticated endpoint and
+  // override the seeded openrouter tier. These tests exercise the
+  // openrouter tier only (the openference tier's priority is covered by
+  // model-pricing-fetcher.test.ts), so keep the key out.
+  delete process.env.OPENFERENCE_API_KEY;
 });
 
 afterEach(() => {
@@ -135,6 +141,33 @@ describe("model-pricing resolver", () => {
     const dated = await resolveModelPricing("gpt-5.6-luna-20250815");
     expect(dated.input).toBe(1.25);
     expect(dated.output).toBe(10);
+  });
+
+  test("dated model uses the dated entry when one exists (openference preferred)", async () => {
+    await seedPricingCache({
+      "deepseek-v4-flash": { input: 0.07938, output: 0.15876, cacheRead: 0.015876 },
+      "deepseek-v4-flash-0731": { input: 0.065, output: 0.18, cacheRead: 0.016 },
+    });
+
+    const rates = await resolveModelPricing("DeepSeek-V4-Flash-0731");
+    expect(rates.input).toBeCloseTo(0.065, 6); // dated entry, NOT the base 0423 rates
+  });
+
+  test("bare model keeps resolving the base entry", async () => {
+    await seedPricingCache({
+      "deepseek-v4-flash": { input: 0.07938, output: 0.15876, cacheRead: 0.015876 },
+      "deepseek-v4-flash-0731": { input: 0.065, output: 0.18, cacheRead: 0.016 },
+    });
+
+    const rates = await resolveModelPricing("DeepSeek-V4-Flash");
+    expect(rates.input).toBeCloseTo(0.07938, 6);
+  });
+
+  test("dated model with no dated entry falls back to the stripped base entry", async () => {
+    await seedPricingCache({ "deepseek-v4-flash": { input: 0.07938, output: 0.15876, cacheRead: 0.015876 } });
+
+    const rates = await resolveModelPricing("DeepSeek-V4-Flash-0831");
+    expect(rates.input).toBeCloseTo(0.07938, 6);
   });
 
   test("empty / malformed model name → returns zeros (no throw)", async () => {

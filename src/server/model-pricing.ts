@@ -1,15 +1,15 @@
 /**
- * Model pricing resolver — priority chain openrouter → local → empty.
+ * Model pricing resolver — priority chain openference → openrouter → local → empty.
  *
  * Public surface for the rest of signal-house. Single async function,
  * `getModelPricing(model)`, that resolves to per-1M-token rates.
  *
- * Priority chain (locked decision, 2026-08-26 — litellm replaced by
- * OpenRouter as the cache source):
- *   1. OpenRouter cache (in-memory, populated by the fetcher on startup +
- *      per refresh). /api/v1/models is free + keyless, covers every
- *      dashboard model via machine-key normalisation (vendor/model → model),
- *      and ships per-token rates in the same unit litellm used.
+ * Priority chain (2026-09-04 — openference added as the PREFERRED source:
+ * the operator bills through openference, so its authenticated /v1/models
+ * rates win over OpenRouter's):
+ *   1. Pricing cache (in-memory, populated by the fetcher on startup + per
+ *      refresh). Two sources — openference first, OpenRouter second; the
+ *      source priority lives inside the fetcher's getModelPricing.
  *   2. Operator's local rates from ~/.config/opencode/opencode.jsonc,
  *      read via the existing `getInputCostPerMillion()` / `getCacheReadCostPerMillion()`
  *      helpers in `src/server/cost-input.ts`. Output rate is NOT exposed
@@ -17,11 +17,11 @@
  *      when output is missing.
  *   3. Empty result `{ input: 0, output: 0, cacheRead: 0 }`. Never NaN.
  *
- * The chain is fixed and explicit. machineKey normalisation runs first
- * (lowercase + dot-stripping + non-alphanumeric collapse), then a trailing
- * date-snapshot suffix is stripped (`gpt-5.6-luna-20250815` →
- * `gpt-5.6-luna`) before the lookup — mirrors the existing pattern in
- * `cost-input.ts:69-72`.
+ * Lookup order per model (D1): machineKey normalisation runs first, then the
+ * resolver tries the FULL (possibly dated) key — "deepseek-v4-flash-0731" —
+ * before the stripped base key ("deepseek-v4-flash"). A dated variant that
+ * exists in a source is authoritative for itself; the stripped key is a
+ * fallback only (dated-only listings land under both keys at parse time).
  *
  * Used by `src/orchestrator/aggregates.ts` to compute per-row cost when
  * `SIGNAL_HOUSE_ESTIMATE_COSTS=true` (default).
@@ -46,21 +46,22 @@ export interface ModelRates {
 const OUTPUT_DEFAULT_MULTIPLIER = 4;
 
 /**
- /** Pre-fetch rates for a batch of model keys. Returns a Map keyed by
-  *  machine key (lowercase + dot-stripped). Use this in callers that need
-  *  sync access to rates — the aggregator runs sync, calls this once per
-  *  refresh, then looks up per-row without awaiting.
-  *
-  * Dedupes by machine key before calling the resolver (so "GPT-5" and
-  * "gpt-5" count as the same lookup). Empty input returns an empty map.
-  * Never throws.
-  */
- export async function fetchAllRates(modelKeys: readonly string[]): Promise<Map<string, ModelRates>> {
-   const uniq = new Set<string>();
-   for (const raw of modelKeys) {
-     const k = stripDateSnapshot(machineKey(raw));
-     if (k) uniq.add(k);
-   }
+ * Pre-fetch rates for a batch of model keys. Returns a Map keyed by
+ * machine key (lowercase + dot-stripped). Use this in callers that need
+ * sync access to rates — the aggregator runs sync, calls this once per
+ * refresh, then looks up per-row without awaiting.
+ *
+ * Dedupes by FULL machine key — dated variants keep their own key, so a
+ * dated spelling and its base resolve as separate entries when both exist
+ * (the variant split; the resolver prices each with its own rates). Empty
+ * input returns an empty map. Never throws.
+ */
+export async function fetchAllRates(modelKeys: readonly string[]): Promise<Map<string, ModelRates>> {
+  const uniq = new Set<string>();
+  for (const raw of modelKeys) {
+    const k = machineKey(raw);
+    if (k) uniq.add(k);
+  }
    const entries = await Promise.all(
      [...uniq].map(async (key) => [key, await getModelPricing(key)] as const),
    );
@@ -87,12 +88,15 @@ export function buildRatesMap(entries: Iterable<readonly [string, ModelRates]>):
  * "we don't know the price for this model."
  */
 export async function getModelPricing(model: string): Promise<ModelRates> {
-  const key = stripDateSnapshot(machineKey(model));
-  if (!key) return zero();
+  const full = machineKey(model);
+  const stripped = stripDateSnapshot(full);
+  if (!full) return zero();
 
-  // 1. OpenRouter cache — query with the stripped key so date-snapshot
-  //    variants ("gpt-5.6-luna-20250815") resolve to the same row as the base model.
-  const cacheRow = await getModelPricingFromCache(key);
+  // 1. Pricing cache — try the FULL (possibly dated) key first, then the
+  //    stripped base key as a fallback. A dated variant that exists in a
+  //    source is authoritative for itself; the stripped key is consulted
+  //    only when the dated lookup missed everywhere (D1).
+  const cacheRow = await getModelPricingFromCache(full);
   if (nonZero(cacheRow)) {
     return {
       input: cacheRow.input,
@@ -100,11 +104,23 @@ export async function getModelPricing(model: string): Promise<ModelRates> {
       cacheRead: cacheRow.cacheRead,
     };
   }
+  if (stripped !== full) {
+    const strippedRow = await getModelPricingFromCache(stripped);
+    if (nonZero(strippedRow)) {
+      return {
+        input: strippedRow.input,
+        output: strippedRow.output,
+        cacheRead: strippedRow.cacheRead,
+      };
+    }
+  }
 
-  // 2. operator's local rates (opencode.jsonc via cost-input.ts) — also
-  //    query with the stripped key for the same reason.
-  const localInput = getInputCostPerMillion(key);
-  const localCacheRead = getCacheReadCostPerMillion(key);
+  // 2. operator's local rates (opencode.jsonc via cost-input.ts) — query
+  //    with the FULL key; cost-input strips a date suffix internally as its
+  //    own fallback, so a dated model still resolves to the base entry when
+  //    the config has no explicit dated block.
+  const localInput = getInputCostPerMillion(full);
+  const localCacheRead = getCacheReadCostPerMillion(full);
   if (localInput > 0 || localCacheRead > 0) {
     // Locked decision #7: output defaults to input × 4 when the local source
     // doesn't expose an output rate. cost-input.ts today doesn't expose

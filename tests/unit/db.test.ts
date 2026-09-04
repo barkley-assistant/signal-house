@@ -8,7 +8,8 @@ import { V1DatabaseRefusedError, ensureSchema, looksLikeV1Database } from "../..
 import { insertSnapshot, latestSnapshot, pruneSnapshots } from "../../src/db/snapshots";
 import { setLatestState, getLatestState, parsedLatestStates } from "../../src/db/latest-state";
 import { setRefreshMeta, getRefreshMeta, getRefreshMetaMany } from "../../src/db/refresh-meta";
-import { replaceDayForSource, backfillDaysForSource, queryDailyMetrics } from "../../src/db/daily-metrics";
+import { replaceDayForSource, backfillDaysForSource, queryDailyMetrics, queryDailyTrend, queryDailyModelTrend } from "../../src/db/daily-metrics";
+import { setPricingCachePath, resetPricingCache } from "../../src/server/model-pricing-fetcher";
 import { runRetention } from "../../src/db/retention";
 import { SCHEMA_VERSION } from "../../src/db/schema";
 import type { RuntimeConfig } from "../../src/config/types";
@@ -40,6 +41,10 @@ let owner: DatabaseOwner | null = null;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "sh-db-"));
+  // Hermeticity: the openference fetch is auth-only; when the parent shell
+  // exports the key, trend tests that resolve rates would hit the REAL
+  // authenticated endpoint instead of the seeded cache. Keep it out.
+  delete process.env.OPENFERENCE_API_KEY;
 });
 
 afterEach(() => {
@@ -248,3 +253,70 @@ describe("getRefreshMetaMany batch reader", () => {
     owner.close();
   });
 });
+
+  describe("daily trend estimator lookup order (dated variant first)", () => {
+    /** Seed the fetcher's OpenRouter-format cache file and warm it, exactly
+     *  like tests/unit/model-pricing.test.ts does. The openference tier stays
+     *  empty (no key in the test env), so these tests exercise the resolver
+     *  chain through the OpenRouter tier only. */
+    async function seedPricingCache(models: Record<string, { input: number; output: number; cacheRead: number }>) {
+      const cachePath = join(dir, "model-pricing.json");
+      writeFileSync(
+        cachePath,
+        JSON.stringify({
+          fetchedAt: new Date().toISOString(),
+          source: "https://test/seed",
+          providerFilter: "openai",
+          modelCount: Object.keys(models).length,
+          models,
+        }),
+      );
+      const { getModelPricing: fetcherGet } = await import("../../src/server/model-pricing-fetcher");
+      await fetcherGet("__warmup__");
+    }
+
+    test("queryDailyTrend prices dated and bare spellings with their own rates", async () => {
+      setPricingCachePath(join(dir, "model-pricing.json"));
+      resetPricingCache();
+      await seedPricingCache({
+        "deepseek-v4-flash": { input: 0.07938, output: 0.15876, cacheRead: 0.015876 },
+        "deepseek-v4-flash-0731": { input: 0.14, output: 0.28, cacheRead: 0.014 },
+      });
+
+      const owner2 = openMemoryDatabase();
+      const db = owner2.db;
+      const date = "2026-09-01";
+      replaceDayForSource(db, date, "hermes", [
+        { date, metric: "model.tokens_input", value: 1_000_000, tags: { model: "DeepSeek-V4-Flash-0731" } },
+        { date, metric: "model.tokens_output", value: 1_000_000, tags: { model: "DeepSeek-V4-Flash-0731" } },
+        { date, metric: "model.tokens_cache_read", value: 1_000_000, tags: { model: "DeepSeek-V4-Flash-0731" } },
+        { date, metric: "model.tokens_input", value: 1_000_000, tags: { model: "DeepSeek-V4-Flash" } },
+      ]);
+      const trend = await queryDailyTrend(db, date, date, { rates: new Map(), enabled: true });
+      expect(trend).toHaveLength(1);
+      // dated row: (1M×0.14 + 1M×0.28 + 1M×0.014)/1M; bare row: (1M×0.07938)/1M
+      expect(trend[0].cost).toBeCloseTo(0.14 + 0.28 + 0.014 + 0.07938, 6);
+      owner2.close();
+    });
+
+    test("queryDailyModelTrend prices a dated-only model with its own dated rate", async () => {
+      setPricingCachePath(join(dir, "model-pricing.json"));
+      resetPricingCache();
+      await seedPricingCache({
+        "gpt-56-luna": { input: 1.0, output: 6.0, cacheRead: 1.0 },
+        "gpt-56-luna-20250815": { input: 2.0, output: 12.0, cacheRead: 2.0 },
+      });
+
+      const owner2 = openMemoryDatabase();
+      const db = owner2.db;
+      const date = "2026-09-01";
+      replaceDayForSource(db, date, "hermes", [
+        { date, metric: "model.tokens_input", value: 1_000_000, tags: { model: "gpt-5.6-luna-20250815" } },
+        { date, metric: "model.tokens_output", value: 1_000_000, tags: { model: "gpt-5.6-luna-20250815" } },
+      ]);
+      const trend = await queryDailyModelTrend(db, "gpt-56-luna-20250815", date, date, { rates: new Map(), enabled: true });
+      expect(trend).toHaveLength(1);
+      expect(trend[0].cost).toBeCloseTo(2.0 + 12.0, 6); // dated rate (2.0/12.0), not the base (1.0/6.0)
+      owner2.close();
+    });
+  });

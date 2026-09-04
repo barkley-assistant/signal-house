@@ -312,13 +312,14 @@ export async function queryDailyModelTrend(
 
   // Estimator mode: resolve rates once for this key. Spellings share the
   // canonical group but may normalise differently, so try each until one
-  // hits the resolver's stripped-key map.
+  // hits the resolver's rate map (full dated key first, stripped base
+  // fallback — D1).
   let resolvedRates: ModelRates | undefined;
   if (costOpts.enabled && matchedSpellings.size > 0) {
     const rates = await fetchAllRates([...matchedSpellings]);
     for (const spelling of matchedSpellings) {
       const mk = machineKey(spelling);
-      const r = rates.get(stripDateSnapshot(mk)) ?? rates.get(mk);
+      const r = rates.get(mk) ?? rates.get(stripDateSnapshot(mk));
       if (r && (r.input > 0 || r.output > 0)) {
         resolvedRates = r;
         break;
