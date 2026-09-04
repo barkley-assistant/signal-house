@@ -4,14 +4,27 @@
     {
       "machine": "deepseek-v4-pro",
       "label": "DeepSeek V4 Pro",
-      "family": "DeepSeek",
-      "aliases": ["deepseek-v4-pro-0813"]
+      "family": "DeepSeek"
+    },
+    {
+      "machine": "deepseek-v4-pro-0813",
+      "label": "DeepSeek V4 Pro 0813",
+      "family": "DeepSeek"
     },
     {
       "machine": "deepseek-v4-flash",
       "label": "DeepSeek V4 Flash",
-      "family": "DeepSeek",
-      "aliases": ["deepseek-v4-flash-0731", "deepseek-v4-flash-0831"]
+      "family": "DeepSeek"
+    },
+    {
+      "machine": "deepseek-v4-flash-0731",
+      "label": "DeepSeek V4 Flash 0731",
+      "family": "DeepSeek"
+    },
+    {
+      "machine": "deepseek-v4-flash-0831",
+      "label": "DeepSeek V4 Flash 0831",
+      "family": "DeepSeek"
     },
     { "machine": "grok-45", "label": "Grok 4.5", "family": "xAI" },
     { "machine": "grok-build-01", "label": "Grok Build 0.1", "family": "xAI" },

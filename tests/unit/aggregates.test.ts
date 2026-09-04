@@ -223,6 +223,15 @@ describe("mergeModelRows cache preservation", () => {
     const merged = mergeModelRows(rows, { rates, enabled: true });
     expect(merged[0].cost).toBeCloseTo(0.14 + 0.28 + 0.014, 6); // exactly (in·1M + out·1M + cache·1M)/1M
   });
+
+  test("byModel does not merge flash 0731 into the bare flash row", () => {
+    const rows = [
+      { model: "DeepSeek-V4-Flash", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "DeepSeek-V4-Flash-0731", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+    ];
+    const merged = mergeModelRows(rows, { rates: new Map(), enabled: false });
+    expect(merged).toHaveLength(2);
+  });
 });
 
 describe("computeAggregates privacy filtering", () => {

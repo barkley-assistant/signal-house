@@ -78,6 +78,18 @@ describe("modelLabel", () => {
 });
 
 describe("model aliasing", () => {
+  test("dated DeepSeek variants are their own canonical keys (display + trend split)", () => {
+    expect(canonicalMachineKey("DeepSeek-V4-Flash-0731")).toBe("deepseek-v4-flash-0731");
+    expect(canonicalMachineKey("DeepSeek-V4-Flash")).toBe("deepseek-v4-flash");
+    expect(canonicalMachineKey("deepseek/deepseek-v4-flash-0731")).toBe("deepseek-v4-flash-0731"); // vendor-prefixed spelling
+    expect(canonicalMachineKey("DeepSeek-V4-Pro-0813")).toBe("deepseek-v4-pro-0813");
+    expect(canonicalMachineKey("DeepSeek-V4-Pro")).toBe("deepseek-v4-pro");
+    expect(modelLabel("DeepSeek-V4-Flash-0731")).toBe("DeepSeek V4 Flash 0731");
+    expect(modelLabel("DeepSeek-V4-Pro-0813")).toBe("DeepSeek V4 Pro 0813");
+    expect(modelFamily("DeepSeek-V4-Flash-0731")).toBe("DeepSeek");
+    expect(modelFamily("DeepSeek-V4-Pro-0813")).toBe("DeepSeek");
+  });
+
   test("resolves aliases to the canonical label, family, and machine key", () => {
     expect(modelLabel("Ox Alpha Free")).toBe("Ox Alpha");
     expect(modelFamily("Ox Alpha Free")).toBe("Stealth");
