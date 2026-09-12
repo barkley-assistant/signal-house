@@ -288,6 +288,9 @@
   font-size: 14px;
   color: var(--text-primary, #e2e8f0);
   word-break: break-word;
+  /* Every value in this grid is numeric (money included) — mono matches the
+     td.num cells the expanded row belongs to. */
+  font-family: var(--font-mono);
 }
 .model-row__detail-stat--eff .model-row__detail-value {
   color: var(--info, #38bdf8);
@@ -321,11 +324,15 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   white-space: nowrap;
+  /* Numbers (incl. the per-source cost) go mono like the rest of the panel's
+     numerics; the source name opts back out below. */
+  font-family: var(--font-mono);
 }
 .model-row__source-name {
   color: var(--text-primary, #e2e8f0);
   font-weight: 600;
   letter-spacing: 0.03em;
+  font-family: var(--font-body);
 }
 .model-row__source strong {
   color: var(--text-primary, #e2e8f0);

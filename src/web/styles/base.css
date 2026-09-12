@@ -207,6 +207,12 @@ button.primary {
 .mono {
   font-family: var(--font-mono);
 }
+/* Money — ONE typeface wherever a dollar figure appears (design-system §3):
+   mono, matching .big-number and td.num. Used by HTML contexts including
+   ECharts tooltips (HTML renderMode attaches to the DOM, so page CSS applies). */
+.money {
+  font-family: var(--font-mono);
+}
 .big-number {
   font-family: var(--font-mono);
   font-weight: 700;

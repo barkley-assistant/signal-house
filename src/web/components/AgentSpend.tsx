@@ -72,7 +72,7 @@ export function AgentSpend() {
               <span className="kpi-tile__label">Cache</span>
               <span className="spend-hero__amount">{hitRateDisplay}</span>
               <span className="kpi-caption">
-                saved {savedAmount} at model input rates
+                saved <span className="money">{savedAmount}</span> at model input rates
               </span>
             </motion.div>
             <motion.div
@@ -264,7 +264,10 @@ function DailyUsageChart() {
             });
             const rows = arr
               .filter((p) => p.value !== null)
-              .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.startsWith("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
+              .map((p) => {
+                const isCost = p.seriesName.startsWith("Cost");
+                return `${p.marker} ${p.seriesName}: <b${isCost ? ' class="money"' : ""} style="color:#e2e8f0">${isCost ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`;
+              });
             return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
           },
         },
@@ -285,7 +288,7 @@ function DailyUsageChart() {
             type: "value",
             min: 0,
             max: yMaxCost,
-            axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `$${Math.round(v)}` },
+            axisLabel: { color: "#64748b", fontSize: 10, fontFamily: '"JetBrains Mono", monospace', formatter: (v: number) => `$${Math.round(v)}` },
             splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
           },
           {
@@ -295,6 +298,7 @@ function DailyUsageChart() {
             axisLabel: {
               color: "#64748b",
               fontSize: 10,
+              fontFamily: '"JetBrains Mono", monospace',
               formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
             },
             splitLine: { show: false },
@@ -481,7 +485,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           type: "value",
           min: 0,
           max: costPeak,
-          axisLabel: { color: "#64748b", fontSize: 9, formatter: (v: number) => `$${Math.round(v * 100) / 100}` },
+          axisLabel: { color: "#64748b", fontSize: 9, fontFamily: '"JetBrains Mono", monospace', formatter: (v: number) => `$${Math.round(v * 100) / 100}` },
           splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
         },
         {
@@ -491,6 +495,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           axisLabel: {
             color: "#64748b",
             fontSize: 9,
+            fontFamily: '"JetBrains Mono", monospace',
             formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
           },
           splitLine: { show: false },
