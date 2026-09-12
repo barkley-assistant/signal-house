@@ -89,7 +89,7 @@ export interface Aggregates {
   window: { start: string; end: string; days: number };
   throughput: { issuesOpened: number; issuesClosed: number; prsCreated: number; prsMerged: number; totalCommits: number } | null;
   cycleTime: { avgSeconds: number | null; medianSeconds: number | null; p95Seconds: number | null; sampleSize: number } | null;
-  ci: { totalRuns: number; passCount: number; failCount: number; passRate: number | null } | null;
+  ci: { totalRuns: number; passCount: number; failCount: number; otherCount: number; passRate: number | null } | null;
   staleWork: { staleIssues: number; stalePrs: number; thresholdDays: number } | null;
   usage: UsageAggregate | null;
 }
@@ -140,16 +140,28 @@ export function computeAggregates(states: PersistedState[], config: RuntimeConfi
         }
       : null;
 
-  // CI — workflow runs inside the window.
+  // CI — workflow runs inside the window. Every run is accounted for:
+  // pass + fail + other === totalRuns, always. GitHub conclusions beyond
+  // success/failure (skipped, cancelled, neutral, timed_out, startup_failure,
+  // stale, plus in-flight runs with conclusion null) land in otherCount —
+  // "unknown stays unknown" forbids silently dropping runs from the caption
+  // arithmetic. Subtraction (not enumeration) because the collector passes
+  // arbitrary conclusion strings through; subtraction is total by construction.
   const runs = ghRuns.filter((w) => inWindow(w.createdAt));
   const passCount = runs.filter((w) => w.conclusion === "success").length;
   const failCount = runs.filter((w) => w.conclusion === "failure").length;
+  const otherCount = runs.length - passCount - failCount;
   const ci =
     runs.length > 0
       ? {
           totalRuns: runs.length,
           passCount,
           failCount,
+          otherCount,
+          // Terminal-only denominator: skipped/cancelled runs are not health
+          // failures (GitHub required-check semantics), and the per-day
+          // delivery chart computes the same rate from terminal runs only —
+          // the window headline and the daily bars must agree.
           passRate: passCount + failCount > 0 ? passCount / (passCount + failCount) : null,
         }
       : null;

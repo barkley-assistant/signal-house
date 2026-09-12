@@ -40,7 +40,8 @@ export interface StatePayload {
   summary: {
     throughput: { issuesOpened: number; issuesClosed: number; prsCreated: number; prsMerged: number; totalCommits: number } | null;
     cycleTime: { avgSeconds: number | null; medianSeconds: number | null; p95Seconds: number | null; sampleSize: number } | null;
-    ci: { totalRuns: number; passCount: number; failCount: number; passRate: number | null } | null;
+    /** otherCount: runs neither pass nor fail (skipped/cancelled/in-flight) — keeps caption arithmetic total. */
+    ci: { totalRuns: number; passCount: number; failCount: number; otherCount: number; passRate: number | null } | null;
     staleWork: { staleIssues: number; stalePrs: number; thresholdDays: number } | null;
     costAndTokens: {
       cost: number | null;

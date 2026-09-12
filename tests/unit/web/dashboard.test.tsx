@@ -100,7 +100,7 @@ describe("HealthStrip", () => {
       summary: {
         throughput: { issuesOpened: 3, issuesClosed: 5, prsCreated: 2, prsMerged: 4, totalCommits: 120 },
         cycleTime: { avgSeconds: 600, medianSeconds: 540, p95Seconds: 900, sampleSize: 10 },
-        ci: { totalRuns: 50, passCount: 45, failCount: 5, passRate: 0.9 },
+        ci: { totalRuns: 50, passCount: 45, failCount: 5, otherCount: 0, passRate: 0.9 },
         staleWork: { staleIssues: 1, stalePrs: 2, thresholdDays: 14 },
         costAndTokens: { cost: 123.45, tokens: 5_000_000, costPerHour: 0.18, tokensPerHour: 6944 },
       },
@@ -116,6 +116,36 @@ describe("HealthStrip", () => {
     render(<HealthStrip state={state} />);
     expect(screen.getByText("90%")).toBeTruthy();
     expect(screen.getAllByText("$0.18").length).toBeGreaterThan(0);
+  });
+
+  test("CI caption accounts for non-terminal runs when present", () => {
+    const state = emptyState({
+      summary: {
+        throughput: null,
+        cycleTime: null,
+        ci: { totalRuns: 57, passCount: 45, failCount: 5, otherCount: 7, passRate: 0.9 },
+        staleWork: null,
+        costAndTokens: null,
+      },
+      usage: null,
+    });
+    render(<HealthStrip state={state} />);
+    expect(screen.getByText("45 pass · 5 fail · 7 other · 57 runs")).toBeTruthy();
+  });
+
+  test("CI caption omits the other segment when it is zero", () => {
+    const state = emptyState({
+      summary: {
+        throughput: null,
+        cycleTime: null,
+        ci: { totalRuns: 50, passCount: 45, failCount: 5, otherCount: 0, passRate: 0.9 },
+        staleWork: null,
+        costAndTokens: null,
+      },
+      usage: null,
+    });
+    render(<HealthStrip state={state} />);
+    expect(screen.getByText("45 pass · 5 fail · 50 runs")).toBeTruthy();
   });
 
   test("animates the entrance (staggered variants present)", () => {

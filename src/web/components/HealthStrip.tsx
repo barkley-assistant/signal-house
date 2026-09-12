@@ -58,7 +58,7 @@ export function HealthStrip({ state }: { state: StatePayload | null }) {
           CI Health
         </div>
         <div className="big-number">{ci ? (ci.passRate !== null ? `${Math.round(ci.passRate * 100)}%` : "—") : "—"}</div>
-        <div className="kpi-caption">{ci ? `${ci.passCount} pass · ${ci.failCount} fail · ${ci.totalRuns} runs` : "No CI runs"}</div>
+        <div className="kpi-caption">{ci ? `${ci.passCount} pass · ${ci.failCount} fail${ci.otherCount > 0 ? ` · ${ci.otherCount} other` : ""} · ${ci.totalRuns} runs` : "No CI runs"}</div>
       </motion.div>
 
       <motion.div className="kpi-tile" variants={item}>

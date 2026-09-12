@@ -182,6 +182,57 @@ describe("computeAggregates windowing", () => {
   });
 });
 
+describe("CI conclusion accounting", () => {
+  const day = (daysAgo: number): string => utcDaysAgo(daysAgo);
+
+  /** Github fixture: one public repo, one run per conclusion value, all in-window. */
+  function ghStateWithRuns(conclusions: Array<string | null>): PersistedState {
+    const data = emptySourceData();
+    data.repositories = [{ repoKey: "github:r", name: "r", localPath: null, remoteUrl: null, githubOwner: "r", githubRepo: "r", source: "github", isPrivate: false, present: true, lastSeenAt: null }];
+    data.workflowRuns = conclusions.map((conclusion, i) => ({
+      id: `w${i}`,
+      name: "ci",
+      status: conclusion === null ? "in_progress" : "completed",
+      conclusion,
+      createdAt: day(1),
+      completedAt: conclusion === null ? null : day(1),
+      headSha: `s${i}`,
+      repo: "r",
+      repoKey: "github:r",
+      branch: "main",
+      workflowName: "ci",
+      url: "",
+    }));
+    return state("github", data);
+  }
+
+  test("pass + fail + other === totalRuns: skipped/cancelled/null runs accounted, not dropped", () => {
+    const s = ghStateWithRuns(["success", "failure", "skipped", "cancelled", "neutral", "timed_out", null]);
+    const a = computeAggregates([s], config, 7);
+    expect(a.ci!.totalRuns).toBe(7);
+    expect(a.ci!.passCount).toBe(1);
+    expect(a.ci!.failCount).toBe(1);
+    expect(a.ci!.otherCount).toBe(5);
+    expect(a.ci!.passCount + a.ci!.failCount + a.ci!.otherCount).toBe(a.ci!.totalRuns);
+  });
+
+  test("passRate stays terminal-only (pass / (pass + fail)) when others are present", () => {
+    const s = ghStateWithRuns(["success", "skipped", "cancelled"]);
+    const a = computeAggregates([s], config, 7);
+    // 1 pass of 1 terminal run — the 2 skipped/cancelled runs must not
+    // enter the denominator.
+    expect(a.ci!.passRate).toBeCloseTo(1, 5);
+  });
+
+  test("all-non-terminal window: ci non-null, passRate null (unknown, not 0%), otherCount === totalRuns", () => {
+    const s = ghStateWithRuns(["skipped", null, "cancelled"]);
+    const a = computeAggregates([s], config, 7);
+    expect(a.ci).not.toBeNull();
+    expect(a.ci!.passRate).toBeNull();
+    expect(a.ci!.otherCount).toBe(3);
+  });
+});
+
 describe("mergeModelRows cache preservation", () => {
   test("preserves cacheReadTokens and source discrimination", () => {
     const rows = [

@@ -166,6 +166,11 @@ titles. Cards carry an `aria-label` describing their content.
   error/neutral)
 - `.big-number` — JetBrains Mono 700, the star of the show
 - `.kpi-caption` — secondary context line
+- Caption arithmetic is total: `pass · fail · other · runs`, where `other`
+  (skipped/cancelled/in-flight) renders only when non-zero —
+  `pass + fail + other === runs` always. The Cost & Tokens value is a
+  rate and carries an explicit `/hr` unit; its label uses the neutral dot
+  (no status claimed — blue is reserved for active/urgent per §1).
 
 ### Agent Spend overview
 
