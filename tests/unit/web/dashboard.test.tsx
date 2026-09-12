@@ -113,9 +113,16 @@ describe("HealthStrip", () => {
         byModel: [],
       },
     });
-    render(<HealthStrip state={state} />);
+    const { container } = render(<HealthStrip state={state} />);
     expect(screen.getByText("90%")).toBeTruthy();
-    expect(screen.getAllByText("$0.18").length).toBeGreaterThan(0);
+    // The value renders as "$0.18" + a nested unit span ("/hr") — the
+    // default matcher only reads direct text nodes, so match on textContent.
+    expect(
+      screen.getAllByText((_, el) => el?.textContent === "$0.18/hr").length,
+    ).toBeGreaterThan(0);
+    // The 5th tile's label carries the neutral dot (no status claimed), so
+    // its label aligns with the other four.
+    expect(container.querySelector(".kpi-tile--cost-tokens .dot--neutral")).not.toBeNull();
   });
 
   test("CI caption accounts for non-terminal runs when present", () => {

@@ -68,8 +68,25 @@ export function HealthStrip({ state }: { state: StatePayload | null }) {
       </motion.div>
 
       <motion.div className="kpi-tile kpi-tile--cost-tokens" variants={item}>
-        <div className="kpi-tile__label">Cost &amp; Tokens</div>
-        <div className="big-number">{none(ct?.costPerHour) ? "—" : formatCost(ct!.costPerHour!)}</div>
+        <div className="kpi-tile__label">
+          {/* Neutral dot: this tile claims no pass/fail status, but the label
+              needs the dot for alignment with the other four — blue is
+              reserved for active/urgent (design-system §1), so grey it is. */}
+          <span className="dot dot--neutral" />
+          Cost &amp; Tokens
+        </div>
+        <div className="big-number">
+          {/* A rate, not a total — the unit suffix is the only thing
+              separating it from the four absolute-value tiles above. */}
+          {none(ct?.costPerHour) ? (
+            "—"
+          ) : (
+            <>
+              {formatCost(ct!.costPerHour!)}
+              <span className="big-number__unit">/hr</span>
+            </>
+          )}
+        </div>
         <div className="kpi-caption">{none(ct?.tokensPerHour) ? "No usage telemetry" : `${formatCompact(ct!.tokensPerHour!)} tok/hr`}</div>
       </motion.div>
     </motion.div>

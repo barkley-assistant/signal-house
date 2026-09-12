@@ -213,6 +213,14 @@ button.primary {
   font-size: 34px;
   line-height: 1.1;
 }
+/* Unit suffix inside a big number (the "/hr" rate marker). Smaller and
+   muted so the magnitude stays the star; mono inherited from .big-number. */
+.big-number__unit {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
 .kpi-caption {
   color: var(--text-muted);
   font-size: 12px;
