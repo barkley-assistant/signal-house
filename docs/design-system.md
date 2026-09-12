@@ -81,8 +81,8 @@ tired**. It should feel calm, dense, and honest:
 - **Instrument Sans** (body, `--font-body`), 400–500 weight.
 - **JetBrains Mono** (numbers + code, `--font-mono`), 400–700 weight. Every
   money value renders in JetBrains Mono — KPI tiles, hero, ledger, tables,
-  detail panes, chart tooltips, and cost axes alike. One typeface for money,
-  everywhere.
+  detail panes, both chart tooltips (daily + model-detail), and cost axes
+  alike. One typeface for money, everywhere.
 
 Fonts load via `@import` in `base.css` (Google Fonts + Fontshare);
 they are runtime assets like any other.

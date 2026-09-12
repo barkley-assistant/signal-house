@@ -468,7 +468,10 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           });
           const rows = arr
             .filter((p) => p.value !== null)
-            .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${p.seriesName.startsWith("Cost") ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`);
+            .map((p) => {
+              const isCost = p.seriesName.startsWith("Cost");
+              return `${p.marker} ${p.seriesName}: <b${isCost ? ' class="money"' : ""} style="color:#e2e8f0">${isCost ? formatCost(p.value as number) : formatCompact(p.value as number)}</b>`;
+            });
           return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
         },
       },
