@@ -106,18 +106,19 @@
 /* Attention queue + agent spend are stacked full-width sections
    (operator preference: queue under the spend card). */
 
-/* Agent Spend overview — single row, three regions. Two macro tiles on the
-   left (Total cost 25%, Cache 25%). Tile borders removed so the
-   stats sit in the page rather than as boxed cards. */
+/* Agent Spend overview — three equal tiles in a single row: Total cost,
+   Cache, and Cost / merged PR. Tile borders removed so the stats sit in
+   the page rather than as boxed cards. */
 .spend-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
   margin: 16px 0;
 }
 .spend-overview__total,
-.spend-overview__cache {
+.spend-overview__cache,
+.spend-overview__delivery {
   padding: 14px 0;
   display: flex;
   flex-direction: column;
@@ -127,7 +128,8 @@
 .spend-overview__total {
   gap: 6px;
 }
-.spend-overview__cache {
+.spend-overview__cache,
+.spend-overview__delivery {
   justify-content: center;
 }
 .spend-hero__amount {

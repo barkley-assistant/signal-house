@@ -46,6 +46,15 @@ export function AgentSpend() {
   const hasCacheActivity = (usage?.cacheReadTokens ?? 0) > 0;
   const savedAmount = useCountUp(hasCacheActivity && Number.isFinite(usage?.cacheSavings) ? usage?.cacheSavings ?? 0 : 0);
   const hitRateDisplay = hasCacheActivity ? formatPercent(usage?.cacheHitRate) : "—";
+  const throughput = state?.summary.throughput ?? null;
+  const prsMerged = throughput?.prsMerged ?? null;
+  // The rate only exists when cost is known AND the denominator is positive:
+  // a missing cost or a zero-PR window is "no data" ("—"), never $0.00.
+  // A known $0 spend over real PRs IS $0.00 — that case falls through.
+  const costPerPr =
+    usage?.totalCost != null && prsMerged != null && prsMerged > 0
+      ? usage.totalCost / prsMerged
+      : null;
 
   return (
     <section className="card" aria-label="Agent spend">
@@ -74,6 +83,22 @@ export function AgentSpend() {
               <span className="spend-hero__amount">{hitRateDisplay}</span>
               <span className="kpi-caption">
                 saved <span className="money">{savedAmount}</span> at model input rates
+              </span>
+            </motion.div>
+            <motion.div
+              className="spend-overview__delivery"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.25 }}
+            >
+              <span className="kpi-tile__label">Cost / merged PR</span>
+              <span className="spend-hero__amount">
+                {costPerPr === null ? "—" : formatCostHero(costPerPr)}
+              </span>
+              <span className="kpi-caption">
+                {throughput
+                  ? `${formatNumber(throughput.prsMerged)} merged PRs · ${formatNumber(throughput.totalCommits)} commits`
+                  : "No GitHub data"}
               </span>
             </motion.div>
           </div>

@@ -407,6 +407,96 @@ describe("AgentSpend", () => {
     expect(screen.queryByText("$215.95")).toBeNull();
   });
 
+  test("cost per merged PR tile divides window cost by merged PRs", () => {
+    useDash.setState({
+      state: emptyState({
+        summary: {
+          throughput: { issuesOpened: 3, issuesClosed: 5, prsCreated: 2, prsMerged: 4, totalCommits: 120 },
+          cycleTime: null,
+          ci: null,
+          staleWork: null,
+          costAndTokens: null,
+        },
+        usage: {
+          totalSessions: 1597,
+          totalMessages: 1000,
+          totalTokens: 5420000000,
+          totalCost: 515.95,
+          bySource: { opencode: { sessions: 900, cost: 300, tokens: 3000000000 } },
+          byModel: [],
+        },
+      }),
+    });
+    const { container } = render(<AgentSpend />);
+    const tile = container.querySelector(".spend-overview__delivery");
+    expect(tile).toBeTruthy();
+    expect(tile?.textContent).toContain("Cost / merged PR");
+    // 515.95 / 4 = 128.9875 → formatCostHero → "$128.99"
+    expect(tile?.textContent).toContain("$128.99");
+    expect(tile?.textContent).toContain("4 merged PRs · 120 commits");
+  });
+
+  test("cost per merged PR renders em-dash on missing inputs, never zero", () => {
+    const renderTile = (state: StatePayload) => {
+      cleanup();
+      useDash.setState({ state });
+      const { container } = render(<AgentSpend />);
+      const tile = container.querySelector(".spend-overview__delivery");
+      expect(tile).toBeTruthy();
+      return tile?.textContent ?? "";
+    };
+    // Scope is the tile element, never the container: the cache tile
+    // legitimately renders "$0.00" when there is no cache activity, so a
+    // container-wide "not $0.00" would fail for an unrelated reason.
+    const assertDashFigure = (tileText: string) => {
+      expect(tileText).toContain("—");
+      expect(tileText).not.toContain("$0.00");
+      expect(tileText).not.toContain("NaN");
+      expect(tileText).not.toContain("Infinity");
+    };
+    const usage = {
+      totalSessions: 1597,
+      totalMessages: 1000,
+      totalTokens: 5420000000,
+      totalCost: 515.95,
+      bySource: { opencode: { sessions: 900, cost: 300, tokens: 3000000000 } },
+      byModel: [],
+    };
+    // throughput null → "No GitHub data" caption, "—" figure.
+    const noThroughputText = renderTile(emptyState({ usage }));
+    assertDashFigure(noThroughputText);
+    expect(noThroughputText).toContain("No GitHub data");
+    // zero merged PRs → "—" figure, denominator still shown in caption.
+    const zeroPrText = renderTile(
+      emptyState({
+        summary: {
+          throughput: { issuesOpened: 3, issuesClosed: 5, prsCreated: 2, prsMerged: 0, totalCommits: 120 },
+          cycleTime: null,
+          ci: null,
+          staleWork: null,
+          costAndTokens: null,
+        },
+        usage,
+      }),
+    );
+    assertDashFigure(zeroPrText);
+    expect(zeroPrText).toContain("0 merged PRs");
+    // cost unknown → "—" figure, never "$0.00".
+    const unknownCostText = renderTile(
+      emptyState({
+        summary: {
+          throughput: { issuesOpened: 3, issuesClosed: 5, prsCreated: 2, prsMerged: 4, totalCommits: 120 },
+          cycleTime: null,
+          ci: null,
+          staleWork: null,
+          costAndTokens: null,
+        },
+        usage: { ...usage, totalCost: null },
+      }),
+    );
+    assertDashFigure(unknownCostText);
+  });
+
   test("shows empty state when usage is absent", () => {
     useDash.setState({ state: emptyState() });
     render(<AgentSpend />);
