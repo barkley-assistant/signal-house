@@ -1,8 +1,9 @@
 /**
  * Agent Spend card — consolidated cost/tokens view (planning 03 §Card, decision #10).
- * A single panel: macro totals in a hero on the left, per-source breakdown
- * (OpenCode / Hermes) as a ledger on the right, then the stacked daily chart
- * and by-model table. Sources without cost telemetry render "—", never 0.
+ * A single panel: an overview of three tiles (Total cost hero, Cache, and
+ * Cost / merged PR), then the stacked daily chart and by-model table.
+ * Per-source attribution lives in each by-model row's expandable detail,
+ * not the overview. Unknown values render "—", never 0.
  */
 
 import { useEffect, useRef, useState, Fragment } from "react";
@@ -75,18 +76,6 @@ export function AgentSpend() {
                 saved <span className="money">{savedAmount}</span> at model input rates
               </span>
             </motion.div>
-            <motion.div
-              className="spend-sources"
-              initial="hidden"
-              animate="visible"
-              variants={{
-                hidden: {},
-                visible: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } },
-              }}
-            >
-              <SpendSource label="OpenCode" source="opencode" usage={usage} />
-              <SpendSource label="Hermes" source="hermes" usage={usage} />
-            </motion.div>
           </div>
           <hr className="spend-divider" />
           <DailyUsageChart />
@@ -94,34 +83,6 @@ export function AgentSpend() {
         </>
       )}
     </section>
-  );
-}
-
-type UsageLike = NonNullable<ReturnType<typeof useDash.getState>["state"]>["usage"];
-
-/** One agent row in the right-hand ledger — title + substats stack on the
- *  left (vertically centered), cost figure anchored right (vertically
- *  centered against the stack). */
-function SpendSource({ label, source, usage }: { label: string; source: string; usage: UsageLike }) {
-  const src = usage?.bySource[source as keyof typeof usage.bySource];
-  return (
-    <motion.div
-      className="spend-source-row"
-      variants={{
-        hidden: { opacity: 0, y: 6 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
-      }}
-    >
-      <div className="spend-source-row__info">
-        <span className="kpi-tile__label heading">{label}</span>
-        <span className="spend-source-row__meta">
-          {src
-            ? `${formatNumber(src.sessions)} sessions · ${formatCompact(src.tokens)} tokens · ${formatCompact(src.cacheReadTokens)} cached`
-            : "No data"}
-        </span>
-      </div>
-      <span className="big-number small">{src ? formatCost(src.cost) : "—"}</span>
-    </motion.div>
   );
 }
 

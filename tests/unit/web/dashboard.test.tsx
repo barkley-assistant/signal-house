@@ -394,56 +394,17 @@ describe("AgentSpend", () => {
     expect(emptyCacheStat?.textContent).not.toContain("null");
   });
 
-  test("ledger rows show per-source cache_read substat", () => {
-    useDash.setState({
-      state: usageState({
-        bySource: {
-          opencode: { sessions: 900, cost: 300, tokens: 3000000000, cacheReadTokens: 1234567 },
-          hermes: { sessions: 697, cost: 215.95, tokens: 2420000000, cacheReadTokens: 0 },
-        },
-      }),
-    });
-    const { container } = render(<AgentSpend />);
-    const metas = container.querySelectorAll(".spend-sources .spend-source-row__meta");
-    expect(metas).toHaveLength(2);
-    expect(metas[0]?.textContent).toContain(`${formatCompact(1234567)} cached`);
-    expect(metas[1]?.textContent).toContain("0 cached");
-
-    cleanup();
-    useDash.setState({
-      state: usageState({
-        bySource: {
-          opencode: { sessions: 900, cost: 300, tokens: 3000000000, cacheReadTokens: 1234567 },
-        },
-      }),
-    });
-    const { container: missingSourceContainer } = render(<AgentSpend />);
-    const missingSourceMeta = missingSourceContainer.querySelectorAll(".spend-sources .spend-source-row__meta")[1];
-    expect(missingSourceMeta?.textContent).toBe("No data");
-    expect(missingSourceMeta?.textContent).not.toContain("cache_read");
-  });
-
-  test("renders both agent source rows", () => {
+  test("per-source ledger rows are removed from the panel body", () => {
     useDash.setState({ state: usageState() });
-    render(<AgentSpend />);
-    expect(screen.getByText("OpenCode")).toBeTruthy();
-    expect(screen.getByText("Hermes")).toBeTruthy();
-    // formatCost() always emits two decimals ($300.00), matching the hero + ledger.
-    expect(screen.getByText("$300.00")).toBeTruthy();
-    expect(screen.getByText("$215.95")).toBeTruthy();
-  });
-
-  test("unknown source cost renders em-dash, never zero", () => {
-    useDash.setState({
-      state: usageState({
-        bySource: {
-          opencode: { sessions: 0, cost: null, tokens: null },
-          hermes: { sessions: 0, cost: null, tokens: null },
-        },
-      }),
-    });
-    render(<AgentSpend />);
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    const { container } = render(<AgentSpend />);
+    expect(container.querySelector(".spend-sources")).toBeNull();
+    expect(container.querySelector(".spend-source-row")).toBeNull();
+    expect(screen.queryByText("OpenCode")).toBeNull();
+    expect(screen.queryByText("Hermes")).toBeNull();
+    // The per-source cost figures no longer render anywhere in the panel
+    // (byModel is empty in this fixture, so no detail block carries them).
+    expect(screen.queryByText("$300.00")).toBeNull();
+    expect(screen.queryByText("$215.95")).toBeNull();
   });
 
   test("shows empty state when usage is absent", () => {
@@ -696,6 +657,52 @@ describe("ModelTable click-to-expand (mobile-only behaviour, but DOM lives at al
     expect(detailText).toMatch(/\$[/ ]?1m/i);
     // The first row is now aria-expanded.
     expect(firstRow.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("expanded row detail renders the BY SOURCE per-source block", () => {
+    useDash.setState({
+      state: emptyState({
+        usage: {
+          totalSessions: 5,
+          totalMessages: 4,
+          totalTokens: 500,
+          totalCost: 4,
+          bySource: { opencode: { sessions: 5, cost: 4, tokens: 500 } },
+          byModel: [
+            {
+              model: "Alpha",
+              family: null,
+              sessions: 5,
+              cost: 4,
+              tokens: 500,
+              cacheReadTokens: 100,
+              cacheHitRate: 0.25,
+              cacheSavings: 0.05,
+              effPerM: 3,
+              bySource: {
+                opencode: {
+                  cacheReadTokens: 100,
+                  cacheSavings: 0.05,
+                  inputTokens: 400,
+                  outputTokens: 100,
+                  cost: 4,
+                },
+              },
+            },
+          ],
+        },
+      }),
+    });
+    render(<AgentSpend />);
+    const firstRow = document.querySelectorAll(".model-row")[0] as HTMLElement;
+    fireEvent.click(firstRow);
+    const detail = document.querySelector(".model-row__detail-sources");
+    expect(detail).toBeTruthy();
+    const detailText = detail?.textContent ?? "";
+    expect(detailText).toContain("By source");
+    expect(detailText).toContain("opencode");
+    expect(detailText).toContain("400 in");
+    expect(detailText).toContain("$4.00");
   });
 
   test("clicking a second row collapses the first (single-expand semantics)", () => {

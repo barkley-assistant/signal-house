@@ -107,8 +107,7 @@
    (operator preference: queue under the spend card). */
 
 /* Agent Spend overview — single row, three regions. Two macro tiles on the
-   left (Total cost 25%, Cache 25%) and the per-source ledger filling the
-   remaining half (Harness/Agent stats 50%). Tile borders removed so the
+   left (Total cost 25%, Cache 25%). Tile borders removed so the
    stats sit in the page rather than as boxed cards. */
 .spend-overview {
   display: grid;
@@ -156,36 +155,6 @@
 .spend-hero__dot {
   color: var(--divider);
 }
-/* Micro: per-source ledger on the right — agents separated by dividers,
-   not more boxes. Cost up front, sessions·tokens muted underneath. */
-.spend-sources {
-  display: flex;
-  flex-direction: column;
-}
-.spend-source-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 0;
-}
-.spend-source-row + .spend-source-row {
-  border-top: 1px solid var(--divider);
-}
-/* Left stack: label over substats, vertically centered as a block. */
-.spend-source-row__info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.spend-source-row__meta {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 @media (max-width: 900px) {
   /* On tablets the three-column overview collapses to single column so each
      region gets full width; the hero figure stays at desktop size. */
@@ -202,30 +171,12 @@
     gap: 6px 10px;
     font-size: 13px;
   }
-  .spend-source-row__meta {
-    white-space: normal;
-    max-width: none;
-  }
-  .spend-source-row {
-    padding: 12px 0;
-    gap: 12px;
-  }
-  .spend-source-row .big-number.small {
-    font-size: 18px;
-  }
 }
-/* Separator between the overview (macro + micro) and the chart below. */
+/* Separator between the overview tiles and the chart below. */
 .spend-divider {
   border: none;
   border-top: 1px solid var(--divider);
   margin: 4px 0 0;
-}
-.big-number.small {
-  font-size: 20px;
-}
-.kpi-tile__label.heading {
-  text-transform: none;
-  letter-spacing: 0;
 }
 
 /* Model table. */
