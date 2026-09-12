@@ -80,7 +80,7 @@ tired**. It should feel calm, dense, and honest:
 - **Satoshi** (headings, `--font-heading`), 600–700 weight.
 - **Instrument Sans** (body, `--font-body`), 400–500 weight.
 - **JetBrains Mono** (numbers + code, `--font-mono`), 400–700 weight. Every
-  money value renders in JetBrains Mono — KPI tiles, hero, ledger, tables,
+  money value renders in JetBrains Mono — KPI tiles, hero, tables,
   detail panes, both chart tooltips (daily + model-detail), and cost axes
   alike. One typeface for money, everywhere.
 
@@ -177,12 +177,15 @@ titles. Cards carry an `aria-label` describing their content.
 
 ### Agent Spend overview
 
-`.spend-overview` → a single two-region panel: the **macro hero** on the left
-(`.spend-hero`: 56px mono total cost, then muted "Sessions · Tokens" beneath
-it, dot-separated) and the **micro ledger** on the right (`.spend-sources` —
-one `.spend-source-row` per agent, cost up front plus sessions·tokens muted,
-agents separated by a divider rather than nested boxes). Collapses to one
-column below 700px.
+`.spend-overview` → a single three-tile panel, equal thirds on desktop: the
+**Total cost** hero (`.spend-overview__total`: mono total cost in
+`clamp(24px, 5vw, 56px)`, then muted "Sessions · Tokens" beneath, dot-
+separated), the **Cache** tile (`.spend-overview__cache`: hit rate + saved
+amount), and the **Cost / merged PR** tile (`.spend-overview__delivery`:
+window spend ÷ merged PRs — a delivery-linkage stat computed client-side,
+rendering "—" when throughput or cost is unknown). Collapses to one column
+below 700px. Per-source attribution lives in each by-model row's expandable
+detail, not the overview.
 
 ### Tables
 
