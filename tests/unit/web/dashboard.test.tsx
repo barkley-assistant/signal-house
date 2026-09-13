@@ -46,6 +46,7 @@ function emptyState(overrides: Partial<StatePayload> = {}): StatePayload {
       costAndTokens: null,
     },
     usage: null,
+    lifetime: null,
     attention: [],
     status: {
       refresh: {

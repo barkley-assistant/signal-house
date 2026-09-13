@@ -18,6 +18,7 @@ import { resolvePrivacyMap, isRepoVisible, uncoveredRepos } from "../privacy/pri
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
 import { queryUsageAggregate } from "../metrics/usage-history";
+import { computeLifetimeStats, type LifetimeStats } from "../metrics/lifetime";
 import type { RefreshState } from "../shared/types";
 
 export interface AttentionItem {
@@ -55,6 +56,9 @@ export interface StatePayload {
     } | null;
   };
   usage: UsageAggregate | null;
+  /** Window-less "to date" aggregates over all retained daily_metrics
+   *  history (bounded by retention — never all-time). Null = no rows. */
+  lifetime: LifetimeStats | null;
   attention: AttentionItem[];
   status: {
     refresh: RefreshState;
@@ -208,6 +212,7 @@ export async function buildState(db: Database, config: RuntimeConfig, collectors
         : null,
     },
     usage,
+    lifetime: computeLifetimeStats(db, costOpts),
     attention: attention.slice(0, ATTENTION_LIMIT),
     status: {
       refresh: refreshState,

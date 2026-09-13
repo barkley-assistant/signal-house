@@ -77,7 +77,7 @@ describe("state contract", () => {
   test("returns the documented top-level shape", async () => {
     const res = await authed("/api/state");
     const body = (await res.json()) as Record<string, unknown>;
-    expect(Object.keys(body).sort()).toEqual(["attention", "status", "summary", "usage", "window"]);
+    expect(Object.keys(body).sort()).toEqual(["attention", "lifetime", "status", "summary", "usage", "window"]);
     expect(body.window).toHaveProperty("start");
     expect(body.window).toHaveProperty("end");
     expect(body.status).toHaveProperty("refresh");

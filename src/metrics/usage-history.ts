@@ -141,17 +141,30 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
 
 /** Per-model rows from the accumulated daily_metrics model history, merged
  *  across sources into one row per normalized model (labels/families from
- *  the curated map, "unknown" dropped, sessions desc). */
-function queryModelRows(db: Database, from: string, to: string, costOpts: CostEstimationOpts): UsageAggregate["byModel"] {
+ *  the curated map, "unknown" dropped, sessions desc).
+ *  `from`/`to` null = unbounded — the lifetime aggregate reuses this exact
+ *  pivot + merge over the full retained history, so "most-used model" can
+ *  never disagree with the by-model table's grouping. */
+export function queryModelRows(db: Database, from: string | null, to: string | null, costOpts: CostEstimationOpts): UsageAggregate["byModel"] {
+  // Optional date predicates — same dynamic-clause style as queryDailyMetrics.
+  const clauses = ["source IN ('opencode', 'hermes')", "metric LIKE 'model.%'"];
+  const params: string[] = [];
+  if (from !== null) {
+    clauses.push("date >= ?");
+    params.push(from);
+  }
+  if (to !== null) {
+    clauses.push("date <= ?");
+    params.push(to);
+  }
   const rows = db
     .query(
       `SELECT source, json_extract(tags, '$.model') AS model, metric, SUM(value) AS value
        FROM daily_metrics
-       WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
-         AND metric LIKE 'model.%'
+       WHERE ${clauses.join(" AND ")}
        GROUP BY source, model, metric`,
     )
-    .all(from, to) as Array<{ source: string; model: string | null; metric: string; value: number | null }>;
+    .all(...params) as Array<{ source: string; model: string | null; metric: string; value: number | null }>;
 
   const byKey = new Map<string, {
     model: string;
