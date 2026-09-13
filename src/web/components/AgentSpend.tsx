@@ -1,6 +1,8 @@
 /**
  * Agent Spend card — consolidated cost/tokens view (planning 03 §Card, decision #10).
- * A single panel: an overview of two tiles (Total cost hero, Cache), a
+ * A single panel: a 2×2 overview (Total cost hero + Cache on top; Blended
+ * $/1M and Cost / session unit rates below, both client-side divisions of
+ * the window totals), a
  * Lifetime to-date stat block, then the stacked daily chart and by-model
  * table. Per-source attribution lives in each by-model row's expandable
  * detail, not the overview. Unknown values render "—", never 0.
@@ -12,6 +14,7 @@ import * as echarts from "echarts";
 import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint } from "../state/store";
 import type { WindowDays } from "../../shared/window";
 import type { LifetimeStats } from "../../metrics/lifetime";
+import type { UsageAggregate } from "../../orchestrator/aggregates";
 import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
@@ -50,6 +53,40 @@ function formatDay(day: string, withYear: boolean): string {
     month: "short",
     ...(withYear ? { year: "numeric" } : {}),
   });
+}
+
+/** Window cost after the synthetic-zero guard. The estimator pins
+ *  costSource:"unknown" rows to cost 0, so a window where some
+ *  token-bearing model is unpriced can total exactly 0 — that is
+ *  unknown spend, not free spend, and must read "—" like any other
+ *  unknown. Gated on total===0 so mixed payloads (real known cost > 0)
+ *  keep the hero's existing semantics: unknown rows contribute 0
+ *  silently. */
+function windowCost(usage: UsageAggregate): number | null {
+  const total = usage.totalCost;
+  if (total === null) return null;
+  if (total === 0 && usage.byModel.some((m) => m.costSource === "unknown" && (m.tokens ?? 0) > 0)) {
+    return null;
+  }
+  return total;
+}
+
+/** Blended $/1M — window cost per million tokens moved. Deliberately face
+ *  value across all five token terms, unlike the by-model $/1M column's
+ *  cache-discounted effective tokens; the cell caption states this so the
+ *  two figures can't read as a contradiction. */
+function blendedPerM(usage: UsageAggregate): number | null {
+  const cost = windowCost(usage);
+  const tokens = usage.totalTokens;
+  if (cost === null || tokens === null || tokens <= 0) return null;
+  return (cost / tokens) * 1_000_000;
+}
+
+/** Cost per session — the average price of one agent run in the window. */
+function costPerSession(usage: UsageAggregate): number | null {
+  const cost = windowCost(usage);
+  if (cost === null || usage.totalSessions <= 0) return null;
+  return cost / usage.totalSessions;
 }
 
 /** The "to date" stat lines under the overview tiles. Every number is
@@ -113,6 +150,8 @@ export function AgentSpend() {
   const hasCacheActivity = (usage?.cacheReadTokens ?? 0) > 0;
   const savedAmount = useCountUp(hasCacheActivity && Number.isFinite(usage?.cacheSavings) ? usage?.cacheSavings ?? 0 : 0);
   const hitRateDisplay = hasCacheActivity ? formatPercent(usage?.cacheHitRate) : "—";
+  const blended = usage !== null ? blendedPerM(usage) : null;
+  const perSession = usage !== null ? costPerSession(usage) : null;
 
   return (
     <section className="card" aria-label="Agent spend">
@@ -142,6 +181,25 @@ export function AgentSpend() {
               <span className="kpi-caption">
                 saved <span className="money">{savedAmount}</span> at model input rates
               </span>
+            </motion.div>
+            <motion.div
+              className="model-row__detail-stat spend-overview__stat"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+            >
+              <span className="model-row__detail-label">Blended $/1M</span>
+              <span className="model-row__detail-value">{formatEffPerM(blended)}</span>
+              <span className="kpi-caption">all tokens at face value</span>
+            </motion.div>
+            <motion.div
+              className="model-row__detail-stat spend-overview__stat"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+            >
+              <span className="model-row__detail-label">Cost / session</span>
+              <span className="model-row__detail-value">{formatCost(perSession)}</span>
             </motion.div>
           </div>
           <LifetimeBlock lifetime={lifetime} />

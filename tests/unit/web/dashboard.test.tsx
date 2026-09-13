@@ -477,12 +477,119 @@ describe("AgentSpend", () => {
     expect(byLabel("Top model")?.querySelector(".model-row__detail-value")?.textContent).toBe("—");
   });
 
+  test("renders blended $/1M and cost per session from the window totals", () => {
+    useDash.setState({ state: usageState() });
+    const { container } = render(<AgentSpend />);
+    const stats = [...container.querySelectorAll(".spend-overview__stat")];
+    expect(stats.length).toBe(2);
+    // DOM order matches JSX order: blended first, per-session second.
+    // 515.95 / 5.42B tokens × 1M = $0.095; 515.95 / 1597 sessions = $0.32
+    // (both verified against the formatters: formatEffPerM uses 3 decimals
+    // below $1, formatCost uses 2).
+    expect(stats[0].textContent).toContain("Blended $/1M");
+    expect(stats[0].textContent).toContain("$0.095");
+    // Caption is load-bearing: the by-model $/1M column discounts cache
+    // reads (effective tokens), the blended figure counts everything at
+    // face value — without the caption the two read as a contradiction.
+    expect(stats[0].textContent).toContain("all tokens at face value");
+    expect(stats[1].textContent).toContain("Cost / session");
+    expect(stats[1].textContent).toContain("$0.32");
+  });
+
+  test("unit rates render em-dash on unknown cost, never zero", () => {
+    useDash.setState({ state: usageState({ totalCost: null }) });
+    const { container } = render(<AgentSpend />);
+    const stats = [...container.querySelectorAll(".spend-overview__stat")];
+    expect(stats.length).toBe(2);
+    for (const cell of stats) {
+      expect(cell.textContent).toContain("—");
+      // "$0" catches both zero leaks ("$0.00", "$0.000") without tripping
+      // on the "Blended $/1M" label text.
+      expect(cell.textContent).not.toContain("$0");
+      expect(cell.textContent).not.toContain("NaN");
+    }
+  });
+
+  test("zero or missing denominators render em-dash, never NaN or Infinity", () => {
+    // totalTokens 0 → blended "—", per-session still real.
+    useDash.setState({ state: usageState({ totalTokens: 0 }) });
+    const { container } = render(<AgentSpend />);
+    let stats = [...container.querySelectorAll(".spend-overview__stat")];
+    expect(stats[0].textContent).toContain("—");
+    expect(stats[1].textContent).toContain("$0.32");
+
+    // totalSessions 0 → per-session "—", blended still real. The panel
+    // itself still renders: its empty-state guard requires sessions AND
+    // tokens AND cost to ALL be empty.
+    cleanup();
+    useDash.setState({ state: usageState({ totalSessions: 0 }) });
+    const { container: c2 } = render(<AgentSpend />);
+    stats = [...c2.querySelectorAll(".spend-overview__stat")];
+    expect(stats[0].textContent).toContain("$0.095");
+    expect(stats[1].textContent).toContain("—");
+
+    // totalTokens null (unknown token telemetry) → blended "—".
+    cleanup();
+    useDash.setState({ state: usageState({ totalTokens: null }) });
+    const { container: c3 } = render(<AgentSpend />);
+    stats = [...c3.querySelectorAll(".spend-overview__stat")];
+    expect(stats[0].textContent).toContain("—");
+    expect(stats[1].textContent).toContain("$0.32");
+  });
+
+  test("all-unknown model costs make the unit rates em-dash, not a confident $0", () => {
+    // The estimator pins costSource:"unknown" rows to cost 0, so a window
+    // where every token-bearing model is unpriced totals $0 — unknown
+    // spend, not free spend. The unit rates must say "—". (The hero keeps
+    // its pre-existing $0.00 behaviour in this case; fixing it is out of
+    // scope, so no hero assertion here.)
+    useDash.setState({
+      state: usageState({
+        totalCost: 0,
+        byModel: [
+          { model: "Mystery 1", family: null, sessions: 9, cost: 0, tokens: 900, costSource: "unknown", cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 },
+          { model: "Mystery 2", family: null, sessions: 7, cost: 0, tokens: 700, costSource: "unknown", cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 },
+        ],
+      }),
+    });
+    const { container } = render(<AgentSpend />);
+    const stats = [...container.querySelectorAll(".spend-overview__stat")];
+    expect(stats.length).toBe(2);
+    for (const cell of stats) {
+      expect(cell.textContent).toContain("—");
+      expect(cell.textContent).not.toContain("$0");
+    }
+
+    // Complement: one priced model makes the total non-zero again, so the
+    // guard must NOT fire — the unknown row contributes 0 silently
+    // (existing mixed-payload semantics, same as the hero) and the rates
+    // render real numbers.
+    cleanup();
+    useDash.setState({
+      state: usageState({
+        totalCost: 5,
+        totalTokens: 1_000_000,
+        totalSessions: 10,
+        byModel: [
+          { model: "Priced", family: null, sessions: 4, cost: 5, tokens: 100, costSource: "estimated", cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 },
+          { model: "Mystery", family: null, sessions: 6, cost: 0, tokens: 900, costSource: "unknown", cacheReadTokens: 0, cacheHitRate: 0, cacheSavings: 0 },
+        ],
+      }),
+    });
+    const { container: mixed } = render(<AgentSpend />);
+    const cells = [...mixed.querySelectorAll(".spend-overview__stat")];
+    // 5 / 1M tokens × 1M = $5.00; 5 / 10 sessions = $0.50.
+    expect(cells[0].textContent).toContain("$5.00");
+    expect(cells[1].textContent).toContain("$0.50");
+  });
+
   test("the cost per merged PR tile is gone", () => {
     useDash.setState({ state: usageState() });
     const { container } = render(<AgentSpend />);
     expect(container.querySelector(".spend-overview__delivery")).toBeNull();
     expect(screen.queryByText("Cost / merged PR")).toBeNull();
-    expect(container.querySelector(".spend-overview")!.childElementCount).toBe(2);
+    // Overview cluster: hero pair + the two unit-rate cells = 4 cells.
+    expect(container.querySelector(".spend-overview")!.childElementCount).toBe(4);
   });
 
   test("shows empty state when usage is absent", () => {

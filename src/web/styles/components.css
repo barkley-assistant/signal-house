@@ -106,9 +106,11 @@
 /* Attention queue + agent spend are stacked full-width sections
    (operator preference: queue under the spend card). */
 
-/* Agent Spend overview — two equal tiles in a single row: Total cost and
-   Cache. Tile borders removed so the stats sit in the page rather than as
-   boxed cards. The Lifetime to-date stat block sits below (full width). */
+/* Agent Spend overview — a 2×2 grid: the Total cost hero and Cache tiles
+   (equal halves) on the top row, two unit-rate cells (Blended $/1M,
+   Cost / session) on the row below. Tile borders removed so the stats
+   sit in the page rather than as boxed cards. The Lifetime to-date stat
+   block sits below (full width). */
 .spend-overview {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -129,6 +131,20 @@
 }
 .spend-overview__cache {
   justify-content: center;
+}
+/* Unit-economics row (row 2 of the 2×2). Cells reuse the
+   model-row__detail-stat label-over-value primitives so the cluster
+   matches the lifetime block's design language; this rule adds only the
+   tile padding, vertical centering within the stretched grid row, and
+   one size step up from the 14px detail value so the rates read as
+   stats, not footnotes — the hero keeps its clamp() dominance above. */
+.spend-overview__stat {
+  padding: 14px 0;
+  justify-content: center;
+}
+.spend-overview__stat .model-row__detail-value {
+  font-size: 20px;
+  font-weight: 600;
 }
 .spend-hero__amount {
   font-family: var(--font-mono);
@@ -181,7 +197,7 @@
 }
 
 @media (max-width: 900px) {
-  /* On tablets the two-tile overview collapses to one column so each tile
+  /* On tablets the 2×2 overview collapses to one column so each cell
      gets full width; the hero figure stays at desktop size. */
   .spend-overview {
     grid-template-columns: 1fr;
