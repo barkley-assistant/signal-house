@@ -5,11 +5,12 @@
 
 import type { PersistedState } from "../config/types";
 import type { RuntimeConfig } from "../config/types";
-import { avg, median, percentile, sum } from "../shared/math";
+import { avg, median, mergeNullSum, percentile, sum } from "../shared/math";
 import { utcDaysAgo, utcDay } from "../shared/dates";
 import { canonicalMachineKey, machineKey, modelFamily, modelLabel, stripDateSnapshot } from "../shared/models";
 import { DEFAULT_WINDOW_DAYS } from "../shared/window";
 import { resolvePrivacyMap, isRepoVisible } from "../privacy/privacy";
+import { costFromTokens } from "../shared/types";
 import type { CostEstimationOpts, CostSource, ModelRates, ModelUsageRow, UsageDay } from "../shared/types";
 
 export interface SourceUsageMetrics {
@@ -399,7 +400,7 @@ export function mergeModelRows(
       const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
       if (rates && (rates.input > 0 || rates.output > 0)) {
         rowRates = rates;
-        rowCost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
+        rowCost = costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
         rowCostSource = "estimated";
       } else if (inputTokens + outputTokens + cacheReadTokens === 0) {
         rowCost = 0;
@@ -451,7 +452,7 @@ export function mergeModelRows(
       if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
         const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
         if (rates && (rates.input > 0 || rates.output > 0)) {
-          src.cost += (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
+          src.cost += costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
         }
       } else if (!costOpts.enabled && rowCost !== null && rowCost > 0) {
         // Distribute upstream cost by token share: each source's tokens
@@ -494,7 +495,7 @@ export function mergeModelRows(
           if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
             const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
             if (rates && (rates.input > 0 || rates.output > 0)) {
-              entry.cost = (inputTokens * rates.input + outputTokens * rates.output + cacheReadTokens * rates.cacheRead) / 1_000_000;
+              entry.cost = costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
             }
           } else if (!costOpts.enabled && rowSourceCost > 0) {
             entry.cost = rowSourceCost;
@@ -534,9 +535,4 @@ export function mergeModelRows(
 
 function rowTokens(row: { inputTokens: number | null; outputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null; reasoningTokens: number | null }): number | null {
   return sum([row.inputTokens, row.outputTokens, row.cacheReadTokens, row.cacheWriteTokens, row.reasoningTokens]);
-}
-
-function mergeNullSum(a: number | null, b: number | null): number | null {
-  if (a === null && b === null) return null;
-  return (a ?? 0) + (b ?? 0);
 }

@@ -128,6 +128,14 @@ export interface ModelRates {
   cacheRead: number;
 }
 
+/** Estimated USD cost for a token mix at per-1M rates. Single shared
+ *  implementation of the estimator formula — every cost path on the
+ *  dashboard (aggregator merge, daily trend, per-model trend) must stay
+ *  numerically identical, so a pricing-semantics change lands in ONE place. */
+export function costFromTokens(input: number, output: number, cacheRead: number, rates: ModelRates): number {
+  return (input * rates.input + output * rates.output + cacheRead * rates.cacheRead) / 1_000_000;
+}
+
 /** Options bundle for the cost estimation pipeline. Passed to the
  *  aggregator's sync merge functions so they don't grow to five+
  *  positional parameters (AGENTS.md "Types"). The resolver builds

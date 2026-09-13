@@ -18,7 +18,7 @@ import type { Database } from "bun:sqlite";
 import type { UsageAggregate } from "../orchestrator/aggregates";
 import type { CostEstimationOpts } from "../shared/types";
 import { mergeModelRows } from "../orchestrator/aggregates";
-import { sum } from "../shared/math";
+import { mergeNullSum, sum } from "../shared/math";
 
 const DAY_METRICS = [
   "sessions.total",
@@ -72,11 +72,6 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
   let windowCacheRead = 0;
   let windowInput = 0;
 
-  const merge = (a: number | null, b: number | null): number | null => {
-    if (a === null && b === null) return null;
-    return (a ?? 0) + (b ?? 0);
-  };
-
   for (const [source, metrics] of perSource) {
     const sessions = metrics.get("sessions.total") ?? 0;
     const messages = metrics.get("messages.total") ?? null;
@@ -87,9 +82,9 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
     const cacheHitRate = cacheReadTokens + inputTokens > 0 ? cacheReadTokens / (cacheReadTokens + inputTokens) : 0;
     bySource[source] = { sessions, cost, tokens, cacheReadTokens, cacheHitRate, cacheSavings: 0 };
     totalSessions += sessions;
-    totalMessages = merge(totalMessages, messages);
-    totalTokens = merge(totalTokens, tokens);
-    totalCost = merge(totalCost, cost);
+    totalMessages = mergeNullSum(totalMessages, messages);
+    totalTokens = mergeNullSum(totalTokens, tokens);
+    totalCost = mergeNullSum(totalCost, cost);
     windowCacheRead += cacheReadTokens;
     windowInput += inputTokens;
   }
@@ -178,11 +173,6 @@ export function queryModelRows(db: Database, from: string | null, to: string | n
     reasoningTokens: number | null;
   }>();
 
-  const merge = (a: number | null, b: number | null): number | null => {
-    if (a === null && b === null) return null;
-    return (a ?? 0) + (b ?? 0);
-  };
-
   for (const r of rows) {
     if (!r.model) continue;
     const key = `${r.source}\u0000${r.model}`;
@@ -196,22 +186,22 @@ export function queryModelRows(db: Database, from: string | null, to: string | n
         row.sessions += r.value ?? 0;
         break;
       case "model.cost":
-        row.cost = merge(row.cost, r.value);
+        row.cost = mergeNullSum(row.cost, r.value);
         break;
       case "model.tokens_input":
-        row.inputTokens = merge(row.inputTokens, r.value);
+        row.inputTokens = mergeNullSum(row.inputTokens, r.value);
         break;
       case "model.tokens_output":
-        row.outputTokens = merge(row.outputTokens, r.value);
+        row.outputTokens = mergeNullSum(row.outputTokens, r.value);
         break;
       case "model.tokens_cache_read":
-        row.cacheReadTokens = merge(row.cacheReadTokens, r.value);
+        row.cacheReadTokens = mergeNullSum(row.cacheReadTokens, r.value);
         break;
       case "model.tokens_cache_write":
-        row.cacheWriteTokens = merge(row.cacheWriteTokens, r.value);
+        row.cacheWriteTokens = mergeNullSum(row.cacheWriteTokens, r.value);
         break;
       case "model.tokens_reasoning":
-        row.reasoningTokens = merge(row.reasoningTokens, r.value);
+        row.reasoningTokens = mergeNullSum(row.reasoningTokens, r.value);
         break;
     }
   }

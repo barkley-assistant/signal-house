@@ -9,6 +9,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts, DailyWrite } from "../shared/types";
+import { costFromTokens } from "../shared/types";
 import { canonicalMachineKey, machineKey, stripDateSnapshot } from "../shared/models";
 import { utcDayRange } from "../shared/dates";
 import { fetchAllRates, type ModelRates } from "../server/model-pricing";
@@ -205,7 +206,7 @@ export async function queryDailyTrend(
     const input = row.inputTokens ?? 0;
     const output = row.outputTokens ?? 0;
     const cacheRead = row.cacheReadTokens ?? 0;
-    const modelCost = (input * r.input + output * r.output + cacheRead * r.cacheRead) / 1_000_000;
+    const modelCost = costFromTokens(input, output, cacheRead, r);
     costByDate.set(row.date, (costByDate.get(row.date) ?? 0) + modelCost);
   }
 
@@ -345,7 +346,7 @@ export async function queryDailyModelTrend(
       const tokensSum = t.input + t.output + t.cacheRead + t.cacheWrite + t.reasoning;
       const cost =
         resolvedRates
-          ? (t.input * resolvedRates.input + t.output * resolvedRates.output + t.cacheRead * resolvedRates.cacheRead) / 1_000_000
+          ? costFromTokens(t.input, t.output, t.cacheRead, resolvedRates)
           : upstreamCostByDate.get(date) ?? 0;
       return {
         date,

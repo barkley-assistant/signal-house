@@ -18,6 +18,14 @@ export function sum(values: ReadonlyArray<number | null>): number | null {
   return seen ? acc : null;
 }
 
+/** Sum two nullable numbers; null only when BOTH are null. The pairwise
+ *  equivalent of `sum` — merging two unknown values must not invent a
+ *  confident zero (the dashboard's unknown-stays-unknown contract). */
+export function mergeNullSum(a: number | null, b: number | null): number | null {
+  if (a === null && b === null) return null;
+  return (a ?? 0) + (b ?? 0);
+}
+
 export function avg(values: ReadonlyArray<number | null>): number | null {
   const known = values.filter((v): v is number => v !== null && Number.isFinite(v));
   if (known.length === 0) return null;

@@ -27,6 +27,7 @@ import type {
   UsageDay,
 } from "../../shared/types";
 import { emptySourceData } from "../../shared/types";
+import { mergeNullSum } from "../../shared/math";
 import { utcDaysAgo } from "../../shared/dates";
 
 export class HermesCollector implements Collector<SourceData> {
@@ -319,12 +320,6 @@ function queryModelBreakdownByDay(db: Database, sinceSec: number, nowSec: number
   return byDay;
 }
 
-/** Sum two nullable numbers; null only when BOTH are null. */
-function sumNullable(a: number | null, b: number | null): number | null {
-  if (a === null && b === null) return null;
-  return (a ?? 0) + (b ?? 0);
-}
-
 /** Match the SQL grouping key: (model, billing_provider). */
 function modelKey(model: string, provider: string | null): string {
   return `${model}\u0000${provider ?? ""}`;
@@ -337,24 +332,24 @@ function mergeUsageDay(map: Map<string, UsageDay>, incoming: UsageDay): void {
     return;
   }
   existing.sessions += incoming.sessions;
-  existing.messages = sumNullable(existing.messages, incoming.messages);
-  existing.tokensInput = sumNullable(existing.tokensInput, incoming.tokensInput);
-  existing.tokensOutput = sumNullable(existing.tokensOutput, incoming.tokensOutput);
-  existing.tokensCacheRead = sumNullable(existing.tokensCacheRead, incoming.tokensCacheRead);
-  existing.tokensCacheWrite = sumNullable(existing.tokensCacheWrite, incoming.tokensCacheWrite);
-  existing.tokensReasoning = sumNullable(existing.tokensReasoning, incoming.tokensReasoning);
-  existing.cost = sumNullable(existing.cost, incoming.cost);
+  existing.messages = mergeNullSum(existing.messages, incoming.messages);
+  existing.tokensInput = mergeNullSum(existing.tokensInput, incoming.tokensInput);
+  existing.tokensOutput = mergeNullSum(existing.tokensOutput, incoming.tokensOutput);
+  existing.tokensCacheRead = mergeNullSum(existing.tokensCacheRead, incoming.tokensCacheRead);
+  existing.tokensCacheWrite = mergeNullSum(existing.tokensCacheWrite, incoming.tokensCacheWrite);
+  existing.tokensReasoning = mergeNullSum(existing.tokensReasoning, incoming.tokensReasoning);
+  existing.cost = mergeNullSum(existing.cost, incoming.cost);
 }
 
 function mergeModelRow(target: ModelUsageRow, incoming: ModelUsageRow): void {
   target.sessions += incoming.sessions;
-  target.messages = sumNullable(target.messages, incoming.messages);
-  target.inputTokens = sumNullable(target.inputTokens, incoming.inputTokens);
-  target.outputTokens = sumNullable(target.outputTokens, incoming.outputTokens);
-  target.cacheReadTokens = sumNullable(target.cacheReadTokens, incoming.cacheReadTokens);
-  target.cacheWriteTokens = sumNullable(target.cacheWriteTokens, incoming.cacheWriteTokens);
-  target.reasoningTokens = sumNullable(target.reasoningTokens, incoming.reasoningTokens);
-  target.cost = sumNullable(target.cost, incoming.cost);
+  target.messages = mergeNullSum(target.messages, incoming.messages);
+  target.inputTokens = mergeNullSum(target.inputTokens, incoming.inputTokens);
+  target.outputTokens = mergeNullSum(target.outputTokens, incoming.outputTokens);
+  target.cacheReadTokens = mergeNullSum(target.cacheReadTokens, incoming.cacheReadTokens);
+  target.cacheWriteTokens = mergeNullSum(target.cacheWriteTokens, incoming.cacheWriteTokens);
+  target.reasoningTokens = mergeNullSum(target.reasoningTokens, incoming.reasoningTokens);
+  target.cost = mergeNullSum(target.cost, incoming.cost);
 }
 
 /** Merge a model row into the window-wide byModel map. */
