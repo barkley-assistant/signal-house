@@ -1,9 +1,9 @@
 /**
  * Agent Spend card — consolidated cost/tokens view (planning 03 §Card, decision #10).
- * A single panel: an overview of three tiles (Total cost hero, Cache, and
- * Cost / merged PR), then the stacked daily chart and by-model table.
- * Per-source attribution lives in each by-model row's expandable detail,
- * not the overview. Unknown values render "—", never 0.
+ * A single panel: an overview of two tiles (Total cost hero, Cache), a
+ * Lifetime to-date stat block, then the stacked daily chart and by-model
+ * table. Per-source attribution lives in each by-model row's expandable
+ * detail, not the overview. Unknown values render "—", never 0.
  */
 
 import { useEffect, useRef, useState, Fragment } from "react";
@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import * as echarts from "echarts";
 import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint } from "../state/store";
 import type { WindowDays } from "../../shared/window";
+import type { LifetimeStats } from "../../metrics/lifetime";
 import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
@@ -39,22 +40,79 @@ function useCountUp(target: number | null, duration = 900) {
   return text;
 }
 
+/** "2026-08-31" → "31 Aug 2026" (withYear) or "31 Aug" — en-GB, the same
+ *  date style the chart axes use, so the bound and the busiest-day line
+ *  read consistently. */
+function formatDay(day: string, withYear: boolean): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(withYear ? { year: "numeric" } : {}),
+  });
+}
+
+/** The "to date" stat lines under the overview tiles. Every number is
+ *  bounded by retention (a rolling window at the configured daily-metrics
+ *  retention), so the header states the actual first retained day — the
+ *  block never claims "all time". Unknown stays "—", never 0.
+ *
+ *  Stat cells reuse the by-model detail primitives verbatim
+ *  (model-row__detail-stat/-label/-value): the label-over-value shape,
+ *  tabular-nums and mono values are exactly this card's design language,
+ *  so no bespoke cell styling exists. */
+function LifetimeBlock({ lifetime }: { lifetime: LifetimeStats | null }) {
+  const topModel = lifetime?.topModel ?? null;
+  const busiestDay = lifetime?.busiestDay ?? null;
+  const stats: Array<{ label: string; value: string; sub?: string }> = [
+    { label: "Commits", value: formatNumber(lifetime?.totalCommits ?? null) },
+    { label: "Tokens", value: formatCompact(lifetime?.totalTokens ?? null) },
+    { label: "Sessions", value: formatNumber(lifetime?.totalSessions ?? null) },
+    {
+      label: "Top model",
+      value: topModel?.label ?? "—",
+      // The session count self-proves the ranking next to the by-model table.
+      sub: topModel !== null ? `${formatNumber(topModel.sessions)} sessions` : undefined,
+    },
+    {
+      label: "Busiest day",
+      value:
+        busiestDay !== null
+          ? `${formatDay(busiestDay.date, false)} · ${formatCompact(busiestDay.tokens)}`
+          : "—",
+    },
+  ];
+  return (
+    <motion.div
+      className="spend-lifetime"
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.25 }}
+    >
+      <span className="kpi-tile__label">
+        Lifetime to date{lifetime?.sinceDay ? ` · since ${formatDay(lifetime.sinceDay, true)}` : ""}
+      </span>
+      <div className="spend-lifetime__grid">
+        {stats.map((s) => (
+          <div key={s.label} className="model-row__detail-stat">
+            <span className="model-row__detail-label">{s.label}</span>
+            <span className="model-row__detail-value">{s.value}</span>
+            {s.sub !== undefined && <span className="spend-lifetime__sub">{s.sub}</span>}
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 export function AgentSpend() {
   const { state } = useDash();
   const usage = state?.usage ?? null;
+  const lifetime = state?.lifetime ?? null;
   const heroAmount = useCountUp(usage?.totalCost ?? null);
   const hasCacheActivity = (usage?.cacheReadTokens ?? 0) > 0;
   const savedAmount = useCountUp(hasCacheActivity && Number.isFinite(usage?.cacheSavings) ? usage?.cacheSavings ?? 0 : 0);
   const hitRateDisplay = hasCacheActivity ? formatPercent(usage?.cacheHitRate) : "—";
-  const throughput = state?.summary.throughput ?? null;
-  const prsMerged = throughput?.prsMerged ?? null;
-  // The rate only exists when cost is known AND the denominator is positive:
-  // a missing cost or a zero-PR window is "no data" ("—"), never $0.00.
-  // A known $0 spend over real PRs IS $0.00 — that case falls through.
-  const costPerPr =
-    usage?.totalCost != null && prsMerged != null && prsMerged > 0
-      ? usage.totalCost / prsMerged
-      : null;
 
   return (
     <section className="card" aria-label="Agent spend">
@@ -85,23 +143,8 @@ export function AgentSpend() {
                 saved <span className="money">{savedAmount}</span> at model input rates
               </span>
             </motion.div>
-            <motion.div
-              className="spend-overview__delivery"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.25 }}
-            >
-              <span className="kpi-tile__label">Cost / merged PR</span>
-              <span className="spend-hero__amount">
-                {costPerPr === null ? "—" : formatCostHero(costPerPr)}
-              </span>
-              <span className="kpi-caption">
-                {throughput
-                  ? `${formatNumber(throughput.prsMerged)} merged PRs · ${formatNumber(throughput.totalCommits)} commits`
-                  : "No GitHub data"}
-              </span>
-            </motion.div>
           </div>
+          <LifetimeBlock lifetime={lifetime} />
           <hr className="spend-divider" />
           <DailyUsageChart />
           <ModelTable />

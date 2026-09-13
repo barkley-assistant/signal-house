@@ -106,19 +106,18 @@
 /* Attention queue + agent spend are stacked full-width sections
    (operator preference: queue under the spend card). */
 
-/* Agent Spend overview — three equal tiles in a single row: Total cost,
-   Cache, and Cost / merged PR. Tile borders removed so the stats sit in
-   the page rather than as boxed cards. */
+/* Agent Spend overview — two equal tiles in a single row: Total cost and
+   Cache. Tile borders removed so the stats sit in the page rather than as
+   boxed cards. The Lifetime to-date stat block sits below (full width). */
 .spend-overview {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
   margin: 16px 0;
 }
 .spend-overview__total,
-.spend-overview__cache,
-.spend-overview__delivery {
+.spend-overview__cache {
   padding: 14px 0;
   display: flex;
   flex-direction: column;
@@ -128,8 +127,7 @@
 .spend-overview__total {
   gap: 6px;
 }
-.spend-overview__cache,
-.spend-overview__delivery {
+.spend-overview__cache {
   justify-content: center;
 }
 .spend-hero__amount {
@@ -157,10 +155,44 @@
 .spend-hero__dot {
   color: var(--divider);
 }
+
+/* Lifetime to-date stat lines — one label-over-value cell per stat on the
+   same pattern as the by-model detail grid (shared
+   model-row__detail-stat/-label/-value classes), so the block reads as
+   one design language. Desktop: five across; tablet: two; phone: stacked.
+   The base grid rule must stay BEFORE the media overrides below: equal
+   specificity means the later rule wins, so a base rule after the media
+   blocks would pin five-across at every width. */
+.spend-lifetime {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+.spend-lifetime__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+/* Muted second line under the Top model value (its session count). */
+.spend-lifetime__sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 @media (max-width: 900px) {
-  /* On tablets the three-column overview collapses to single column so each
-     region gets full width; the hero figure stays at desktop size. */
+  /* On tablets the two-tile overview collapses to one column so each tile
+     gets full width; the hero figure stays at desktop size. */
   .spend-overview {
+    grid-template-columns: 1fr;
+  }
+  .spend-lifetime__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  /* Phones: the stat lines stack one per row. */
+  .spend-lifetime__grid {
     grid-template-columns: 1fr;
   }
 }

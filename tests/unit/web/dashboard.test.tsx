@@ -408,94 +408,81 @@ describe("AgentSpend", () => {
     expect(screen.queryByText("$215.95")).toBeNull();
   });
 
-  test("cost per merged PR tile divides window cost by merged PRs", () => {
+  test("lifetime block renders the five to-date stat lines", () => {
     useDash.setState({
-      state: emptyState({
-        summary: {
-          throughput: { issuesOpened: 3, issuesClosed: 5, prsCreated: 2, prsMerged: 4, totalCommits: 120 },
-          cycleTime: null,
-          ci: null,
-          staleWork: null,
-          costAndTokens: null,
+      state: {
+        ...usageState(),
+        lifetime: {
+          sinceDay: "2026-06-15",
+          totalCommits: 1534,
+          totalTokens: 13_500_000_000,
+          totalSessions: 3915,
+          topModel: { label: "MiniMax M3", sessions: 1057 },
+          busiestDay: { date: "2026-08-31", tokens: 505_000_000 },
         },
-        usage: {
-          totalSessions: 1597,
-          totalMessages: 1000,
-          totalTokens: 5420000000,
-          totalCost: 515.95,
-          bySource: { opencode: { sessions: 900, cost: 300, tokens: 3000000000 } },
-          byModel: [],
-        },
-      }),
+      },
     });
     const { container } = render(<AgentSpend />);
-    const tile = container.querySelector(".spend-overview__delivery");
-    expect(tile).toBeTruthy();
-    expect(tile?.textContent).toContain("Cost / merged PR");
-    // 515.95 / 4 = 128.9875 → formatCostHero → "$128.99"
-    expect(tile?.textContent).toContain("$128.99");
-    expect(tile?.textContent).toContain("4 merged PRs · 120 commits");
+    const block = container.querySelector(".spend-lifetime");
+    expect(block).toBeTruthy();
+    expect(block?.textContent).toContain("Lifetime to date");
+    // The honest bound — the actual first retained day, never "all time".
+    expect(block?.textContent).toContain("since 15 Jun 2026");
+    expect(block?.textContent).toContain("1,534");
+    expect(block?.textContent).toContain("13.5B");
+    expect(block?.textContent).toContain("3,915");
+    expect(block?.textContent).toContain("MiniMax M3");
+    expect(block?.textContent).toContain("1,057 sessions");
+    expect(block?.textContent).toContain("31 Aug · 505M");
   });
 
-  test("cost per merged PR renders em-dash on missing inputs, never zero", () => {
-    const renderTile = (state: StatePayload) => {
-      cleanup();
-      useDash.setState({ state });
-      const { container } = render(<AgentSpend />);
-      const tile = container.querySelector(".spend-overview__delivery");
-      expect(tile).toBeTruthy();
-      return tile?.textContent ?? "";
-    };
-    // Scope is the tile element, never the container: the cache tile
-    // legitimately renders "$0.00" when there is no cache activity, so a
-    // container-wide "not $0.00" would fail for an unrelated reason.
-    const assertDashFigure = (tileText: string) => {
-      expect(tileText).toContain("—");
-      expect(tileText).not.toContain("$0.00");
-      expect(tileText).not.toContain("NaN");
-      expect(tileText).not.toContain("Infinity");
-    };
-    const usage = {
-      totalSessions: 1597,
-      totalMessages: 1000,
-      totalTokens: 5420000000,
-      totalCost: 515.95,
-      bySource: { opencode: { sessions: 900, cost: 300, tokens: 3000000000 } },
-      byModel: [],
-    };
-    // throughput null → "No GitHub data" caption, "—" figure.
-    const noThroughputText = renderTile(emptyState({ usage }));
-    assertDashFigure(noThroughputText);
-    expect(noThroughputText).toContain("No GitHub data");
-    // zero merged PRs → "—" figure, denominator still shown in caption.
-    const zeroPrText = renderTile(
-      emptyState({
-        summary: {
-          throughput: { issuesOpened: 3, issuesClosed: 5, prsCreated: 2, prsMerged: 0, totalCommits: 120 },
-          cycleTime: null,
-          ci: null,
-          staleWork: null,
-          costAndTokens: null,
+  test("lifetime lines render em-dash on missing data, never zero", () => {
+    // usageState() leaves lifetime null (emptyState default) — the block
+    // still renders so the layout stays stable, every line "—".
+    useDash.setState({ state: usageState() });
+    const { container } = render(<AgentSpend />);
+    const block = container.querySelector(".spend-lifetime");
+    expect(block).toBeTruthy();
+    const values = [...container.querySelectorAll(".spend-lifetime .model-row__detail-value")];
+    expect(values.length).toBe(5);
+    for (const v of values) {
+      expect(v.textContent).toBe("—");
+      expect(v.textContent).not.toContain("0");
+      expect(v.textContent).not.toContain("NaN");
+    }
+    // No bound is claimed when there is no history at all.
+    expect(block?.textContent).not.toContain("since");
+
+    // Partial data: commits unknown but tokens known — only that line is "—".
+    cleanup();
+    useDash.setState({
+      state: {
+        ...usageState(),
+        lifetime: {
+          sinceDay: "2026-07-09",
+          totalCommits: null,
+          totalTokens: 1_000,
+          totalSessions: null,
+          topModel: null,
+          busiestDay: null,
         },
-        usage,
-      }),
-    );
-    assertDashFigure(zeroPrText);
-    expect(zeroPrText).toContain("0 merged PRs");
-    // cost unknown → "—" figure, never "$0.00".
-    const unknownCostText = renderTile(
-      emptyState({
-        summary: {
-          throughput: { issuesOpened: 3, issuesClosed: 5, prsCreated: 2, prsMerged: 4, totalCommits: 120 },
-          cycleTime: null,
-          ci: null,
-          staleWork: null,
-          costAndTokens: null,
-        },
-        usage: { ...usage, totalCost: null },
-      }),
-    );
-    assertDashFigure(unknownCostText);
+      },
+    });
+    const { container: partial } = render(<AgentSpend />);
+    const lines = [...partial.querySelectorAll(".spend-lifetime .model-row__detail-stat")];
+    const byLabel = (label: string) =>
+      lines.find((l) => l.querySelector(".model-row__detail-label")?.textContent === label);
+    expect(byLabel("Commits")?.querySelector(".model-row__detail-value")?.textContent).toBe("—");
+    expect(byLabel("Tokens")?.querySelector(".model-row__detail-value")?.textContent).toBe("1K");
+    expect(byLabel("Top model")?.querySelector(".model-row__detail-value")?.textContent).toBe("—");
+  });
+
+  test("the cost per merged PR tile is gone", () => {
+    useDash.setState({ state: usageState() });
+    const { container } = render(<AgentSpend />);
+    expect(container.querySelector(".spend-overview__delivery")).toBeNull();
+    expect(screen.queryByText("Cost / merged PR")).toBeNull();
+    expect(container.querySelector(".spend-overview")!.childElementCount).toBe(2);
   });
 
   test("shows empty state when usage is absent", () => {
