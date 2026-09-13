@@ -24,7 +24,7 @@
  *     so a process kill mid-write never corrupts the cache. The
  *     previous-good version survives.
  *   - Network refresh: at most hourly per source, aligned to the top of the
- *     hour (sameClockHour gate — see below).
+ *     hour (sameUtcHour gate — see below).
  *   - Failure modes (every one preserves the previous-good cache):
  *       - fetch fails AND disk cache exists   → use disk cache, status "stale"
  *       - fetch fails AND disk cache missing  → in-memory stays empty,
@@ -49,6 +49,7 @@ import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { log } from "../shared/logger";
+import { sameUtcHour } from "../shared/dates";
 import {
   parseOpenRouterPricing,
   parseOpenferencePricing,
@@ -60,7 +61,7 @@ const OPENFERENCE_URL = "https://api.openference.com/v1/models";
 const CACHE_FILENAME = "model-pricing.json";
 const OPENFERENCE_CACHE_FILENAME = "openference-pricing.json";
 /** Refresh at most hourly, aligned to the top of the hour: ensurePricingCacheFresh()
- *  treats a cache as fresh only within the current clock hour (sameClockHour).
+ *  treats a cache as fresh only within the current clock hour (sameUtcHour).
  *  The poller calls it on its own cadence (every 2 min); this gate collapses
  *  those calls into at most one network fetch per hour per source. Both
  *  catalogs are stable for days — hourly is generous; the alignment just
@@ -185,19 +186,11 @@ export async function ensurePricingCacheFresh(): Promise<void> {
     // Decide whether to hit the network. Fresh = fetched within the current
     // clock hour, so after a fetch at :58 the next one lands at :00 — the
     // "refresh on the hour" behaviour without needing a scheduler.
-    if (!(state.inMemory && sameClockHour(new Date(state.inMemory.fetchedAt), new Date()))) {
+    if (!(state.inMemory && sameUtcHour(new Date(state.inMemory.fetchedAt), new Date()))) {
       needRefresh = true;
     }
   }
   if (needRefresh) await refreshFromNetwork();
-}
-
-/** True when both instants fall inside the same wall-clock hour (UTC).
- *  Deliberately hour-of-day + day granularity, not elapsed-3600s: an
- *  11:59 fetch and a 12:00 fetch are different hours even though they're
- *  60s apart, which is exactly the on-the-hour alignment we want. */
-function sameClockHour(a: Date, b: Date): boolean {
-  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate() && a.getUTCHours() === b.getUTCHours();
 }
 
 /** Force a network refresh for every source that needs one, regardless of
@@ -211,7 +204,7 @@ async function refreshSource(state: SourceState): Promise<void> {
   // Per-source freshness gate: a source fetched within the current clock
   // hour is not re-fetched, even when refreshFromNetwork was called for the
   // other source's sake.
-  if (state.inMemory && sameClockHour(new Date(state.inMemory.fetchedAt), new Date())) {
+  if (state.inMemory && sameUtcHour(new Date(state.inMemory.fetchedAt), new Date())) {
     return;
   }
   try {
