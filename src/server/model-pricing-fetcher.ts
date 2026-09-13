@@ -50,6 +50,7 @@ import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { log } from "../shared/logger";
 import { sameUtcHour } from "../shared/dates";
+import { machineKey } from "../shared/models";
 import {
   parseOpenRouterPricing,
   parseOpenferencePricing,
@@ -139,10 +140,6 @@ const openference: SourceState = {
  */
 export async function getModelPricing(model: string): Promise<{ input: number; output: number; cacheRead: number }> {
   await ensurePricingCacheFresh();
-  // Import lazily to avoid a cycle (models.ts is in shared/, but we want to keep
-  // this module light). The resolver (model-pricing.ts) wraps this + the local
-  // fallback; callers should use the resolver, not this directly.
-  const { machineKey } = await import("../shared/models");
   const key = machineKey(model);
   if (!key) return { input: 0, output: 0, cacheRead: 0 };
   const entry = openference.inMemory?.map[key] ?? openrouter.inMemory?.map[key];
