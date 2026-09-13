@@ -32,22 +32,24 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import { useDash, loadDeliveryTrend, loadResourceTrend, type DeliveryPoint, type ResourcePoint } from "../state/store";
-import { readLegendSelection } from "./AgentSpend";
+import { readLegendSelection, persistLegendSelection } from "./charts/legend-storage";
+import { fmtDayShort, fmtDayFull } from "./charts/chart-dates";
+import { CHART_BLUE, CHART_YELLOW, CHART_GREEN, CHART_MUTED, CHART_AXIS_LABEL, CHART_BORDER, CHART_SPLIT_LINE, COMMON_TOOLTIP, hexWithAlpha } from "./charts/chart-theme";
 import { formatNumber } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
 
 // Same accent palette as the Daily cost & tokens chart so the panels feel
 // like siblings, not strangers.
-const CI_COLOR = "#4ade80"; // var(--success) — green
-const COMMITS_COLOR = "#94a3b8"; // var(--text-secondary) — slate
-const PR_COLOR = "#38bdf8"; // var(--info) — blue
+const CI_COLOR = CHART_GREEN; // var(--success) — green
+const COMMITS_COLOR = CHART_MUTED; // var(--text-secondary) — slate
+const PR_COLOR = CHART_BLUE; // var(--info) — blue
 
 // Host-resource series colours — the shared chart palette from the panel
 // design rules (blue/yellow/green), matching Agent Spend's accents.
-const MEM_COLOR = "#38bdf8";
-const SWAP_COLOR = "#facc15";
-const CPU_COLOR = "#4ade80";
+const MEM_COLOR = CHART_BLUE;
+const SWAP_COLOR = CHART_YELLOW;
+const CPU_COLOR = CHART_GREEN;
 
 // Rate-band colours for the CI bar chart. The visual cue is a more honest
 // read of the line-chart's area-fill: green says "we're clean", amber
@@ -66,34 +68,6 @@ const GRID_RIGHT = 16;
 // Legend sits at the top of every delivery chart; this reserves breathing
 // room between the legend row and the plot (Agent Spend uses 48 at ~2x size).
 const GRID_TOP_LEGEND = 30;
-
-function fmtDayShort(d: string): string {
-  const [y, m, day] = d.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function fmtDayFull(d: string): string {
-  const [y, m, day] = d.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-const COMMON_TOOLTIP = {
-  trigger: "axis" as const,
-  confine: true,
-  backgroundColor: "rgba(17, 19, 24, 0.96)",
-  borderColor: "#232732",
-  borderWidth: 1,
-  padding: [10, 12] as [number, number],
-  textStyle: { color: "#94a3b8", fontSize: 12 },
-};
 
 export function DeliveryTrend() {
   const resRef = useRef<HTMLDivElement>(null);
@@ -120,12 +94,7 @@ export function DeliveryTrend() {
     // reloads (issue #363). Attach AFTER the instance exists: an earlier effect
     // with empty deps ran before init and silently no-op'd on a null ref.
     const onLegendToggle = (): void => {
-      try {
-        const legendOpt = resChartRef.current?.getOption().legend as Array<{ selected?: Record<string, boolean> }> | undefined;
-        localStorage.setItem(RES_LEGEND_STORAGE_KEY, JSON.stringify(legendOpt?.[0]?.selected ?? {}));
-      } catch {
-        /* storage unavailable — toggling still works this session */
-      }
+      persistLegendSelection(resChartRef.current, RES_LEGEND_STORAGE_KEY);
     };
     resChartRef.current?.on("legendselectchanged", onLegendToggle);
     const ro = new ResizeObserver(() => {
@@ -260,11 +229,6 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[], legendS
 
   // Same area-fill treatment as the Agent Spend chart: each series washes
   // its own colour under the line (blue 0.12, yellow/green 0.08).
-  const withAlpha = (hex: string, alpha: number): string => {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-  };
-
   const seriesOf = (name: string, key: "memPct" | "swapPct" | "cpuPct", color: string, areaAlpha: number) => ({
     name,
     type: "line" as const,
@@ -274,7 +238,7 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[], legendS
     connectNulls: false,
     lineStyle: { color, width: 2 },
     itemStyle: { color },
-    areaStyle: { color: withAlpha(color, areaAlpha) },
+    areaStyle: { color: hexWithAlpha(color, areaAlpha) },
     emphasis: { focus: "series" as const },
   });
 
@@ -288,7 +252,7 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[], legendS
       tooltip: {
         ...COMMON_TOOLTIP,
         ...touchAwareTooltip(),
-        axisPointer: { type: "line", lineStyle: { color: "#232732" } },
+        axisPointer: { type: "line", lineStyle: { color: CHART_BORDER } },
         formatter: (params: unknown) => {
           const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null | undefined; marker: string }>;
           return formatResourceTooltip(arr, points);
@@ -307,7 +271,7 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[], legendS
         itemWidth: 8,
         itemHeight: 8,
         itemGap: 14,
-        textStyle: { color: "#94a3b8", fontSize: 11 },
+        textStyle: { color: CHART_MUTED, fontSize: 11 },
       },
       xAxis: {
         type: "category",
@@ -316,16 +280,16 @@ function renderResource(chart: echarts.ECharts, points: ResourcePoint[], legendS
         // a band on each side, which reads as the trend "floating" short of
         // the chart bounds next to the bar charts, which fill their bands.
         boundaryGap: false,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
-        axisLine: { lineStyle: { color: "#232732" } },
+        axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
+        axisLine: { lineStyle: { color: CHART_BORDER } },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
         min: 0,
         max: 100,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `${v}%`, interval: 24 },
-        splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+        axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: (v: number) => `${v}%`, interval: 24 },
+        splitLine: { lineStyle: { color: CHART_SPLIT_LINE } },
         axisLine: { show: false },
         axisTick: { show: false },
       },
@@ -420,16 +384,16 @@ function renderCi(chart: echarts.ECharts, points: DeliveryPoint[]): void {
       xAxis: {
         type: "category",
         data: dates,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
-        axisLine: { lineStyle: { color: "#232732" } },
+        axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
+        axisLine: { lineStyle: { color: CHART_BORDER } },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
         min: 0,
         max: 100,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => `${v}%`, interval: 24 },
-        splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+        axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: (v: number) => `${v}%`, interval: 24 },
+        splitLine: { lineStyle: { color: CHART_SPLIT_LINE } },
         axisLine: { show: false },
         axisTick: { show: false },
       },
@@ -514,21 +478,21 @@ function renderBar(chart: echarts.ECharts, points: DeliveryPoint[]): void {
         itemWidth: 8,
         itemHeight: 8,
         itemGap: 14,
-        textStyle: { color: "#94a3b8", fontSize: 11 },
+        textStyle: { color: CHART_MUTED, fontSize: 11 },
       },
       xAxis: {
         type: "category",
         data: dates,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
-        axisLine: { lineStyle: { color: "#232732" } },
+        axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort, interval: "auto", hideOverlap: true },
+        axisLine: { lineStyle: { color: CHART_BORDER } },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
         min: 0,
         max: yMax,
-        axisLabel: { color: "#64748b", fontSize: 10, formatter: (v: number) => (v === 0 ? "0" : formatNumber(v)) },
-        splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+        axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: (v: number) => (v === 0 ? "0" : formatNumber(v)) },
+        splitLine: { lineStyle: { color: CHART_SPLIT_LINE } },
         axisLine: { show: false },
         axisTick: { show: false },
       },

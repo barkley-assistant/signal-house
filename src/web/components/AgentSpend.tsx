@@ -20,6 +20,11 @@ import type { UsageAggregate } from "../../orchestrator/aggregates";
 import { formatNumber, formatCost, formatCostHero, formatCompact, formatPercent, formatEffPerM } from "../../shared/format";
 import { niceCeil } from "../../shared/math";
 import { touchAwareTooltip } from "./chart-tooltip";
+import { readLegendSelection, persistLegendSelection } from "./charts/legend-storage";
+import { fmtDayShort, fmtDayFull, fmtDayWithYear } from "./charts/chart-dates";
+import { CHART_PALETTE, CHART_MUTED, CHART_AXIS_LABEL, CHART_BORDER, CHART_SPLIT_LINE, CHART_TOOLTIP_BG, COMMON_TOOLTIP } from "./charts/chart-theme";
+import { costTokenSeries } from "./charts/cost-token-series";
+import { useEChart } from "./charts/use-echart";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
  *  Plain requestAnimationFrame loop (no framer motion-value indirection) so
@@ -43,18 +48,6 @@ function useCountUp(target: number | null, duration = 900) {
     return () => cancelAnimationFrame(raf);
   }, [target, duration]);
   return text;
-}
-
-/** "2026-08-31" → "31 Aug 2026" (withYear) or "31 Aug" — en-GB, the same
- *  date style the chart axes use, so the bound and the busiest-day line
- *  read consistently. */
-function formatDay(day: string, withYear: boolean): string {
-  const [y, m, d] = day.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    ...(withYear ? { year: "numeric" } : {}),
-  });
 }
 
 /** Window cost after the synthetic-zero guard. The estimator pins
@@ -117,7 +110,7 @@ function LifetimeBlock({ lifetime }: { lifetime: LifetimeStats | null }) {
       label: "Busiest day",
       value:
         busiestDay !== null
-          ? `${formatDay(busiestDay.date, false)} · ${formatCompact(busiestDay.tokens)}`
+          ? `${fmtDayShort(busiestDay.date)} · ${formatCompact(busiestDay.tokens)}`
           : "—",
     },
   ];
@@ -129,7 +122,7 @@ function LifetimeBlock({ lifetime }: { lifetime: LifetimeStats | null }) {
       transition={{ duration: 0.4, delay: 0.25 }}
     >
       <span className="kpi-tile__label">
-        Lifetime to date{lifetime?.sinceDay ? ` · since ${formatDay(lifetime.sinceDay, true)}` : ""}
+        Lifetime to date{lifetime?.sinceDay ? ` · since ${fmtDayWithYear(lifetime.sinceDay)}` : ""}
       </span>
       <div className="spend-lifetime__grid">
         {stats.map((s) => (
@@ -215,27 +208,6 @@ export function AgentSpend() {
   );
 }
 
-/** Read a persisted ECharts legend selection ({seriesName: visible}) from
- *  localStorage. Absent key, corrupt JSON, or non-object payload → undefined
- *  (ECharts then shows every series — the natural default). */
-export function readLegendSelection(storageKey: string): Record<string, boolean> | undefined {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const out: Record<string, boolean> = {};
-      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-        if (typeof v === "boolean") out[k] = v;
-      }
-      return Object.keys(out).length > 0 ? out : undefined;
-    }
-  } catch {
-    /* corrupt or unavailable storage — default to all-visible */
-  }
-  return undefined;
-}
-
 /** Daily cost + token trend from /api/daily/spend, styled natively to the
  *  dashboard: card background, token palette, faint split lines matching the
  *  table borders. Dual y-axes — cost (left, blue) and tokens (right, yellow).
@@ -243,7 +215,7 @@ export function readLegendSelection(storageKey: string): Record<string, boolean>
  */
 function DailyUsageChart() {
   const ref = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<echarts.ECharts | null>(null);
+  const chartRef = useEChart(ref);
   const [loading, setLoading] = useState(true);
   const days = useDash((s) => s.days);
   // Persisted legend selection: which of Cost/Tokens/Cache read are on.
@@ -260,20 +232,6 @@ function DailyUsageChart() {
   const requestedDaysRef = useRef(days);
 
   useEffect(() => {
-    if (!ref.current) return;
-    chartRef.current = echarts.init(ref.current, "dark");
-    // ResizeObserver beats window-resize: tracks the container even when the
-    // grid reflows (mobile column collapse, diagnostics opening, etc).
-    const ro = new ResizeObserver(() => chartRef.current?.resize());
-    ro.observe(ref.current);
-    return () => {
-      ro.disconnect();
-      chartRef.current?.dispose(); // must dispose to avoid instance leaks
-      chartRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
     requestedDaysRef.current = days;
     peaksRef.current = null; // deliberate window change → rescale axes
     // No skeleton here: the previous window's data stays visible until the
@@ -285,11 +243,6 @@ function DailyUsageChart() {
     void loadTrend(days).then((points) => {
       if (disposed || !chartRef.current || requestedDaysRef.current !== days) return;
       const dates = points.map((p) => p.date);
-      const fmtDay = (d: string) => {
-        const [y, m, day] = d.split("-").map(Number);
-        const dt = new Date(Date.UTC(y, m - 1, day));
-        return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-      };
       // Anchor each y-axis to a fixed [0, peak] range from the FIRST dataset
       // observed — never recomputed on filter changes (the line shape should
       // adjust, but the scale shouldn't jump).
@@ -309,12 +262,7 @@ function DailyUsageChart() {
       const onLegendToggle = () => {
         // Persist which series are on so the choice survives reloads
         // (issue: "sorting and filtering settings should remember").
-        try {
-          const legendOpt = chartRef.current?.getOption().legend as Array<{ selected?: Record<string, boolean> }> | undefined;
-          localStorage.setItem(LEGEND_STORAGE_KEY, JSON.stringify(legendOpt?.[0]?.selected ?? {}));
-        } catch {
-          /* storage unavailable — toggling still works this session */
-        }
+        persistLegendSelection(chartRef.current, LEGEND_STORAGE_KEY);
         chartRef.current?.setOption(
           {
             yAxis: [
@@ -327,31 +275,21 @@ function DailyUsageChart() {
       };
       // ECharts 5 indexes the top-level palette (not series.lineStyle.color)
       // for legend swatches, so this order MUST match the series array order.
-      const SERIES_COLORS = ["#38bdf8", "#facc15", "#4ade80"] as const;
       const series: echarts.EChartsOption = {
         animation: true,
         animationDuration: 700,
         animationEasing: "cubicOut",
         backgroundColor: "transparent",
-        color: [...SERIES_COLORS],
+        color: [...CHART_PALETTE],
         grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
         tooltip: {
-          trigger: "axis",
+          ...COMMON_TOOLTIP,
           ...touchAwareTooltip(),
-          confine: true,
-          backgroundColor: "rgba(17, 19, 24, 0.96)",
-          borderColor: "#232732",
-          borderWidth: 1,
-          padding: [10, 12],
-          textStyle: { color: "#94a3b8", fontSize: 12 },
           axisPointer: { lineStyle: { color: "#2c3038" } },
           formatter: (params: unknown) => {
             const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
             if (!arr.length) return "";
-            const [y, m, day] = arr[0].axisValue.split("-").map(Number);
-            const full = new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", {
-              weekday: "long", day: "numeric", month: "long", year: "numeric",
-            });
+            const full = fmtDayFull(arr[0].axisValue);
             const rows = arr
               .filter((p) => p.value !== null)
               .map((p) => {
@@ -369,8 +307,8 @@ function DailyUsageChart() {
           // so the line's first/last points sit flush to both plot edges.
           boundaryGap: false,
           data: dates,
-          axisLabel: { color: "#64748b", fontSize: 10, formatter: fmtDay },
-          axisLine: { lineStyle: { color: "#232732" } },
+          axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort },
+          axisLine: { lineStyle: { color: CHART_BORDER } },
           axisTick: { show: false },
         },
         yAxis: [
@@ -378,15 +316,15 @@ function DailyUsageChart() {
             type: "value",
             min: 0,
             max: yMaxCost,
-            axisLabel: { color: "#64748b", fontSize: 10, fontFamily: '"JetBrains Mono", monospace', formatter: (v: number) => `$${Math.round(v)}` },
-            splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+            axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, fontFamily: '"JetBrains Mono", monospace', formatter: (v: number) => `$${Math.round(v)}` },
+            splitLine: { lineStyle: { color: CHART_SPLIT_LINE } },
           },
           {
             type: "value",
             min: 0,
             max: yMaxTokens,
             axisLabel: {
-              color: "#64748b",
+              color: CHART_AXIS_LABEL,
               fontSize: 10,
               fontFamily: '"JetBrains Mono", monospace',
               formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
@@ -406,7 +344,7 @@ function DailyUsageChart() {
           itemWidth: 8,
           itemHeight: 8,
           itemGap: 18,
-          textStyle: { color: "#94a3b8", fontSize: 11 },
+          textStyle: { color: CHART_MUTED, fontSize: 11 },
         },
         // Media queries: on narrow screens, shrink the label gutters so the
         // dual-axis plot keeps as much width as possible (ECharts responsive
@@ -420,37 +358,7 @@ function DailyUsageChart() {
             },
           },
         ],
-        series: [
-          {
-            name: "Cost ($)",
-            type: "line",
-            data: points.map((p) => (p.cost === null ? null : Number(p.cost.toFixed(2)))),
-            smooth: 0.3,
-            showSymbol: false,
-            lineStyle: { color: SERIES_COLORS[0], width: 2 },
-            areaStyle: { color: "rgba(56, 189, 248, 0.12)" },
-          },
-          {
-            name: "Tokens",
-            type: "line",
-            yAxisIndex: 1,
-            data: points.map((p) => p.tokens),
-            smooth: 0.3,
-            showSymbol: false,
-            lineStyle: { color: SERIES_COLORS[1], width: 2 },
-            areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
-          },
-          {
-            name: "Cache read",
-            type: "line",
-            yAxisIndex: 1,
-            data: points.map((p) => p.cacheRead),
-            smooth: 0.3,
-            showSymbol: false,
-            lineStyle: { color: SERIES_COLORS[2], width: 2 },
-            areaStyle: { color: "rgba(74, 222, 128, 0.08)" },
-          },
-        ],
+        series: costTokenSeries(points),
       };
       chartRef.current?.setOption(series, true);
       chartRef.current?.on("legendselectchanged", onLegendToggle);
@@ -515,10 +423,6 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
     const ro = new ResizeObserver(() => chartRef.current?.resize());
     ro.observe(ref.current);
     const dates = pts.map((p) => p.date);
-    const fmtDay = (d: string) => {
-      const [y, m, day] = d.split("-").map(Number);
-      return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    };
     // Same peak-anchor contract as the main chart: computed once per mount,
     // never rescaled by polls within the same open. Token axis peak includes
     // cache reads so the third series never overflows it (matches the main
@@ -530,18 +434,18 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
       animationEasing: "cubicOut",
       backgroundColor: "transparent",
       // Top-level palette indexes by series order — ECharts uses THESE for
-      // the tooltip markers. Mirrors the main chart's SERIES_COLORS.
-      color: ["#38bdf8", "#facc15", "#4ade80"],
+      // the tooltip markers. Mirrors the main chart's CHART_PALETTE.
+      color: [...CHART_PALETTE],
       grid: { left: 2, right: 2, top: 14, bottom: 22, containLabel: true },
       tooltip: {
         trigger: "axis",
         ...touchAwareTooltip(),
         confine: true,
-        backgroundColor: "rgba(17, 19, 24, 0.96)",
-        borderColor: "#232732",
+        backgroundColor: CHART_TOOLTIP_BG,
+        borderColor: CHART_BORDER,
         borderWidth: 1,
         padding: [8, 10],
-        textStyle: { color: "#94a3b8", fontSize: 11 },
+        textStyle: { color: CHART_MUTED, fontSize: 11 },
         axisPointer: { lineStyle: { color: "#2c3038" } },
         formatter: (params: unknown) => {
           const arr = params as Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>;
@@ -563,8 +467,8 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
         type: "category",
         boundaryGap: false,
         data: dates,
-        axisLabel: { color: "#64748b", fontSize: 9, formatter: fmtDay },
-        axisLine: { lineStyle: { color: "#232732" } },
+        axisLabel: { color: CHART_AXIS_LABEL, fontSize: 9, formatter: fmtDayShort },
+        axisLine: { lineStyle: { color: CHART_BORDER } },
         axisTick: { show: false },
       },
       yAxis: [
@@ -572,15 +476,15 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           type: "value",
           min: 0,
           max: costPeak,
-          axisLabel: { color: "#64748b", fontSize: 9, fontFamily: '"JetBrains Mono", monospace', formatter: (v: number) => `$${Math.round(v * 100) / 100}` },
-          splitLine: { lineStyle: { color: "rgba(35, 39, 50, 0.6)" } },
+          axisLabel: { color: CHART_AXIS_LABEL, fontSize: 9, fontFamily: '"JetBrains Mono", monospace', formatter: (v: number) => `$${Math.round(v * 100) / 100}` },
+          splitLine: { lineStyle: { color: CHART_SPLIT_LINE } },
         },
         {
           type: "value",
           min: 0,
           max: tokenPeak,
           axisLabel: {
-            color: "#64748b",
+            color: CHART_AXIS_LABEL,
             fontSize: 9,
             fontFamily: '"JetBrains Mono", monospace',
             formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
@@ -588,37 +492,7 @@ function ModelRowDetail({ modelKey, modelLabel }: { modelKey: string; modelLabel
           splitLine: { show: false },
         },
       ],
-      series: [
-        {
-          name: "Cost ($)",
-          type: "line",
-          data: pts.map((p) => (p.cost === null ? null : Number(p.cost.toFixed(2)))),
-          smooth: 0.3,
-          showSymbol: false,
-          lineStyle: { color: "#38bdf8", width: 2 },
-          areaStyle: { color: "rgba(56, 189, 248, 0.12)" },
-        },
-        {
-          name: "Tokens",
-          type: "line",
-          yAxisIndex: 1,
-          data: pts.map((p) => p.tokens),
-          smooth: 0.3,
-          showSymbol: false,
-          lineStyle: { color: "#facc15", width: 2 },
-          areaStyle: { color: "rgba(250, 204, 21, 0.08)" },
-        },
-        {
-          name: "Cache read",
-          type: "line",
-          yAxisIndex: 1,
-          data: pts.map((p) => p.cacheRead),
-          smooth: 0.3,
-          showSymbol: false,
-          lineStyle: { color: "#4ade80", width: 2 },
-          areaStyle: { color: "rgba(74, 222, 128, 0.08)" },
-        },
-      ],
+      series: costTokenSeries(pts),
     };
     chartRef.current.setOption(option, true);
     return () => {
