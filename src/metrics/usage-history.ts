@@ -18,7 +18,7 @@ import type { Database } from "bun:sqlite";
 import type { UsageAggregate } from "../orchestrator/aggregates";
 import type { CostEstimationOpts } from "../shared/types";
 import { usageSourceClause } from "../shared/types";
-import { mergeModelRows } from "../orchestrator/aggregates";
+import { applyModelCostsToSources, mergeModelRows, preferModelTotalCost } from "../orchestrator/aggregates";
 import { mergeNullSum, sum } from "../shared/math";
 
 const DAY_METRICS = [
@@ -91,26 +91,10 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
   }
 
   const byModel = queryModelRows(db, from, to, costOpts);
-  let windowSavings = 0;
-  const bySourceCostFromMerge = new Map<string, number>();
-  for (const m of byModel) {
-    windowSavings += m.cacheSavings ?? 0;
-    for (const [source, data] of Object.entries(m.bySource ?? {})) {
-      const src = bySource[source];
-      if (src) {
-        src.cacheSavings = (src.cacheSavings ?? 0) + data.cacheSavings;
-        if (costOpts.enabled) {
-          bySourceCostFromMerge.set(source, (bySourceCostFromMerge.get(source) ?? 0) + data.cost);
-        }
-      }
-    }
-  }
-  if (costOpts.enabled) {
-    for (const [source, cost] of bySourceCostFromMerge) {
-      const src = bySource[source];
-      if (src) src.cost = cost;
-    }
-  }
+  // Same fold as the snapshot path: estimation replaces each source's cost
+  // with the estimator's per-source contribution; passthrough keeps the
+  // upstream sums. Shared helper keeps the two data paths identical.
+  const windowSavings = applyModelCostsToSources(byModel, bySource, costOpts);
 
   // totalCost: prefer the per-model rollup when costOpts.enabled is true
   // (the estimator's number is internally consistent across days and sources).
@@ -118,9 +102,7 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
   // behavior) or when byModel is empty (which happens in the tests'
   // usageDays() fixture and in real usage when a source has data but the
   // collector didn't break it down by model).
-  const estimatedTotalCost: number | null = costOpts.enabled && byModel.length > 0
-    ? sum(byModel.map((m) => m.cost ?? 0)) ?? 0
-    : totalCost;
+  const estimatedTotalCost: number | null = preferModelTotalCost(byModel, costOpts, totalCost);
 
   return {
     totalSessions,

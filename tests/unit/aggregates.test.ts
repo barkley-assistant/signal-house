@@ -78,27 +78,27 @@ function usageDays(n: number): PersistedState {
 describe("computeAggregates windowing", () => {
   test("window reflects the requested days; default is 30", () => {
     const s = usageDays(40);
-    expect(computeAggregates([s], config).window.days).toBe(30);
-    expect(computeAggregates([s], config).window.start).toBe(utcDaysAgo(30));
-    expect(computeAggregates([s], config, 7).window.days).toBe(7);
-    expect(computeAggregates([s], config, 90).window.start).toBe(utcDaysAgo(90));
+    expect(computeAggregates({ states: [s], config }).window.days).toBe(30);
+    expect(computeAggregates({ states: [s], config }).window.start).toBe(utcDaysAgo(30));
+    expect(computeAggregates({ states: [s], config, days: 7 }).window.days).toBe(7);
+    expect(computeAggregates({ states: [s], config, days: 90 }).window.start).toBe(utcDaysAgo(90));
   });
 
   test("usage totals slice byDay to the window", () => {
     const s = usageDays(40); // $1 per day, 40 days of history
-    const a7 = computeAggregates([s], config, 7);
+    const a7 = computeAggregates({ states: [s], config, days: 7 });
     // Window is [today-7, today] inclusive — 8 calendar days of $1 rows.
     expect(a7.usage!.totalSessions).toBe(8);
     expect(a7.usage!.totalCost).toBeCloseTo(8, 5);
 
-    const a90 = computeAggregates([s], config, 90);
+    const a90 = computeAggregates({ states: [s], config, days: 90 });
     expect(a90.usage!.totalSessions).toBe(40);
     expect(a90.usage!.totalCost).toBeCloseTo(40, 5);
   });
 
   test("bySource slices to the window too", () => {
     const s = usageDays(40);
-    const a7 = computeAggregates([s], config, 7);
+    const a7 = computeAggregates({ states: [s], config, days: 7 });
     expect(a7.usage!.bySource.hermes.sessions).toBe(8);
     expect(a7.usage!.bySource.hermes.cost).toBeCloseTo(8, 5);
   });
@@ -113,7 +113,7 @@ describe("computeAggregates windowing", () => {
       bySource: { opencode: { sessions: 999, cost: 42, tokens: 1000 } },
       byModel: [{ model: "Weekmodel", family: null, sessions: 2, cost: 2, tokens: 2 }],
     };
-    const a = computeAggregates([s], config, 7, override);
+    const a = computeAggregates({ states: [s], config, days: 7, usageOverride: override });
     expect(a.usage!.totalSessions).toBe(999);
     expect(a.usage!.totalCost).toBeCloseTo(42, 5);
     expect(a.usage!.byModel[0].model).toBe("Weekmodel");
@@ -121,7 +121,7 @@ describe("computeAggregates windowing", () => {
 
   test("usage falls back to the snapshot when no history override is given", () => {
     const s = usageDays(40);
-    const a = computeAggregates([s], config, 7, null);
+    const a = computeAggregates({ states: [s], config, days: 7 });
     expect(a.usage!.totalSessions).toBe(8);
     expect(a.usage!.totalCost).toBeCloseTo(8, 5);
   });
@@ -146,12 +146,12 @@ describe("computeAggregates windowing", () => {
     for (const pr of data.pullRequests) pr.repoKey = "github:r";
     const s = state("github", data);
 
-    const a7 = computeAggregates([s], config, 7);
+    const a7 = computeAggregates({ states: [s], config, days: 7 });
     expect(a7.cycleTime!.sampleSize).toBe(1);
     // 41h-2h... merged yesterday created 2 days ago → ~24h+ delta in seconds
     expect(a7.cycleTime!.medianSeconds).toBeCloseTo((Date.parse(iso(1)) - Date.parse(iso(2))) / 1000, 2);
 
-    const a90 = computeAggregates([s], config, 90);
+    const a90 = computeAggregates({ states: [s], config, days: 90 });
     expect(a90.cycleTime!.sampleSize).toBe(2);
   });
 
@@ -170,12 +170,12 @@ describe("computeAggregates windowing", () => {
     ];
     const s = state("github", data);
 
-    const a7 = computeAggregates([s], config, 7);
+    const a7 = computeAggregates({ states: [s], config, days: 7 });
     expect(a7.throughput!.issuesClosed).toBe(1);
     expect(a7.ci!.totalRuns).toBe(1);
     expect(a7.ci!.passRate).toBeCloseTo(1, 5);
 
-    const a90 = computeAggregates([s], config, 90);
+    const a90 = computeAggregates({ states: [s], config, days: 90 });
     expect(a90.throughput!.issuesClosed).toBe(2);
     expect(a90.ci!.totalRuns).toBe(2);
     expect(a90.ci!.passRate).toBeCloseTo(0.5, 5);
@@ -208,7 +208,7 @@ describe("CI conclusion accounting", () => {
 
   test("pass + fail + other === totalRuns: skipped/cancelled/null runs accounted, not dropped", () => {
     const s = ghStateWithRuns(["success", "failure", "skipped", "cancelled", "neutral", "timed_out", null]);
-    const a = computeAggregates([s], config, 7);
+    const a = computeAggregates({ states: [s], config, days: 7 });
     expect(a.ci!.totalRuns).toBe(7);
     expect(a.ci!.passCount).toBe(1);
     expect(a.ci!.failCount).toBe(1);
@@ -218,7 +218,7 @@ describe("CI conclusion accounting", () => {
 
   test("passRate stays terminal-only (pass / (pass + fail)) when others are present", () => {
     const s = ghStateWithRuns(["success", "skipped", "cancelled"]);
-    const a = computeAggregates([s], config, 7);
+    const a = computeAggregates({ states: [s], config, days: 7 });
     // 1 pass of 1 terminal run — the 2 skipped/cancelled runs must not
     // enter the denominator.
     expect(a.ci!.passRate).toBeCloseTo(1, 5);
@@ -226,7 +226,7 @@ describe("CI conclusion accounting", () => {
 
   test("all-non-terminal window: ci non-null, passRate null (unknown, not 0%), otherCount === totalRuns", () => {
     const s = ghStateWithRuns(["skipped", null, "cancelled"]);
-    const a = computeAggregates([s], config, 7);
+    const a = computeAggregates({ states: [s], config, days: 7 });
     expect(a.ci).not.toBeNull();
     expect(a.ci!.passRate).toBeNull();
     expect(a.ci!.otherCount).toBe(3);
@@ -309,7 +309,7 @@ describe("computeAggregates privacy filtering", () => {
   }
 
   test("stale counts exclude private repos when showPrivateRepoItems is off", () => {
-    const agg = computeAggregates([ghState()], config);
+    const agg = computeAggregates({ states: [ghState()], config });
     // The private stale issue must NOT leak into the card...
     expect(agg.staleWork?.staleIssues).toBe(0);
     // ...but the public in-window issue still counts.
@@ -318,7 +318,7 @@ describe("computeAggregates privacy filtering", () => {
 
   test("stale counts include private repos on the explicit operator opt-in", () => {
     const cfg = { ...config, privacy: { showPrivateRepoItems: true } };
-    const agg = computeAggregates([ghState()], cfg);
+    const agg = computeAggregates({ states: [ghState()], config: cfg });
     expect(agg.staleWork?.staleIssues).toBe(1);
     expect(agg.throughput?.issuesOpened ?? 0).toBe(1);
   });
@@ -326,7 +326,7 @@ describe("computeAggregates privacy filtering", () => {
   test("fail-closed: issues from repos missing from the map are excluded too", () => {
     const s = ghState();
     s.data!.issues.push({ id: "3", title: "ghost repo issue", state: "open", createdAt: OLD, updatedAt: OLD, closedAt: null, repo: "acme/unlisted", repoKey: "github:acme/unlisted", labels: [], assignee: null, milestone: null, url: "" });
-    const agg = computeAggregates([s], config);
+    const agg = computeAggregates({ states: [s], config });
     expect(agg.staleWork?.staleIssues).toBe(0);
   });
 });

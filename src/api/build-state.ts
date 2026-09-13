@@ -104,13 +104,13 @@ export async function buildState(db: Database, config: RuntimeConfig, collectors
   const costRates: Map<string, ModelRates> = await fetchAllRates(allModelKeys);
   const costOpts: CostEstimationOpts = { rates: costRates, enabled: config.estimateCosts };
 
-  const aggregates = computeAggregates(
+  const aggregates = computeAggregates({
     states,
     config,
     days,
-    queryUsageAggregate(db, start, end, costOpts),
+    usageOverride: queryUsageAggregate(db, start, end, costOpts),
     costOpts,
-  );
+  });
 
   const allRepos = states.flatMap((s) => s.data!.repositories);
   const privacyMap = resolvePrivacyMap(allRepos);

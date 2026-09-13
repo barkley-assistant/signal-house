@@ -95,7 +95,23 @@ export interface Aggregates {
   usage: UsageAggregate | null;
 }
 
-export function computeAggregates(states: PersistedState[], config: RuntimeConfig, days: number = DEFAULT_WINDOW_DAYS, usageOverride: UsageAggregate | null = null, costOpts: CostEstimationOpts = { rates: new Map(), enabled: false }): Aggregates {
+export interface AggregateOptions {
+  states: PersistedState[];
+  config: RuntimeConfig;
+  days?: number;
+  /** Precomputed usage aggregate from signal-house's own daily_metrics
+   *  history; null falls back to snapshot derivation. */
+  usageOverride?: UsageAggregate | null;
+  costOpts?: CostEstimationOpts;
+}
+
+export function computeAggregates({
+  states,
+  config,
+  days = DEFAULT_WINDOW_DAYS,
+  usageOverride = null,
+  costOpts = { rates: new Map(), enabled: false },
+}: AggregateOptions): Aggregates {
   const end = utcDay();
   const start = utcDaysAgo(days);
   const window = { start, end, days };
@@ -218,40 +234,19 @@ function buildSnapshotUsage(usageStates: PersistedState[], inWindowDay: (d: Usag
   }
 
   const mergedByModel = combineModels(usageStates, costOpts);
-  let windowSavings = 0;
   // When estimation is on, replace each source's upstream cost with the
   // estimator's per-source contribution (sum of per-source costs across
   // the merged model rows). When off, leave the upstream byDay sum in
-  // place — that's what the source tiles should show.
-  const bySourceCostFromMerge = new Map<string, number>();
-  for (const m of mergedByModel) {
-    windowSavings += m.cacheSavings ?? 0;
-    for (const [src, data] of Object.entries(m.bySource ?? {})) {
-      const srcMetrics = bySource[src];
-      if (srcMetrics) {
-        srcMetrics.cacheSavings = (srcMetrics.cacheSavings ?? 0) + data.cacheSavings;
-        if (costOpts.enabled) {
-          bySourceCostFromMerge.set(src, (bySourceCostFromMerge.get(src) ?? 0) + data.cost);
-        }
-      }
-    }
-  }
-  if (costOpts.enabled) {
-    for (const [src, cost] of bySourceCostFromMerge) {
-      const srcMetrics = bySource[src];
-      if (srcMetrics) srcMetrics.cost = cost;
-    }
-  }
+  // place — that's what the source tiles should show. applyModelCostsToSources
+  // owns that fold; it also accumulates the window savings.
+  const windowSavings = applyModelCostsToSources(mergedByModel, bySource, costOpts);
 
   // totalCost: prefer the model-row totals (they carry the right value
   // whether estimated or passthrough) when estimation is enabled and
   // byModel is non-empty. Fall back to windowCost (the upstream byDay sum)
   // when estimation is off or when byModel is empty (tests' usageDays()
   // fixture, or real usage where a source has data but no per-model detail).
-  const totalCost =
-    costOpts.enabled && mergedByModel.length > 0
-      ? sum(mergedByModel.map((m) => m.cost ?? 0)) ?? 0
-      : windowCost;
+  const totalCost = preferModelTotalCost(mergedByModel, costOpts, windowCost);
 
   return {
     totalSessions: sum(usageStates.map((s) => s.data?.usage?.byDay.filter(inWindowDay).reduce((a, d) => a + d.sessions, 0) ?? null)) ?? 0,
@@ -377,7 +372,7 @@ export function mergeModelRows(
     const outputTokens = row.outputTokens ?? 0;
     const cacheReadTokens = row.cacheReadTokens ?? 0;
 
-    // Cost derivation:
+    // Cost derivation + rate-sheet capture for this row (see priceRow):
     //   - estimateCosts=true:  recompute cost from tokens × rates.
     //                           "estimated" if openrouter or local had the model,
     //                           "unknown" if no rate was found anywhere,
@@ -386,50 +381,14 @@ export function mergeModelRows(
     //                           local-source in costSource; both are "estimated".
     //                           Future: per-row provenance via the resolver.)
     //   - estimateCosts=false: passthrough — use the upstream cost as-is.
-    let rowCost: number | null;
-    let rowCostSource: CostSource | undefined;
-    // The rate set this row was priced with. Kept so cacheSavings and the
-    // effPerM discount below derive from the SAME source as `cost` — one
-    // price sheet per row, not a mix of estimator + legacy local rates.
-    let rowRates: ModelRates | undefined;
-    if (costOpts.enabled) {
-      // Dated variant first, stripped base as a fallback — mirrors the
-      // resolver's lookup order (D1). The rates map is keyed by FULL
-      // machine key (dated keys survive the parser), so a dated row must
-      // hit its own dated entry before the base.
-      const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
-      if (rates && (rates.input > 0 || rates.output > 0)) {
-        rowRates = rates;
-        rowCost = costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
-        rowCostSource = "estimated";
-      } else if (inputTokens + outputTokens + cacheReadTokens === 0) {
-        rowCost = 0;
-        rowCostSource = "skipped";
-      } else {
-        rowCost = 0;
-        rowCostSource = "unknown";
-      }
-    } else {
-      rowCost = row.cost;
-      rowCostSource = row.cost !== null && row.cost !== undefined ? "passthrough" : undefined;
-    }
-
-    // Net savings = tokens read from cache × (input − cache_read) price delta,
-    // priced from the SAME rate sheet as `cost` above. When no rate was found
-    // (unknown/passthrough rows) there is no defensible discount number —
-    // savings stay 0 rather than mixing a second price source in.
-    const cacheSavings =
-      rowRates && rowCostSource === "estimated"
-        ? (cacheReadTokens * Math.max(0, rowRates.input - rowRates.cacheRead)) / 1_000_000
-        : 0;
-
-    // Per-source slice of this row's cost. When estimation is on, slice
-    // proportionally to per-source tokens × rates (so bySource.<src>.cost
-    // is internally consistent with byModel[].cost and the same data
-    // flows everywhere). When estimation is off, slice proportionally to
-    // the row's total upstream cost (so the sum matches the upstream
-    // value without forcing each source to independently know the rate).
-    const rowSourceCost = rowCost ?? 0;
+    const { rowCost, rowCostSource, rowRates, cacheSavings } = priceRow(
+      row,
+      costOpts,
+      rawKey,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+    );
 
     const existing = map.get(key);
     if (existing) {
@@ -448,21 +407,8 @@ export function mergeModelRows(
       src.cacheSavings += cacheSavings;
       // Per-source cost: estimator computes from per-source tokens × rates
       // (so it lines up with the estimator's own number on the row); passthrough
-      // distributes the row's upstream cost by per-source token share.
-      if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-        const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
-        if (rates && (rates.input > 0 || rates.output > 0)) {
-          src.cost += costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
-        }
-      } else if (!costOpts.enabled && rowCost !== null && rowCost > 0) {
-        // Distribute upstream cost by token share: each source's tokens
-        // divided by total row tokens, times the row's total upstream cost.
-        const totalRowTokens = inputTokens + outputTokens + cacheReadTokens;
-        if (totalRowTokens > 0) {
-          const share = (inputTokens + outputTokens + cacheReadTokens) / totalRowTokens;
-          src.cost += rowCost * share;
-        }
-      }
+      // adds the row's upstream cost gated on the source actually carrying tokens.
+      src.cost += sourceCostSlice(inputTokens, outputTokens, cacheReadTokens, rowCost, rowCostSource, costOpts, rawKey, true);
       existing.bySource[source] = src;
       if (row.sessions > existing.best) {
         existing.best = row.sessions;
@@ -484,24 +430,17 @@ export function mergeModelRows(
         cacheReadTokens,
         cacheSavings,
         rates: rowRates,
-        bySource: (() => {
-          const entry: { cacheReadTokens: number; cacheSavings: number; inputTokens: number; outputTokens: number; cost: number } = {
+        bySource: {
+          [source]: {
             cacheReadTokens,
             inputTokens,
             outputTokens,
             cacheSavings,
-            cost: 0,
-          };
-          if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-            const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
-            if (rates && (rates.input > 0 || rates.output > 0)) {
-              entry.cost = costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
-            }
-          } else if (!costOpts.enabled && rowSourceCost > 0) {
-            entry.cost = rowSourceCost;
-          }
-          return { [source]: entry };
-        })(),
+            // First row for this model — the source owns all the tokens, so
+            // passthrough takes the row's whole upstream cost (no share split).
+            cost: sourceCostSlice(inputTokens, outputTokens, cacheReadTokens, rowCost, rowCostSource, costOpts, rawKey, false),
+          },
+        },
         best: row.sessions,
       });
     }
@@ -535,4 +474,148 @@ export function mergeModelRows(
 
 function rowTokens(row: { inputTokens: number | null; outputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null; reasoningTokens: number | null }): number | null {
   return sum([row.inputTokens, row.outputTokens, row.cacheReadTokens, row.cacheWriteTokens, row.reasoningTokens]);
+}
+
+/** Cost derivation + rate-sheet capture for ONE row.
+ *
+ *  estimateCosts=true:  recompute cost from tokens × rates; "estimated" if
+ *  a source had the model, "unknown" if no rate was found anywhere,
+ *  "skipped" if the row has no tokens.
+ *  estimateCosts=false: passthrough — the upstream cost as-is.
+ *
+ *  Also returns the rate sheet the row was priced with and the cache
+ *  savings derived from it — kept together so cacheSavings and the effPerM
+ *  discount derive from the SAME price source as `cost` (one price sheet
+ *  per row, never a mix of estimator + legacy local rates).
+ */
+function priceRow(
+  row: ModelUsageRow,
+  costOpts: CostEstimationOpts,
+  rawKey: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number,
+): { rowCost: number | null; rowCostSource: CostSource | undefined; rowRates: ModelRates | undefined; cacheSavings: number } {
+  let rowCost: number | null;
+  let rowCostSource: CostSource | undefined;
+  let rowRates: ModelRates | undefined;
+  if (costOpts.enabled) {
+    // Dated variant first, stripped base as a fallback — mirrors the
+    // resolver's lookup order (D1). The rates map is keyed by FULL
+    // machine key (dated keys survive the parser), so a dated row must
+    // hit its own dated entry before the base.
+    const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
+    if (rates && (rates.input > 0 || rates.output > 0)) {
+      rowRates = rates;
+      rowCost = costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
+      rowCostSource = "estimated";
+    } else if (inputTokens + outputTokens + cacheReadTokens === 0) {
+      rowCost = 0;
+      rowCostSource = "skipped";
+    } else {
+      rowCost = 0;
+      rowCostSource = "unknown";
+    }
+  } else {
+    rowCost = row.cost;
+    rowCostSource = row.cost !== null && row.cost !== undefined ? "passthrough" : undefined;
+  }
+
+  // Net savings = tokens read from cache × (input − cache_read) price delta,
+  // priced from the SAME rate sheet as `cost` above. When no rate was found
+  // (unknown/passthrough rows) there is no defensible discount number —
+  // savings stay 0 rather than mixing a second price source in.
+  const cacheSavings =
+    rowRates && rowCostSource === "estimated"
+      ? (cacheReadTokens * Math.max(0, rowRates.input - rowRates.cacheRead)) / 1_000_000
+      : 0;
+  return { rowCost, rowCostSource, rowRates, cacheSavings };
+}
+
+/** One source's slice of a row's cost.
+ *
+ *  Estimation mode: per-source tokens × rates, so bySource.<src>.cost is
+ *  internally consistent with byModel[].cost (the same estimator number
+ *  flows everywhere). Unknown/skipped rows contribute 0.
+ *
+ *  Passthrough: the row's upstream cost. The FIRST row for a model takes it
+ *  whole (that source owns all the tokens); subsequent rows from other
+ *  sources gate on the source carrying tokens — the token-share split
+ *  collapses to the whole row cost because each row IS one source's slice.
+ */
+function sourceCostSlice(
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number,
+  rowCost: number | null,
+  rowCostSource: CostSource | undefined,
+  costOpts: CostEstimationOpts,
+  rawKey: string,
+  distributeByShare: boolean,
+): number {
+  if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
+    const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
+    if (rates && (rates.input > 0 || rates.output > 0)) {
+      return costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
+    }
+    return 0;
+  }
+  if (!costOpts.enabled && rowCost !== null && rowCost > 0) {
+    if (!distributeByShare) return rowCost;
+    return inputTokens + outputTokens + cacheReadTokens > 0 ? rowCost : 0;
+  }
+  return 0;
+}
+
+/** Fold merged model rows' per-source costs + savings into the bySource map
+ *  and return the window savings total.
+ *
+ *  Estimation mode REPLACES each source's upstream cost with the estimator's
+ *  per-source contribution (the merged rows carry the computed totals; the
+ *  upstream byDay sum would double-count). Passthrough keeps the upstream
+ *  byDay sums and only adds savings.
+ *
+ *  Shared by the snapshot derivation (buildSnapshotUsage) and the
+ *  daily-history aggregate (queryUsageAggregate) — the two data paths must
+ *  stay numerically identical by contract, and sharing the fold is the only
+ *  way to keep that true.
+ */
+export function applyModelCostsToSources(
+  byModel: UsageAggregate["byModel"],
+  bySource: Record<string, SourceUsageMetrics>,
+  costOpts: CostEstimationOpts,
+): number {
+  let windowSavings = 0;
+  const bySourceCostFromMerge = new Map<string, number>();
+  for (const m of byModel) {
+    windowSavings += m.cacheSavings ?? 0;
+    for (const [source, data] of Object.entries(m.bySource ?? {})) {
+      const src = bySource[source];
+      if (src) {
+        src.cacheSavings = (src.cacheSavings ?? 0) + data.cacheSavings;
+        if (costOpts.enabled) {
+          bySourceCostFromMerge.set(source, (bySourceCostFromMerge.get(source) ?? 0) + data.cost);
+        }
+      }
+    }
+  }
+  if (costOpts.enabled) {
+    for (const [source, cost] of bySourceCostFromMerge) {
+      const src = bySource[source];
+      if (src) src.cost = cost;
+    }
+  }
+  return windowSavings;
+}
+
+/** Preferred totalCost: the estimator's by-model rollup when estimation is
+ *  on and byModel is non-empty (it carries the right value whether
+ *  estimated or passthrough), else the upstream per-day sum. Shared by the
+ *  snapshot + daily-history paths so both report the same number. */
+export function preferModelTotalCost(
+  byModel: UsageAggregate["byModel"],
+  costOpts: CostEstimationOpts,
+  fallback: number | null,
+): number | null {
+  return costOpts.enabled && byModel.length > 0 ? sum(byModel.map((m) => m.cost ?? 0)) ?? 0 : fallback;
 }
