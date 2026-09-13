@@ -62,11 +62,11 @@ export async function fetchAllRates(modelKeys: readonly string[]): Promise<Map<s
     const k = machineKey(raw);
     if (k) uniq.add(k);
   }
-   const entries = await Promise.all(
-     [...uniq].map(async (key) => [key, await getModelPricing(key)] as const),
-   );
-   return buildRatesMap(entries);
- }
+  const entries = await Promise.all(
+    [...uniq].map(async (key) => [key, await getModelPricing(key)] as const),
+  );
+  return buildRatesMap(entries);
+}
 
 /** Synchronous variant: build a rates map from pre-fetched rates. Useful
  *  in tests that want to inject a pre-built map. */

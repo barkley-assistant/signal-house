@@ -473,12 +473,6 @@ function DailyUsageChart() {
 type SortKey = "model" | "sessions" | "tokens" | "cost" | "cachePct" | "eff" | null;
 type SortState = { key: SortKey; asc: boolean };
 
-/** Mini daily cost+tokens chart for ONE model, shown inside the expanded
- *  by-model row. Deliberately the main DailyUsageChart's visual language at
- *  reduced size: same palette (#38bdf8 cost / #facc15 tokens), same smooth
- *  lines with flush edges (boundaryGap: false), same tooltip shell, same
- *  peak-anchoring rule (niceCeil once per open).
- *
 /** Mini daily cost+tokens+cache-read chart for ONE model, shown inside the
  *  expanded by-model row. Deliberately the main DailyUsageChart's EXACT
  *  series grammar at reduced size: same three series, same palette
