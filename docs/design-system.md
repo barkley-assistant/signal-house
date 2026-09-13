@@ -177,15 +177,19 @@ titles. Cards carry an `aria-label` describing their content.
 
 ### Agent Spend overview
 
-`.spend-overview` → a single three-tile panel, equal thirds on desktop: the
+`.spend-overview` → a two-tile panel, equal halves on desktop: the
 **Total cost** hero (`.spend-overview__total`: mono total cost in
 `clamp(24px, 5vw, 56px)`, then muted "Sessions · Tokens" beneath, dot-
-separated), the **Cache** tile (`.spend-overview__cache`: hit rate + saved
-amount), and the **Cost / merged PR** tile (`.spend-overview__delivery`:
-window spend ÷ merged PRs — a delivery-linkage stat computed client-side,
-rendering "—" when throughput or cost is unknown). Collapses to one column
-below 700px. Per-source attribution lives in each by-model row's expandable
-detail, not the overview.
+separated) and the **Cache** tile (`.spend-overview__cache`: hit rate +
+saved amount). Collapses to one column below 900px. Per-source attribution
+lives in each by-model row's expandable detail, not the overview.
+
+Below the tiles, the **Lifetime to date** block (`.spend-lifetime`): five
+label-over-value stat lines — Commits, Tokens, Sessions, Top model (with
+its session count), Busiest day — in `.spend-lifetime__grid`, five across
+on desktop, two below 900px, stacked below 640px. The header states the
+actual first retained day ("since 15 Jun 2026"); the numbers are bounded
+by retention, never labelled "all time". Unknown values render "—".
 
 ### Tables
 
