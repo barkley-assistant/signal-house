@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import type { Collector, CollectorResult, SourceData, UsageDay, ModelUsageRow } from "../../shared/types";
 import { emptySourceData } from "../../shared/types";
 import { utcDaysAgo } from "../../shared/dates";
+import { dayToUsageDay, modelBreakdownByDay, modelToModelUsageRow, type UsageColumns } from "../usage-mappers";
 
 export class OpencodeCollector implements Collector<SourceData> {
   readonly id = "opencode" as const;
@@ -117,28 +118,18 @@ export class OpencodeCollector implements Collector<SourceData> {
   }
 }
 
-interface OpencodeDayRow {
-  day: string;
-  sessions: number;
-  tokens_input: number | null;
-  tokens_output: number | null;
-  tokens_reasoning: number | null;
-  tokens_cache_read: number | null;
-  tokens_cache_write: number | null;
-  cost: number | null;
-}
-
-interface OpencodeModelRow {
-  model: string | null;
-  provider: string | null;
-  sessions: number;
-  tokens_input: number | null;
-  tokens_output: number | null;
-  tokens_reasoning: number | null;
-  tokens_cache_read: number | null;
-  tokens_cache_write: number | null;
-  cost: number | null;
-}
+/** Aggregate column aliases for opencode's SQL (epoch MILLISECONDS —
+ *  contract #10, unlike hermes's seconds). */
+const COLUMNS: UsageColumns = {
+  tokensInput: "tokens_input",
+  tokensOutput: "tokens_output",
+  tokensReasoning: "tokens_reasoning",
+  tokensCacheRead: "tokens_cache_read",
+  tokensCacheWrite: "tokens_cache_write",
+  cost: "cost",
+  // opencode's session table has no message-count column (contract #9 note).
+  messages: null,
+};
 
 const DAY_SQL = `
 SELECT strftime('%Y-%m-%d', time_created / 1000, 'unixepoch') AS day,
@@ -191,65 +182,20 @@ WHERE json_extract(m.data, '$.role') = 'assistant'
 GROUP BY 1, 2, 3
 ORDER BY 1, cost DESC NULLS LAST`;
 
-interface OpencodeModelDayRow extends OpencodeModelRow {
-  day: string;
-}
-
 function queryUsageByDay(db: Database, sinceMs: number): UsageDay[] {
-  const rows = db.query(DAY_SQL).all(sinceMs, Date.now()) as unknown as OpencodeDayRow[];
-  return rows.map((r) => ({
-    date: r.day,
-    sessions: r.sessions,
-    messages: null,
-    tokensInput: r.tokens_input ?? null,
-    tokensOutput: r.tokens_output ?? null,
-    tokensCacheRead: r.tokens_cache_read ?? null,
-    tokensCacheWrite: r.tokens_cache_write ?? null,
-    tokensReasoning: r.tokens_reasoning ?? null,
-    cost: r.cost ?? null,
-  }));
+  return (db.query(DAY_SQL).all(sinceMs, Date.now()) as unknown as Array<Record<string, unknown>>).map((r) =>
+    dayToUsageDay(r, COLUMNS),
+  );
 }
 
 function queryModelBreakdown(db: Database, sinceMs: number): ModelUsageRow[] {
-  const rows = db.query(MODEL_SQL).all(sinceMs, Date.now()) as unknown as OpencodeModelRow[];
-  return rows.map((r) => ({
-    model: r.model ?? "unknown",
-    provider: r.provider ?? null,
-    sessions: r.sessions,
-    messages: null,
-    inputTokens: r.tokens_input ?? null,
-    outputTokens: r.tokens_output ?? null,
-    cacheReadTokens: r.tokens_cache_read ?? null,
-    cacheWriteTokens: r.tokens_cache_write ?? null,
-    reasoningTokens: r.tokens_reasoning ?? null,
-    cost: r.cost ?? null,
-  }));
+  return (db.query(MODEL_SQL).all(sinceMs, Date.now()) as unknown as Array<Record<string, unknown>>).map((r) =>
+    modelToModelUsageRow(r, COLUMNS),
+  );
 }
 
 /** Per-UTC-day model rows, keyed by day — the per-day breakdown the
  *  orchestrator persists into daily_metrics. */
 function queryModelBreakdownByDay(db: Database, sinceMs: number): Map<string, ModelUsageRow[]> {
-  const rows = db.query(MODEL_BY_DAY_SQL).all(sinceMs, Date.now()) as unknown as OpencodeModelDayRow[];
-  const byDay = new Map<string, ModelUsageRow[]>();
-  for (const r of rows) {
-    if (!r.day) continue;
-    let list = byDay.get(r.day);
-    if (!list) {
-      list = [];
-      byDay.set(r.day, list);
-    }
-    list.push({
-      model: r.model ?? "unknown",
-      provider: r.provider ?? null,
-      sessions: r.sessions,
-      messages: null,
-      inputTokens: r.tokens_input ?? null,
-      outputTokens: r.tokens_output ?? null,
-      cacheReadTokens: r.tokens_cache_read ?? null,
-      cacheWriteTokens: r.tokens_cache_write ?? null,
-      reasoningTokens: r.tokens_reasoning ?? null,
-      cost: r.cost ?? null,
-    });
-  }
-  return byDay;
+  return modelBreakdownByDay(db.query(MODEL_BY_DAY_SQL).all(sinceMs, Date.now()) as unknown as Array<Record<string, unknown>>, COLUMNS);
 }

@@ -29,6 +29,7 @@ import type {
 import { emptySourceData } from "../../shared/types";
 import { mergeNullSum } from "../../shared/math";
 import { utcDaysAgo } from "../../shared/dates";
+import { dayToUsageDay, modelBreakdownByDay, modelToModelUsageRow, type UsageColumns } from "../usage-mappers";
 
 export class HermesCollector implements Collector<SourceData> {
   readonly id = "hermes" as const;
@@ -185,29 +186,16 @@ export class HermesCollector implements Collector<SourceData> {
   }
 }
 
-interface HermesDayRow {
-  day: string;
-  sessions: number;
-  messages: number | null;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  cache_read_tokens: number | null;
-  cache_write_tokens: number | null;
-  reasoning_tokens: number | null;
-  cost: number | null;
-}
-
-interface HermesModelRow {
-  model: string;
-  provider: string | null;
-  sessions: number;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  cache_read_tokens: number | null;
-  cache_write_tokens: number | null;
-  reasoning_tokens: number | null;
-  cost: number | null;
-}
+/** Aggregate column aliases for hermes's SQL (epoch SECONDS — contract #10). */
+const COLUMNS: UsageColumns = {
+  tokensInput: "input_tokens",
+  tokensOutput: "output_tokens",
+  tokensReasoning: "reasoning_tokens",
+  tokensCacheRead: "cache_read_tokens",
+  tokensCacheWrite: "cache_write_tokens",
+  cost: "cost",
+  messages: "messages",
+};
 
 const DAY_SQL = `
 SELECT strftime('%Y-%m-%d', started_at, 'unixepoch') AS day,
@@ -257,67 +245,22 @@ WHERE s.started_at >= ? AND s.started_at < ?
 GROUP BY 1, 2, 3
 ORDER BY 1, cost DESC NULLS LAST`;
 
-interface HermesModelDayRow extends HermesModelRow {
-  day: string;
-}
-
 function queryUsageByDay(db: Database, sinceSec: number, nowSec: number): UsageDay[] {
-  const rows = db.query(DAY_SQL).all(sinceSec, nowSec) as unknown as HermesDayRow[];
-  return rows.map((r) => ({
-    date: r.day,
-    sessions: r.sessions,
-    messages: r.messages ?? null,
-    tokensInput: r.input_tokens ?? null,
-    tokensOutput: r.output_tokens ?? null,
-    tokensCacheRead: r.cache_read_tokens ?? null,
-    tokensCacheWrite: r.cache_write_tokens ?? null,
-    tokensReasoning: r.reasoning_tokens ?? null,
-    cost: r.cost ?? null,
-  }));
+  return (db.query(DAY_SQL).all(sinceSec, nowSec) as unknown as Array<Record<string, unknown>>).map((r) =>
+    dayToUsageDay(r, COLUMNS),
+  );
 }
 
 function queryModelBreakdown(db: Database, sinceSec: number, nowSec: number): ModelUsageRow[] {
-  const rows = db.query(MODEL_SQL).all(sinceSec, nowSec) as unknown as HermesModelRow[];
-  return rows.map((r) => ({
-    model: r.model ?? "unknown",
-    provider: r.provider ?? null,
-    sessions: r.sessions,
-    messages: null,
-    inputTokens: r.input_tokens ?? null,
-    outputTokens: r.output_tokens ?? null,
-    cacheReadTokens: r.cache_read_tokens ?? null,
-    cacheWriteTokens: r.cache_write_tokens ?? null,
-    reasoningTokens: r.reasoning_tokens ?? null,
-    cost: r.cost ?? null,
-  }));
+  return (db.query(MODEL_SQL).all(sinceSec, nowSec) as unknown as Array<Record<string, unknown>>).map((r) =>
+    modelToModelUsageRow(r, COLUMNS),
+  );
 }
 
 /** Per-UTC-day model rows, keyed by day — the per-day breakdown the
  *  orchestrator persists into daily_metrics. */
 function queryModelBreakdownByDay(db: Database, sinceSec: number, nowSec: number): Map<string, ModelUsageRow[]> {
-  const rows = db.query(MODEL_BY_DAY_SQL).all(sinceSec, nowSec) as unknown as HermesModelDayRow[];
-  const byDay = new Map<string, ModelUsageRow[]>();
-  for (const r of rows) {
-    if (!r.day) continue;
-    let list = byDay.get(r.day);
-    if (!list) {
-      list = [];
-      byDay.set(r.day, list);
-    }
-    list.push({
-      model: r.model ?? "unknown",
-      provider: r.provider ?? null,
-      sessions: r.sessions,
-      messages: null,
-      inputTokens: r.input_tokens ?? null,
-      outputTokens: r.output_tokens ?? null,
-      cacheReadTokens: r.cache_read_tokens ?? null,
-      cacheWriteTokens: r.cache_write_tokens ?? null,
-      reasoningTokens: r.reasoning_tokens ?? null,
-      cost: r.cost ?? null,
-    });
-  }
-  return byDay;
+  return modelBreakdownByDay(db.query(MODEL_BY_DAY_SQL).all(sinceSec, nowSec) as unknown as Array<Record<string, unknown>>, COLUMNS);
 }
 
 /** Match the SQL grouping key: (model, billing_provider). */
