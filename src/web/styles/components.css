@@ -106,14 +106,14 @@
 /* Attention queue + agent spend are stacked full-width sections
    (operator preference: queue under the spend card). */
 
-/* Agent Spend overview — a 2×2 grid: the Total cost hero and Cache tiles
-   (equal halves) on the top row, two unit-rate cells (Blended $/1M,
-   Cost / session) on the row below. Tile borders removed so the stats
-   sit in the page rather than as boxed cards. The Lifetime to-date stat
-   block sits below (full width). */
+/* Agent Spend overview — a single responsive row: Total cost hero, Cache,
+   Blended $/1M and Cost / session unit rates sit 4-across on desktop,
+   collapse to 2×2 at tablet width and stack on phones. Tile borders
+   removed so the stats sit in the page rather than as boxed cards. The
+   Lifetime to-date stat block sits below (full width). */
 .spend-overview {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
   margin: 16px 0;
@@ -149,11 +149,12 @@
 .spend-hero__amount {
   font-family: var(--font-mono);
   font-weight: 700;
-  /* clamp() keeps the big cost figure inside its column at every viewport.
-   *  5vw is the responsive term — at a 600px wide card the figure renders at
-   *  30px; at 1200px it renders at the 56px ceiling. The lower bound (24px)
-   *  prevents unreadable sizes on tiny screens. No more cost/cache overlap. */
-  font-size: clamp(24px, 5vw, 56px);
+  /* clamp() keeps the big cost figure inside its quarter-width column at
+   * every desktop viewport (4-across row); the stacked media query below
+   * restores the larger hero size when the row collapses. 3.2vw is the
+   * responsive term — at a 1440px viewport it hits the 44px ceiling; at
+   * 1024px it renders ~33px so the figure never ellipsizes. */
+  font-size: clamp(22px, 3.2vw, 44px);
   line-height: 1.1;
   color: var(--text-primary);
   white-space: nowrap;
@@ -197,17 +198,24 @@
 }
 
 @media (max-width: 900px) {
-  /* On tablets the 2×2 overview collapses to one column so each cell
-     gets full width; the hero figure stays at desktop size. */
+  /* On tablets the 4-across overview collapses to 2×2 and the hero gets
+     its larger stacked size back (full-width halves need the bigger
+     figure than a quarter-width desktop column). */
   .spend-overview {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .spend-hero__amount {
+    font-size: clamp(24px, 5vw, 56px);
   }
   .spend-lifetime__grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 @media (max-width: 640px) {
-  /* Phones: the stat lines stack one per row. */
+  /* Phones: the overview and the stat lines stack one per row. */
+  .spend-overview {
+    grid-template-columns: 1fr;
+  }
   .spend-lifetime__grid {
     grid-template-columns: 1fr;
   }

@@ -1,7 +1,9 @@
 /**
  * Agent Spend card — consolidated cost/tokens view (planning 03 §Card, decision #10).
- * A single panel: a 2×2 overview (Total cost hero + Cache on top; Blended
- * $/1M and Cost / session unit rates below, both client-side divisions of
+ * A single panel: a 4-across overview (Total cost hero + Cache + Blended
+ * $/1M + Cost / session unit rates, collapsing 2×2 then stacked), the
+ * lifetime stat grid, then the by-model table. Unit rates are
+ * client-side divisions of
  * the window totals), a
  * Lifetime to-date stat block, then the stacked daily chart and by-model
  * table. Per-source attribution lives in each by-model row's expandable
