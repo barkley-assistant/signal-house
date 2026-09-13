@@ -24,12 +24,12 @@
  * HostMetricsCacheStatus surfaced via diagnostics.
  */
 
-import { existsSync, readFileSync, mkdirSync, readdirSync } from "node:fs";
-import { rename } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { hostname } from "node:os";
 import { log } from "../shared/logger";
 import { sameUtcHour, utcDayFromMs, utcDayRange, utcDaysAgo } from "../shared/dates";
+import { defaultCacheIO, readJsonFromDisk, writeJsonAtomic, type CacheIO } from "./runtime-cache";
 import {
   HOST_METRIC_NAMES,
   hostResourcePercentages,
@@ -138,43 +138,23 @@ export function discoverArchiveDays(root: string): Map<string, string> {
 
 /** Load the disk cache into memory. Returns null on any failure; never throws. */
 function loadFromDisk(): { days: Map<string, HostResourcePercentages>; evaluatedAt: string } | null {
-  try {
-    if (!existsSync(cachePath)) return null;
-    const parsed = JSON.parse(readFileSync(cachePath, "utf-8")) as CachedFile;
-    if (!parsed || typeof parsed.days !== "object" || parsed.days === null) {
-      log.warn("host-metrics-fetcher", `disk cache at ${cachePath} has unexpected shape; ignoring`);
-      return null;
-    }
-    return { days: new Map(Object.entries(parsed.days)), evaluatedAt: parsed.fetchedAt };
-  } catch (err) {
-    log.warn("host-metrics-fetcher", `disk cache at ${cachePath} unreadable: ${(err as Error).message}`);
-    return null;
-  }
+  const parsed = readJsonFromDisk(
+    cachePath,
+    "host-metrics-fetcher",
+    (p): p is CachedFile => !!p && typeof p === "object" && !!(p as CachedFile).days && typeof (p as CachedFile).days === "object",
+  );
+  if (!parsed) return null;
+  return { days: new Map(Object.entries(parsed.days)), evaluatedAt: parsed.fetchedAt };
 }
 
 async function writeCacheAtomic(days: Map<string, HostResourcePercentages>, fetchedAt: string): Promise<void> {
-  mkdirSync(dirname(cachePath), { recursive: true });
-  const tmpPath = join(dirname(cachePath), `${CACHE_FILENAME}.tmp.${process.pid}`);
   const data: CachedFile = { fetchedAt, days: Object.fromEntries(days) };
-  try {
-    await currentIO.write(tmpPath, JSON.stringify(data));
-    await currentIO.rename(tmpPath, cachePath);
-  } catch (err) {
-    log.warn("host-metrics-fetcher", `atomic write failed: ${(err as Error).message} (target ${cachePath} unchanged)`);
-  }
+  await writeJsonAtomic(cachePath, data, currentIO, "host-metrics-fetcher");
 }
 
-export interface HostMetricsIO {
-  write(path: string, data: string): Promise<unknown>;
-  rename(from: string, to: string): Promise<void>;
-}
+export type HostMetricsIO = CacheIO;
 
-let currentIO: HostMetricsIO = {
-  write: (path, data) => Bun.write(path, data),
-  rename: async (from, to) => {
-    await rename(from, to);
-  },
-};
+let currentIO: CacheIO = defaultCacheIO;
 
 /** Ensure the cache covers every archived day. Cheap no-op within the same
  *  wall-clock hour as the last evaluation; otherwise summarizes only the
@@ -291,14 +271,8 @@ export function setHostMetricsRunnerForTesting(runner: SummaryRunner): void {
 }
 
 /** Restore default I/O dependencies. Tests use this between cases. */
-export function setHostMetricsIOForTesting(io?: HostMetricsIO): void {
-  currentIO =
-    io ?? {
-      write: (path, data) => Bun.write(path, data),
-      rename: async (from, to) => {
-        await rename(from, to);
-      },
-    };
+export function setHostMetricsIOForTesting(io?: CacheIO): void {
+  currentIO = io ?? defaultCacheIO;
 }
 
 /** Reset in-memory state and diagnostics. Tests use this. */

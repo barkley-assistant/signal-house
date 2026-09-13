@@ -45,12 +45,11 @@
  * §D.1 (Atomic write discipline); .hermes/plans/pricing-fix.md D3.
  */
 
-import { existsSync, readFileSync, mkdirSync } from "node:fs";
-import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { log } from "../shared/logger";
 import { sameUtcHour } from "../shared/dates";
 import { machineKey } from "../shared/models";
+import { defaultCacheIO, readJsonFromDisk, writeJsonAtomic, type CacheIO } from "./runtime-cache";
 import {
   parseOpenRouterPricing,
   parseOpenferencePricing,
@@ -262,24 +261,19 @@ async function refreshSource(state: SourceState): Promise<void> {
 /** Read a source's disk cache. Returns null on any failure (missing file,
  *  parse error, schema mismatch). Never throws. */
 function loadFromDisk(state: SourceState): { map: PricingMap; fetchedAt: string; source: string; modelCount: number } | null {
-  try {
-    if (!existsSync(state.path)) return null;
-    const text = readFileSync(state.path, "utf-8");
-    const parsed = JSON.parse(text) as CachedFile;
-    if (!parsed || typeof parsed !== "object" || !parsed.models || typeof parsed.models !== "object") {
-      log.warn("model-pricing-fetcher", `${state.providerFilter} disk cache at ${state.path} has unexpected shape; ignoring`);
-      return null;
-    }
-    return {
-      map: parsed.models,
-      fetchedAt: parsed.fetchedAt,
-      source: parsed.source,
-      modelCount: parsed.modelCount,
-    };
-  } catch (err) {
-    log.warn("model-pricing-fetcher", `${state.providerFilter} disk cache at ${state.path} unreadable: ${(err as Error).message}`);
-    return null;
-  }
+  const parsed = readJsonFromDisk(
+    state.path,
+    state.providerFilter,
+    (p): p is CachedFile =>
+      !!p && typeof p === "object" && !!(p as CachedFile).models && typeof (p as CachedFile).models === "object",
+  );
+  if (!parsed) return null;
+  return {
+    map: parsed.models,
+    fetchedAt: parsed.fetchedAt,
+    source: parsed.source,
+    modelCount: parsed.modelCount,
+  };
 }
 
 /**
@@ -288,33 +282,20 @@ function loadFromDisk(state: SourceState): { map: PricingMap; fetchedAt: string;
  *
  * The write + rename are exposed as injectable dependencies so tests can
  * simulate failures (Bun.write throws, rename throws, process kill between).
- * The defaults are the standard bun/node:fs implementations.
+ * The defaults are the shared runtime-cache implementations.
  */
 async function writeCacheAtomic(state: SourceState, data: CachedFile): Promise<void> {
-  mkdirSync(dirname(state.path), { recursive: true });
-  const tmpPath = join(dirname(state.path), `${state.filename}.tmp.${process.pid}`);
-  try {
-    await currentIO.write(tmpPath, JSON.stringify(data, null, 2));
-    await currentIO.rename(tmpPath, state.path);
-  } catch (err) {
-    log.warn("model-pricing-fetcher", `${state.providerFilter} atomic write failed: ${(err as Error).message} (target ${state.path} unchanged)`);
-  }
+  await writeJsonAtomic(state.path, data, currentIO, state.providerFilter);
 }
 
-/** I/O dependencies for the cache file write. Defaults are the standard
- *  bun/node:fs implementations; tests can swap these out via setIOForTesting(). */
-export interface PricingIO {
-  write(path: string, data: string): Promise<unknown>;
-  rename(from: string, to: string): Promise<void>;
-}
+/** I/O dependencies for the cache file write. Defaults are the shared
+ *  runtime-cache implementations; tests swap these out via setIOForTesting(). */
+export type PricingIO = CacheIO;
 
-let currentIO: PricingIO = {
-  write: (path, data) => Bun.write(path, data),
-  rename: async (from, to) => { await rename(from, to); },
-};
+let currentIO: CacheIO = defaultCacheIO;
 
 /** Override the I/O dependencies. Tests use this. */
-export function setIOForTesting(io: PricingIO): void {
+export function setIOForTesting(io: CacheIO): void {
   currentIO = io;
 }
 
