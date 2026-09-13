@@ -177,12 +177,22 @@ titles. Cards carry an `aria-label` describing their content.
 
 ### Agent Spend overview
 
-`.spend-overview` → a two-tile panel, equal halves on desktop: the
+`.spend-overview` → a 2×2 grid, equal halves on desktop. Top row: the
 **Total cost** hero (`.spend-overview__total`: mono total cost in
 `clamp(24px, 5vw, 56px)`, then muted "Sessions · Tokens" beneath, dot-
 separated) and the **Cache** tile (`.spend-overview__cache`: hit rate +
-saved amount). Collapses to one column below 900px. Per-source attribution
-lives in each by-model row's expandable detail, not the overview.
+saved amount). Bottom row: two unit-rate cells (`.spend-overview__stat`,
+built on the shared `model-row__detail-stat` label-over-value
+primitives, value at 20px/600) — **Blended $/1M** (window cost ÷ all
+tokens moved × 1M, every token at face value — unlike the by-model
+`$/1M` column's cache-discounted effective tokens, hence its "all tokens
+at face value" caption) and **Cost / session** (window cost ÷ sessions).
+Both are computed client-side from the `/api/state` usage totals.
+Unknown cost or a zero denominator renders "—", never 0 — including the
+all-models-unknown case where the estimator pins every cost to zero
+(the window total is then unknown, not free). Collapses to one column
+below 900px (four stacked cells). Per-source attribution lives in each
+by-model row's expandable detail, not the overview.
 
 Below the tiles, the **Lifetime to date** block (`.spend-lifetime`): five
 label-over-value stat lines — Commits, Tokens, Sessions, Top model (with
