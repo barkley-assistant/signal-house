@@ -17,6 +17,7 @@
 import type { Database } from "bun:sqlite";
 import type { UsageAggregate } from "../orchestrator/aggregates";
 import type { CostEstimationOpts } from "../shared/types";
+import { usageSourceClause } from "../shared/types";
 import { mergeModelRows } from "../orchestrator/aggregates";
 import { mergeNullSum, sum } from "../shared/math";
 
@@ -46,7 +47,7 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
     .query(
       `SELECT source, metric, SUM(value) AS value
        FROM daily_metrics
-       WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+       WHERE date >= ? AND date <= ? AND ${usageSourceClause()}
          AND metric IN (${placeholders})
        GROUP BY source, metric`,
     )
@@ -142,7 +143,7 @@ export function queryUsageAggregate(db: Database, from: string, to: string, cost
  *  never disagree with the by-model table's grouping. */
 export function queryModelRows(db: Database, from: string | null, to: string | null, costOpts: CostEstimationOpts): UsageAggregate["byModel"] {
   // Optional date predicates — same dynamic-clause style as queryDailyMetrics.
-  const clauses = ["source IN ('opencode', 'hermes')", "metric LIKE 'model.%'"];
+  const clauses = [usageSourceClause(), "metric LIKE 'model.%'"];
   const params: string[] = [];
   if (from !== null) {
     clauses.push("date >= ?");

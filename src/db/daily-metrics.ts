@@ -9,7 +9,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts, DailyWrite } from "../shared/types";
-import { costFromTokens } from "../shared/types";
+import { costFromTokens, usageSourceClause } from "../shared/types";
 import { canonicalMachineKey, machineKey, stripDateSnapshot } from "../shared/models";
 import { utcDayRange } from "../shared/dates";
 import { fetchAllRates, type ModelRates } from "../server/model-pricing";
@@ -139,7 +139,7 @@ export async function queryDailyTrend(
               SUM(CASE WHEN metric = 'tokens.reasoning' THEN value END) AS tokens,
               SUM(CASE WHEN metric = 'tokens.cache_read' THEN value END) AS cacheRead
        FROM daily_metrics
-       WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+       WHERE date >= ? AND date <= ? AND ${usageSourceClause()}
        GROUP BY date ORDER BY date`,
     )
     .all(from, to) as Array<{ date: string; tokens: number | null; cacheRead: number | null }>;
@@ -150,7 +150,7 @@ export async function queryDailyTrend(
       .query(
         `SELECT date, SUM(CASE WHEN metric = 'cost.total' THEN value END) AS cost
          FROM daily_metrics
-         WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+         WHERE date >= ? AND date <= ? AND ${usageSourceClause()}
          GROUP BY date ORDER BY date`,
       )
       .all(from, to) as Array<{ date: string; cost: number | null }>;
@@ -175,7 +175,7 @@ export async function queryDailyTrend(
               SUM(CASE WHEN metric = 'model.tokens_cache_read' THEN value END) AS cacheReadTokens
        FROM daily_metrics
        WHERE date >= ? AND date <= ?
-         AND source IN ('opencode', 'hermes')
+         AND ${usageSourceClause()}
          AND metric LIKE 'model.tokens_%'
        GROUP BY date, json_extract(tags, '$.model')`,
     )
@@ -255,7 +255,7 @@ export async function queryDailyModelTrend(
               SUM(CASE WHEN metric = 'model.tokens_reasoning'   THEN value END) AS reasoningTokens
        FROM daily_metrics
        WHERE date >= ? AND date <= ?
-         AND source IN ('opencode', 'hermes')
+         AND ${usageSourceClause()}
          AND metric LIKE 'model.tokens_%'
        GROUP BY date, json_extract(tags, '$.model')`,
     )
@@ -300,7 +300,7 @@ export async function queryDailyModelTrend(
       .query(
         `SELECT date, SUM(value) AS cost
          FROM daily_metrics
-         WHERE date >= ? AND date <= ? AND source IN ('opencode', 'hermes')
+         WHERE date >= ? AND date <= ? AND ${usageSourceClause()}
            AND metric = 'model.cost'
            AND json_extract(tags, '$.model') IN (${placeholders})
          GROUP BY date`,

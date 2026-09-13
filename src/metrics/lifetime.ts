@@ -13,6 +13,7 @@
 
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts } from "../shared/types";
+import { usageSourceClause } from "../shared/types";
 import { queryModelRows } from "./usage-history";
 
 export interface LifetimeStats {
@@ -63,7 +64,7 @@ export function computeLifetimeStats(db: Database, costOpts: CostEstimationOpts)
            COALESCE(SUM(CASE WHEN metric = 'tokens.reasoning'   THEN value END), 0)
          ELSE NULL END AS tokens
        FROM daily_metrics
-       WHERE source IN ('opencode', 'hermes')`,
+       WHERE ${usageSourceClause()}`,
     )
     .get() as { tokens: number | null; sessions: number | null } | null;
   const totalTokens = usage?.tokens ?? null;
@@ -88,7 +89,7 @@ export function computeLifetimeStats(db: Database, costOpts: CostEstimationOpts)
            COALESCE(SUM(CASE WHEN metric = 'tokens.reasoning'   THEN value END), 0)
          ELSE NULL END AS tokens
        FROM daily_metrics
-       WHERE source IN ('opencode', 'hermes')
+       WHERE ${usageSourceClause()}
        GROUP BY date
        ORDER BY tokens DESC, date ASC
        LIMIT 1`,

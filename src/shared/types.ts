@@ -12,6 +12,19 @@ export type SourceTier = "core" | "agent" | "tool";
 
 export type CollectorId = "github" | "git" | "hermes" | "opencode";
 
+/** Usage sources that feed daily_metrics + the usage aggregate. Adding a
+ *  third usage source means updating THIS one list — every SQL clause
+ *  that filters usage rows is built from it, so the queries can never
+ *  drift from the collector set. Keep in sync with the collector ids. */
+export const USAGE_SOURCES = ["opencode", "hermes"] as const;
+
+/** `source IN ('opencode', 'hermes')` — the usage-source filter used by
+ *  every daily_metrics query. Built from USAGE_SOURCES so the SQL is
+ *  textually identical today and follows the list tomorrow. */
+export function usageSourceClause(column: string = "source"): string {
+  return `${column} IN (${USAGE_SOURCES.map((s) => `'${s}'`).join(", ")})`;
+}
+
 export interface RepositoryIdentity {
   /** Stable identity: `github:<owner>/<repo>` or `local:<abs path>` (or `local:<name>` for un-remote repos). */
   repoKey: string;
