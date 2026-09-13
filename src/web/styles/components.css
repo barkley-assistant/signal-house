@@ -119,33 +119,18 @@
   margin: 16px 0;
 }
 .spend-overview__total,
-.spend-overview__cache {
+.spend-overview__cache,
+.spend-overview__stat {
   padding: 14px 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.spend-overview__total {
   gap: 6px;
-}
-.spend-overview__cache {
+  min-width: 0;
   justify-content: center;
 }
-/* Unit-economics row (row 2 of the 2×2). Cells reuse the
-   model-row__detail-stat label-over-value primitives so the cluster
-   matches the lifetime block's design language; this rule adds only the
-   tile padding, vertical centering within the stretched grid row, and
-   one size step up from the 14px detail value so the rates read as
-   stats, not footnotes — the hero keeps its clamp() dominance above. */
-.spend-overview__stat {
-  padding: 14px 0;
-  justify-content: center;
-}
-.spend-overview__stat .model-row__detail-value {
-  font-size: 20px;
-  font-weight: 600;
-}
+/* All four overview tiles share the label + hero-amount + caption shape
+   (Total cost, Cache, Blended $/1M, Cost / session) so the row reads as
+   one stat cluster; no per-cell sizing remains. */
 .spend-hero__amount {
   font-family: var(--font-mono);
   font-weight: 700;

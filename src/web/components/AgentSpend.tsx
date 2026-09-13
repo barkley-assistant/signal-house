@@ -185,23 +185,24 @@ export function AgentSpend() {
               </span>
             </motion.div>
             <motion.div
-              className="model-row__detail-stat spend-overview__stat"
+              className="spend-overview__stat"
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
             >
-              <span className="model-row__detail-label">Blended $/1M</span>
-              <span className="model-row__detail-value">{formatEffPerM(blended)}</span>
+              <span className="kpi-tile__label">Blended $/1M</span>
+              <span className="spend-hero__amount">{formatEffPerM(blended)}</span>
               <span className="kpi-caption">all tokens at face value</span>
             </motion.div>
             <motion.div
-              className="model-row__detail-stat spend-overview__stat"
+              className="spend-overview__stat"
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
             >
-              <span className="model-row__detail-label">Cost / session</span>
-              <span className="model-row__detail-value">{formatCost(perSession)}</span>
+              <span className="kpi-tile__label">Cost / session</span>
+              <span className="spend-hero__amount">{formatCost(perSession)}</span>
+              <span className="kpi-caption">all sessions at face value</span>
             </motion.div>
           </div>
           <LifetimeBlock lifetime={lifetime} />
