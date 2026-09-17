@@ -51,7 +51,18 @@ export function machineKey(raw: string): string {
 export function resolveEntry(raw: string): ModelEntry | undefined {
   const key = machineKey(raw);
   if (!key) return undefined;
-  return BY_MACHINE.get(key) ?? BY_ALIAS.get(key);
+  return BY_MACHINE.get(key) ?? BY_ALIAS.get(key) ?? resolve900kVariant(key);
+}
+
+/** 900k-context variants (gpt-5.6-terra-900k, …) roll up to their base
+ *  model when the base exists in the map — the operator runs the same
+ *  model with a bigger hermes context window, so display, grouping, and
+ *  pricing treat them as one. Purely additive: a -900k key whose base is
+ *  not in the map falls through to the title-case fallback as today. */
+function resolve900kVariant(key: string): ModelEntry | undefined {
+  if (!key.endsWith("-900k")) return undefined;
+  const base = key.slice(0, -"-900k".length);
+  return BY_MACHINE.get(base) ?? BY_ALIAS.get(base);
 }
 
 /** Return the canonical grouping key for a raw model name, or its raw key when unknown. */

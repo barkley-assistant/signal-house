@@ -29,6 +29,9 @@ describe("full fleet coverage — every model the operator uses maps to a clean 
     ["GLM-5.1", "GLM 5.1", "z.ai"],
     ["GPT 5.6 Luna", "GPT 5.6 Luna", "OpenAI"],
     ["Gpt 5.6 Luna 900k", "GPT 5.6 Luna", "OpenAI"],
+    ["Gpt 5.6 Sol 900k", "GPT 5.6 Sol", "OpenAI"],
+    ["Gpt 5.6 Terra 900k", "GPT 5.6 Terra", "OpenAI"],
+    ["Gpt 5.6 Astra 900k", "GPT 5.6 Astra", "OpenAI"],
     ["Kimi K3", "Kimi K3", "Moonshot"],
     ["Kimi K2.7 Code", "Kimi K2.7 Code", "Moonshot"],
     ["Kimi K2.6", "Kimi K2.6", "Moonshot"],
@@ -106,6 +109,23 @@ describe("model aliasing", () => {
     expect(modelLabel("Gpt 5.6 Luna 900k")).toBe("GPT 5.6 Luna");
     expect(modelFamily("Gpt 5.6 Luna 900k")).toBe("OpenAI");
     expect(canonicalMachineKey("Gpt 5.6 Luna 900k")).toBe("gpt-56-luna");
+  });
+
+  test("900k rollup is generic — any future terra/sol/astra 900k variant resolves to its base", () => {
+    expect(modelLabel("Gpt 5.6 Terra 900k")).toBe("GPT 5.6 Terra");
+    expect(modelFamily("Gpt 5.6 Terra 900k")).toBe("OpenAI");
+    expect(canonicalMachineKey("Gpt 5.6 Terra 900k")).toBe("gpt-56-terra");
+    expect(modelLabel("Gpt 5.6 Sol 900k")).toBe("GPT 5.6 Sol");
+    expect(canonicalMachineKey("Gpt 5.6 Sol 900k")).toBe("gpt-56-sol");
+    expect(modelLabel("Gpt 5.6 Astra 900k")).toBe("GPT 5.6 Astra");
+    expect(modelFamily("Gpt 5.6 Astra 900k")).toBe("OpenAI");
+    expect(canonicalMachineKey("Gpt 5.6 Astra 900k")).toBe("gpt-56-astra");
+  });
+
+  test("900k variant whose base is not in the map keeps its own fallback row", () => {
+    expect(modelLabel("Some Future Model 900k")).toBe("Some Future Model 900k");
+    expect(modelFamily("Some Future Model 900k")).toBeNull();
+    expect(canonicalMachineKey("Some Future Model 900k")).toBe("some-future-model-900k");
   });
 
   test("Muse Spark 1.3 Contributor rolls up under Muse Spark 1.3 with the Muse family", () => {

@@ -324,6 +324,34 @@ describe("mergeModelRows cache preservation", () => {
     expect(m.costSource).toBe("estimated");
     expect(m.cost).toBeCloseTo(1.25 + 0.1, 6);
   });
+
+  test("future terra/sol 900k rows merge into their base model rows and price at base rates", () => {
+    const rates = new Map([
+      ["gpt-56-terra", { input: 4, output: 18, cacheRead: 0.4 }],
+      ["gpt-56-sol", { input: 4, output: 15, cacheRead: 0.4 }],
+      // fetchAllRates resolves -900k spellings to the canonical entries,
+      // so the prebuilt map carries both spellings (buildState's contract).
+      ["gpt-56-terra-900k", { input: 4, output: 18, cacheRead: 0.4 }],
+      ["gpt-56-sol-900k", { input: 4, output: 15, cacheRead: 0.4 }],
+    ]);
+    const rows = [
+      { model: "GPT 5.6 Terra", provider: null, source: "opencode", sessions: 2, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "Gpt 5.6 Terra 900k", provider: null, source: "hermes", sessions: 3, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "Gpt 5.6 Sol 900k", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+    ];
+    const merged = mergeModelRows(rows, { rates, enabled: true });
+    expect(merged).toHaveLength(2);
+    const terra = merged.find((m) => m.machineKey === "gpt-56-terra");
+    const sol = merged.find((m) => m.machineKey === "gpt-56-sol");
+    expect(terra?.model).toBe("GPT 5.6 Terra");
+    expect(terra?.sessions).toBe(5);
+    expect(terra?.costSource).toBe("estimated");
+    expect(terra?.cost).toBeCloseTo(4 + 4, 6);
+    expect(sol?.model).toBe("GPT 5.6 Sol");
+    expect(sol?.sessions).toBe(1);
+    expect(sol?.costSource).toBe("estimated");
+    expect(sol?.cost).toBeCloseTo(4, 6);
+  });
 });
 
 describe("computeAggregates privacy filtering", () => {

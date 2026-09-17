@@ -237,6 +237,23 @@ describe("model-pricing resolver", () => {
     expect(rates.cacheRead).toBe(0.04);
   });
 
+  test("alias fallback is generic: future 900k variants price at their base model's rates", async () => {
+    await seedPricingCache({
+      "gpt-56-terra": { input: 4, output: 18, cacheRead: 0.4 },
+      "gpt-56-sol": { input: 4, output: 15, cacheRead: 0.4 },
+      // no "-900k" entries — the canonical fallback must supply them
+    });
+
+    const terra = await resolveModelPricing("Gpt 5.6 Terra 900k");
+    expect(terra.input).toBe(4);
+    expect(terra.output).toBe(18);
+    expect(terra.cacheRead).toBe(0.4);
+
+    const sol = await resolveModelPricing("gpt-5.6-sol-900k");
+    expect(sol.input).toBe(4);
+    expect(sol.output).toBe(15);
+  });
+
   test("alias fallback: a variant with its own rates keeps them (canonical does not override)", async () => {
     await seedPricingCache({
       "muse-spark-13": { input: 1.25, output: 4.25, cacheRead: 0.15 },
