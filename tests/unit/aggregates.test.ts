@@ -283,6 +283,47 @@ describe("mergeModelRows cache preservation", () => {
     const merged = mergeModelRows(rows, { rates: new Map(), enabled: false });
     expect(merged).toHaveLength(2);
   });
+
+  test("900k variant merges into the canonical model row and prices at canonical rates", () => {
+    const rates = new Map([
+      ["gpt-56-luna", { input: 0.4, output: 1.8, cacheRead: 0.04 }],
+      // fetchAllRates resolves the 900k spelling to the canonical entry,
+      // so the prebuilt map carries both keys (buildState's contract).
+      ["gpt-56-luna-900k", { input: 0.4, output: 1.8, cacheRead: 0.04 }],
+    ]);
+    const rows = [
+      { model: "GPT 5.6 Luna", provider: null, source: "opencode", sessions: 2, messages: null, inputTokens: 1_000_000, outputTokens: 100_000, cacheReadTokens: 500_000, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "Gpt 5.6 Luna 900k", provider: null, source: "hermes", sessions: 3, messages: null, inputTokens: 1_000_000, outputTokens: 50_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+    ];
+    const merged = mergeModelRows(rows, { rates, enabled: true });
+    expect(merged).toHaveLength(1);
+    const m = merged[0];
+    expect(m.model).toBe("GPT 5.6 Luna");
+    expect(m.machineKey).toBe("gpt-56-luna");
+    expect(m.sessions).toBe(5);
+    expect(m.costSource).toBe("estimated");
+    // (0.4 + 1.8·0.1 + 0.04·0.5) + (0.4 + 1.8·0.05 + 0.04·1) — per-1M math
+    expect(m.cost).toBeCloseTo((0.4 + 0.18 + 0.02) + (0.4 + 0.09 + 0.04), 6);
+  });
+
+  test("Muse Spark 1.3 Contributor merges under Muse Spark 1.3 with its own cheaper rates", () => {
+    const rates = new Map([
+      ["muse-spark-13", { input: 1.25, output: 4.25, cacheRead: 0.15 }],
+      ["muse-spark-13-contributor", { input: 0.1, output: 0.2, cacheRead: 0.002 }],
+    ]);
+    const rows = [
+      { model: "Muse Spark 1.3", provider: null, source: "opencode", sessions: 1, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "Muse Spark 1.3 Contributor", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+    ];
+    const merged = mergeModelRows(rows, { rates, enabled: true });
+    expect(merged).toHaveLength(1);
+    const m = merged[0];
+    expect(m.model).toBe("Muse Spark 1.3");
+    expect(m.machineKey).toBe("muse-spark-13");
+    expect(m.family).toBe("Meta");
+    expect(m.costSource).toBe("estimated");
+    expect(m.cost).toBeCloseTo(1.25 + 0.1, 6);
+  });
 });
 
 describe("computeAggregates privacy filtering", () => {

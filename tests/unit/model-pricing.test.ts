@@ -224,6 +224,40 @@ describe("model-pricing resolver", () => {
     expect(rates.output).toBe(4.0); // 1.0 × 4
     expect(rates.cacheRead).toBe(0); // not present in source
   });
+
+  test("alias fallback: unpriced variant inherits the canonical model's rates", async () => {
+    await seedPricingCache({
+      "gpt-56-luna": { input: 0.4, output: 1.8, cacheRead: 0.04 },
+      // "gpt-56-luna-900k" intentionally NOT in cache
+    });
+
+    const rates = await resolveModelPricing("Gpt 5.6 Luna 900k");
+    expect(rates.input).toBe(0.4);
+    expect(rates.output).toBe(1.8);
+    expect(rates.cacheRead).toBe(0.04);
+  });
+
+  test("alias fallback: a variant with its own rates keeps them (canonical does not override)", async () => {
+    await seedPricingCache({
+      "muse-spark-13": { input: 1.25, output: 4.25, cacheRead: 0.15 },
+      "muse-spark-13-contributor": { input: 0.1, output: 0.2, cacheRead: 0.002 },
+    });
+
+    const rates = await resolveModelPricing("Muse Spark 1.3 Contributor");
+    expect(rates.input).toBe(0.1);
+    expect(rates.output).toBe(0.2);
+    expect(rates.cacheRead).toBe(0.002);
+  });
+
+  test("alias fallback: unaliased models skip the canonical step and stay zero on miss", async () => {
+    await seedPricingCache({
+      "gpt-56-luna": { input: 0.4, output: 1.8, cacheRead: 0.04 },
+    });
+
+    // "mystery-model" has no alias entry, so no canonical fallback exists.
+    const rates = await resolveModelPricing("mystery-model");
+    expect(rates).toEqual({ input: 0, output: 0, cacheRead: 0 });
+  });
 });
 
 describe("fetchAllRates", () => {

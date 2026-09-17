@@ -32,7 +32,7 @@ import {
   getInputCostPerMillion,
   getCacheReadCostPerMillion,
 } from "./cost-input";
-import { machineKey, stripDateSnapshot } from "../shared/models";
+import { canonicalMachineKey, machineKey, stripDateSnapshot } from "../shared/models";
 
 export interface ModelRates {
   input: number;
@@ -77,7 +77,17 @@ export function buildRatesMap(entries: Iterable<readonly [string, ModelRates]>):
 /**
  * Resolve per-1M-token rates for `model` (any human-readable form — the
  * resolver normalises). Tries OpenRouter first, then operator's local
- * opencode.jsonc, then returns all zeros.
+ * opencode.jsonc, then the alias-resolved canonical model, then returns
+ * all zeros.
+ *
+ * Alias fallback (added 2026-09-17): variants that roll up into a
+ * canonical model entry in model-map.json (e.g. `gpt-5.6-luna-900k` →
+ * `gpt-5.6-luna`, `muse-spark-1.3-contributor` → `muse-spark-1.3`)
+ * inherit the canonical model's rates when they have no rate of their
+ * own. Grouping already resolves aliases; this makes pricing agree with
+ * grouping. A variant's OWN rates (raw key or stripped key hit) always
+ * win — the canonical fallback only fires when nothing else knows the
+ * variant.
  *
  * The dashboard doesn't distinguish litellm-source from local-source rows
  * visually (one shared footnote covers both). For v1 the resolver returns
@@ -89,14 +99,30 @@ export function buildRatesMap(entries: Iterable<readonly [string, ModelRates]>):
  */
 export async function getModelPricing(model: string): Promise<ModelRates> {
   const full = machineKey(model);
-  const stripped = stripDateSnapshot(full);
   if (!full) return zero();
 
-  // 1. Pricing cache — try the FULL (possibly dated) key first, then the
-  //    stripped base key as a fallback. A dated variant that exists in a
-  //    source is authoritative for itself; the stripped key is consulted
-  //    only when the dated lookup missed everywhere (D1).
-  const cacheRow = await getModelPricingFromCache(full);
+  // 1–2. Own rates: cache (full then stripped — D1) then local config.
+  const own = await resolveFromSources(full);
+  if (nonZero(own)) return own;
+
+  // 3. Alias fallback: the model-map canonical for this raw name (when it
+  //    differs) is consulted with the same full → stripped → local chain.
+  const canonical = canonicalMachineKey(model);
+  if (canonical !== full) {
+    const canonicalRates = await resolveFromSources(canonical);
+    if (nonZero(canonicalRates)) return canonicalRates;
+  }
+
+  // 4. empty result — signal-house renders cost as $0 (per locked decision
+  // #3) and flags this row as costSource: "unknown" upstream.
+  return zero();
+}
+
+/** Full → stripped → local chain for ONE machine key (D1 ordering). */
+async function resolveFromSources(key: string): Promise<ModelRates> {
+  const stripped = stripDateSnapshot(key);
+
+  const cacheRow = await getModelPricingFromCache(key);
   if (nonZero(cacheRow)) {
     return {
       input: cacheRow.input,
@@ -104,7 +130,7 @@ export async function getModelPricing(model: string): Promise<ModelRates> {
       cacheRead: cacheRow.cacheRead,
     };
   }
-  if (stripped !== full) {
+  if (stripped !== key) {
     const strippedRow = await getModelPricingFromCache(stripped);
     if (nonZero(strippedRow)) {
       return {
@@ -115,12 +141,12 @@ export async function getModelPricing(model: string): Promise<ModelRates> {
     }
   }
 
-  // 2. operator's local rates (opencode.jsonc via cost-input.ts) — query
-  //    with the FULL key; cost-input strips a date suffix internally as its
-  //    own fallback, so a dated model still resolves to the base entry when
-  //    the config has no explicit dated block.
-  const localInput = getInputCostPerMillion(full);
-  const localCacheRead = getCacheReadCostPerMillion(full);
+  // operator's local rates (opencode.jsonc via cost-input.ts) — query
+  // with the FULL key; cost-input strips a date suffix internally as its
+  // own fallback, so a dated model still resolves to the base entry when
+  // the config has no explicit dated block.
+  const localInput = getInputCostPerMillion(key);
+  const localCacheRead = getCacheReadCostPerMillion(key);
   if (localInput > 0 || localCacheRead > 0) {
     // Locked decision #7: output defaults to input × 4 when the local source
     // doesn't expose an output rate. cost-input.ts today doesn't expose
@@ -132,8 +158,6 @@ export async function getModelPricing(model: string): Promise<ModelRates> {
     };
   }
 
-  // 3. empty result — signal-house renders cost as $0 (per locked decision
-  // #3) and flags this row as costSource: "unknown" upstream.
   return zero();
 }
 
