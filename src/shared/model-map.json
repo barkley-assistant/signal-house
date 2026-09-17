@@ -1,5 +1,5 @@
 {
-  "//": "Model map for Signal House — edit this file to add or fix models, no code changes needed. 'machine' is the stable grouping/lookup key: lowercase, vendor prefix stripped, dots stripped, spaces/underscores/dashes collapsed to '-'. 'label' is what the dashboard displays. 'family' groups models from the same vendor (muted tag next to the label); omit when unknown. 'aliases' (optional) lists extra machine keys that roll up into this entry — display label, family, and by-model grouping resolve to the canonical entry; cost lookup is NOT aliased. Keep aliases unique across the map. familyPrefixes is a fallback so models not listed here still get a family.",
+  "//": "Model map for Signal House — edit this file to add or fix models, no code changes needed. 'machine' is the stable grouping/lookup key: lowercase, vendor prefix stripped, dots stripped, spaces/underscores/dashes collapsed to '-'. 'label' is what the dashboard displays. 'family' groups models from the same vendor (muted tag next to the label); omit when unknown. 'aliases' (optional) lists extra machine keys that roll up into this entry — display label, family, and by-model grouping resolve to the canonical entry, and rate lookup falls back to the canonical entry's rates when the variant has no rates of its own. Keep aliases unique across the map. familyPrefixes is a fallback so models not listed here still get a family.",
   "models": [
     {
       "machine": "deepseek-v4-pro",
@@ -29,10 +29,12 @@
     { "machine": "grok-45", "label": "Grok 4.5", "family": "xAI" },
     { "machine": "grok-build-01", "label": "Grok Build 0.1", "family": "xAI" },
     { "machine": "ox-alpha", "label": "Ox Alpha", "family": "Stealth", "aliases": ["ox-alpha-free"] },
+    { "machine": "union-alpha", "label": "Union Alpha", "family": "Stealth" },
+    { "machine": "omen-alpha", "label": "Omen Alpha", "family": "Stealth" },
     { "machine": "glm-52", "label": "GLM 5.2", "family": "z.ai" },
     { "machine": "glm-51", "label": "GLM 5.1", "family": "z.ai" },
     { "machine": "glm-5", "label": "GLM 5", "family": "z.ai" },
-    { "machine": "gpt-56-luna", "label": "GPT 5.6 Luna", "family": "OpenAI" },
+    { "machine": "gpt-56-luna", "label": "GPT 5.6 Luna", "family": "OpenAI", "aliases": ["gpt-56-luna-900k"] },
     { "machine": "gpt-56-sol", "label": "GPT 5.6 Sol", "family": "OpenAI" },
     { "machine": "gpt-56-terra", "label": "GPT 5.6 Terra", "family": "OpenAI" },
     { "machine": "gpt-55", "label": "GPT 5.5", "family": "OpenAI" },
@@ -78,6 +80,7 @@
     { "machine": "kimi-k3", "label": "Kimi K3", "family": "Moonshot" },
     { "machine": "kimi-k26", "label": "Kimi K2.6", "family": "Moonshot" },
     { "machine": "kimi-k25", "label": "Kimi K2.5", "family": "Moonshot" },
+    { "machine": "muse-spark-13", "label": "Muse Spark 1.3", "family": "Meta", "aliases": ["muse-spark-13-contributor"] },
     { "machine": "muse-spark-12", "label": "Muse Spark 1.2", "family": "Meta", "aliases": ["muse-spark-12-contributor"] },
     { "machine": "muse-spark-11", "label": "Muse Spark 1.1", "family": "Meta" },
     { "machine": "muse-glimmer-30b", "label": "Muse Glimmer 30B", "family": "Meta" },
@@ -108,6 +111,8 @@
     { "prefix": "google", "family": "Google" },
     { "prefix": "mistral", "family": "Mistral" },
     { "prefix": "ox", "family": "Stealth" },
+    { "prefix": "union", "family": "Stealth" },
+    { "prefix": "omen", "family": "Stealth" },
     { "prefix": "llama", "family": "Meta" },
     { "prefix": "grok", "family": "xAI" }
   ]

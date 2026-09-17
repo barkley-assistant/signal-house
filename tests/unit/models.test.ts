@@ -28,15 +28,21 @@ describe("full fleet coverage — every model the operator uses maps to a clean 
     ["GLM-5.2", "GLM 5.2", "z.ai"],
     ["GLM-5.1", "GLM 5.1", "z.ai"],
     ["GPT 5.6 Luna", "GPT 5.6 Luna", "OpenAI"],
+    ["Gpt 5.6 Luna 900k", "GPT 5.6 Luna", "OpenAI"],
     ["Kimi K3", "Kimi K3", "Moonshot"],
     ["Kimi K2.7 Code", "Kimi K2.7 Code", "Moonshot"],
     ["Kimi K2.6", "Kimi K2.6", "Moonshot"],
     ["MiMo-V2.5", "MiMo V2.5", "Xiaomi"],
     ["MiMo-V2.5-Pro", "MiMo V2.5 Pro", "Xiaomi"],
+    ["Muse Spark 1.3", "Muse Spark 1.3", "Meta"],
+    ["Muse Spark 1.3 Contributor", "Muse Spark 1.3", "Meta"],
     ["Muse Spark 1.2", "Muse Spark 1.2", "Meta"],
     ["Muse Spark 1.2 Contributor", "Muse Spark 1.2", "Meta"],
     ["Muse Spark 1.1", "Muse Spark 1.1", "Meta"],
     ["Muse Glimmer 30B", "Muse Glimmer 30B", "Meta"],
+    ["Union Alpha", "Union Alpha", "Stealth"],
+    ["stealth/union-alpha", "Union Alpha", "Stealth"],
+    ["Omen Alpha", "Omen Alpha", "Stealth"],
     ["MiniMax M3", "MiniMax M3", "MiniMax"],
     ["MiniMax M2.7", "MiniMax M2.7", "MiniMax"],
     ["Qwen3.7 Max", "Qwen 3.7 Max", "Qwen"],
@@ -94,6 +100,32 @@ describe("model aliasing", () => {
     expect(modelLabel("Ox Alpha Free")).toBe("Ox Alpha");
     expect(modelFamily("Ox Alpha Free")).toBe("Stealth");
     expect(canonicalMachineKey("Ox Alpha Free")).toBe("ox-alpha");
+  });
+
+  test("900k variants roll up under their standard OpenAI model", () => {
+    expect(modelLabel("Gpt 5.6 Luna 900k")).toBe("GPT 5.6 Luna");
+    expect(modelFamily("Gpt 5.6 Luna 900k")).toBe("OpenAI");
+    expect(canonicalMachineKey("Gpt 5.6 Luna 900k")).toBe("gpt-56-luna");
+  });
+
+  test("Muse Spark 1.3 Contributor rolls up under Muse Spark 1.3 with the Muse family", () => {
+    expect(modelLabel("Muse Spark 1.3 Contributor")).toBe("Muse Spark 1.3");
+    expect(modelFamily("Muse Spark 1.3 Contributor")).toBe("Meta");
+    expect(canonicalMachineKey("Muse Spark 1.3 Contributor")).toBe("muse-spark-13");
+    // The canonical entry itself is untouched by the alias.
+    expect(modelLabel("Muse Spark 1.3")).toBe("Muse Spark 1.3");
+    expect(canonicalMachineKey("Muse Spark 1.3")).toBe("muse-spark-13");
+  });
+
+  test("Union Alpha and Omen Alpha resolve as Stealth models (vendor-prefixed spelling included)", () => {
+    expect(modelLabel("Union Alpha")).toBe("Union Alpha");
+    expect(modelFamily("Union Alpha")).toBe("Stealth");
+    expect(canonicalMachineKey("Union Alpha")).toBe("union-alpha");
+    expect(modelLabel("stealth/union-alpha")).toBe("Union Alpha");
+    expect(modelFamily("stealth/union-alpha")).toBe("Stealth");
+    expect(modelLabel("Omen Alpha")).toBe("Omen Alpha");
+    expect(modelFamily("Omen Alpha")).toBe("Stealth");
+    expect(canonicalMachineKey("Omen Alpha")).toBe("omen-alpha");
   });
 
   test("preserves unknown-model fallbacks without collapsing", () => {
