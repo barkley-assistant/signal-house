@@ -52,7 +52,9 @@ describe("full fleet coverage — every model the operator uses maps to a clean 
     ["Qwen3.7 Plus", "Qwen 3.7 Plus", "Qwen"],
     ["Qwen3.6 Plus", "Qwen 3.6 Plus", "Qwen"],
     ["DeepSeek V4 Pro", "DeepSeek V4 Pro", "DeepSeek"],
+    ["DeepSeek V4 Pro 0813", "DeepSeek V4 Pro", "DeepSeek"],
     ["DeepSeek V4 Flash", "DeepSeek V4 Flash", "DeepSeek"],
+    ["DeepSeek V4 Flash 0731", "DeepSeek V4 Flash", "DeepSeek"],
     ["Hy3", "Hy3", "Tencent"],
   ];
   for (const [raw, label, family] of fleet) {
@@ -87,14 +89,15 @@ describe("modelLabel", () => {
 });
 
 describe("model aliasing", () => {
-  test("dated DeepSeek variants are their own canonical keys (display + trend split)", () => {
-    expect(canonicalMachineKey("DeepSeek-V4-Flash-0731")).toBe("deepseek-v4-flash-0731");
+  test("dated DeepSeek variants class under their base models (0813 → Pro, 0731/0831 → Flash)", () => {
+    expect(canonicalMachineKey("DeepSeek-V4-Flash-0731")).toBe("deepseek-v4-flash");
     expect(canonicalMachineKey("DeepSeek-V4-Flash")).toBe("deepseek-v4-flash");
-    expect(canonicalMachineKey("deepseek/deepseek-v4-flash-0731")).toBe("deepseek-v4-flash-0731"); // vendor-prefixed spelling
-    expect(canonicalMachineKey("DeepSeek-V4-Pro-0813")).toBe("deepseek-v4-pro-0813");
+    expect(canonicalMachineKey("deepseek/deepseek-v4-flash-0731")).toBe("deepseek-v4-flash"); // vendor-prefixed spelling
+    expect(canonicalMachineKey("DeepSeek-V4-Flash-0831")).toBe("deepseek-v4-flash");
+    expect(canonicalMachineKey("DeepSeek-V4-Pro-0813")).toBe("deepseek-v4-pro");
     expect(canonicalMachineKey("DeepSeek-V4-Pro")).toBe("deepseek-v4-pro");
-    expect(modelLabel("DeepSeek-V4-Flash-0731")).toBe("DeepSeek V4 Flash 0731");
-    expect(modelLabel("DeepSeek-V4-Pro-0813")).toBe("DeepSeek V4 Pro 0813");
+    expect(modelLabel("DeepSeek-V4-Flash-0731")).toBe("DeepSeek V4 Flash");
+    expect(modelLabel("DeepSeek-V4-Pro-0813")).toBe("DeepSeek V4 Pro");
     expect(modelFamily("DeepSeek-V4-Flash-0731")).toBe("DeepSeek");
     expect(modelFamily("DeepSeek-V4-Pro-0813")).toBe("DeepSeek");
   });

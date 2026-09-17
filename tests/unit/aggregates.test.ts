@@ -275,13 +275,26 @@ describe("mergeModelRows cache preservation", () => {
     expect(merged[0].cost).toBeCloseTo(0.14 + 0.28 + 0.014, 6); // exactly (in·1M + out·1M + cache·1M)/1M
   });
 
-  test("byModel does not merge flash 0731 into the bare flash row", () => {
+  test("dated flash 0731 merges into the bare flash row, priced at its own dated rates", () => {
+    const rates = new Map([
+      ["deepseek-v4-flash", { input: 0.07, output: 0.14, cacheRead: 0.014 }],
+      // fetchAllRates resolves the dated spelling to its own dated entry
+      // (openference preferred), so the prebuilt map carries both keys.
+      ["deepseek-v4-flash-0731", { input: 0.14, output: 0.28, cacheRead: 0.014 }],
+    ]);
     const rows = [
-      { model: "DeepSeek-V4-Flash", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
-      { model: "DeepSeek-V4-Flash-0731", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "DeepSeek-V4-Flash", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "DeepSeek-V4-Flash-0731", provider: null, source: "hermes", sessions: 1, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
     ];
-    const merged = mergeModelRows(rows, { rates: new Map(), enabled: false });
-    expect(merged).toHaveLength(2);
+    const merged = mergeModelRows(rows, { rates, enabled: true });
+    expect(merged).toHaveLength(1);
+    const m = merged[0];
+    expect(m.model).toBe("DeepSeek V4 Flash");
+    expect(m.machineKey).toBe("deepseek-v4-flash");
+    expect(m.sessions).toBe(2);
+    expect(m.costSource).toBe("estimated");
+    // Each spelling keeps its own rates: bare 0.07 + dated 0.14 (per 1M input tokens).
+    expect(m.cost).toBeCloseTo(0.07 + 0.14, 6);
   });
 
   test("900k variant merges into the canonical model row and prices at canonical rates", () => {
