@@ -75,6 +75,8 @@
     { "machine": "muse-glimmer-30b", "label": "Muse Glimmer 30B", "family": "Meta" },
     { "machine": "mimo-v25", "label": "MiMo V2.5", "family": "Xiaomi" },
     { "machine": "mimo-v25-pro", "label": "MiMo V2.5 Pro", "family": "Xiaomi" },
+    { "machine": "mimo-v26-flash", "label": "MiMo V2.6 Flash", "family": "Xiaomi" },
+    { "machine": "mimo-v26-pro", "label": "MiMo V2.6 Pro", "family": "Xiaomi" },
     { "machine": "hy3", "label": "Hy3", "family": "Tencent" },
     { "machine": "big-pickle", "label": "Big Pickle", "family": "OpenCode" },
     { "machine": "auto", "label": "Auto", "family": "Openference" },
@@ -103,6 +105,7 @@
     { "prefix": "union", "family": "Stealth" },
     { "prefix": "omen", "family": "Stealth" },
     { "prefix": "llama", "family": "Meta" },
+    { "prefix": "mimo", "family": "Xiaomi" },
     { "prefix": "grok", "family": "xAI" }
   ]
 }

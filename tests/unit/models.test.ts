@@ -37,6 +37,11 @@ describe("full fleet coverage — every model the operator uses maps to a clean 
     ["Kimi K2.6", "Kimi K2.6", "Moonshot"],
     ["MiMo-V2.5", "MiMo V2.5", "Xiaomi"],
     ["MiMo-V2.5-Pro", "MiMo V2.5 Pro", "Xiaomi"],
+    ["MiMo-V2.6-Flash", "MiMo V2.6 Flash", "Xiaomi"],
+    ["MiMo-V2.6-Pro", "MiMo V2.6 Pro", "Xiaomi"],
+    // opencode reports the lowercase spelling — same row, same label.
+    ["mimo-v2.6-flash", "MiMo V2.6 Flash", "Xiaomi"],
+    ["mimo-v2.6-pro", "MiMo V2.6 Pro", "Xiaomi"],
     ["Muse Spark 1.3", "Muse Spark 1.3", "Meta"],
     ["Muse Spark 1.3 Contributor", "Muse Spark 1.3", "Meta"],
     ["Muse Spark 1.2", "Muse Spark 1.2", "Meta"],
@@ -71,6 +76,7 @@ describe("modelFamily", () => {
     expect(modelFamily("gemini-2.5-pro")).toBe("Google");
     expect(modelFamily("mistral-large")).toBe("Mistral");
     expect(modelFamily("llama-4")).toBe("Meta");
+    expect(modelFamily("mimo-v2.7-flash")).toBe("Xiaomi");
     expect(modelFamily("o3-mini")).toBe("OpenAI");
   });
 
