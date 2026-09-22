@@ -108,10 +108,12 @@ function LifetimeBlock({ lifetime }: { lifetime: LifetimeStats | null }) {
     },
     {
       label: "Busiest day",
-      value:
-        busiestDay !== null
-          ? `${fmtDayShort(busiestDay.date)} · ${formatCompact(busiestDay.tokens)}`
-          : "—",
+      // Date over magnitude, not "31 Aug · 505M" — two facts jammed behind a
+      // middot had to be parsed horizontally while every peer cell stacks.
+      // Sub slot mirrors Top model, so the band's second line reads as a
+      // deliberate pattern rather than one row's accident.
+      value: busiestDay !== null ? fmtDayShort(busiestDay.date) : "—",
+      sub: busiestDay !== null ? `${formatCompact(busiestDay.tokens)} tokens` : undefined,
     },
   ];
   return (
@@ -121,9 +123,15 @@ function LifetimeBlock({ lifetime }: { lifetime: LifetimeStats | null }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.25 }}
     >
-      <span className="kpi-tile__label">
-        Lifetime to date{lifetime?.sinceDay ? ` · since ${fmtDayWithYear(lifetime.sinceDay)}` : ""}
-      </span>
+      {/* Header row: label left, honest retention bound right. Splitting
+          them makes the block read as a section heading — as one string it
+          looked like a fifth headline stat. */}
+      <div className="spend-lifetime__head">
+        <span className="kpi-tile__label">Lifetime to date</span>
+        {lifetime?.sinceDay ? (
+          <span className="spend-lifetime__since">since {fmtDayWithYear(lifetime.sinceDay)}</span>
+        ) : null}
+      </div>
       <div className="spend-lifetime__grid">
         {stats.map((s) => (
           <div key={s.label} className="model-row__detail-stat">
@@ -145,6 +153,8 @@ export function AgentSpend() {
   const hasCacheActivity = (usage?.cacheReadTokens ?? 0) > 0;
   const savedAmount = useCountUp(hasCacheActivity && Number.isFinite(usage?.cacheSavings) ? usage?.cacheSavings ?? 0 : 0);
   const hitRateDisplay = hasCacheActivity ? formatPercent(usage?.cacheHitRate) : "—";
+  // Green only for a real positive saving — a $0.00 must never read as a win.
+  const savingsPositive = hasCacheActivity && (usage?.cacheSavings ?? 0) > 0;
   const blended = usage !== null ? blendedPerM(usage) : null;
   const perSession = usage !== null ? costPerSession(usage) : null;
 
@@ -173,8 +183,14 @@ export function AgentSpend() {
             >
               <span className="kpi-tile__label">Cache</span>
               <span className="spend-hero__amount">{hitRateDisplay}</span>
-              <span className="kpi-caption">
-                saved <span className="money">{savedAmount}</span> at model input rates
+              {/* The saving is the point of the stat, so it leads in the
+                  success colour rather than hiding inside a caption. The
+                  qualifier rides the same line — splitting it pushed this
+                  cell to four lines against its siblings' three. A saving
+                  that isn't positive falls back to a muted caption. */}
+              <span className={savingsPositive ? "spend-hero__saved" : "kpi-caption"}>
+                saved <span className="money">{savedAmount}</span>
+                <span className={savingsPositive ? "spend-hero__saved-note" : undefined}> at model input rates</span>
               </span>
             </motion.div>
             <motion.div

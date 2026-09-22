@@ -177,29 +177,50 @@ titles. Cards carry an `aria-label` describing their content.
 
 ### Agent Spend overview
 
-`.spend-overview` → a 2×2 grid, equal halves on desktop. Top row: the
-**Total cost** hero (`.spend-overview__total`: mono total cost in
-`clamp(24px, 5vw, 56px)`, then muted "Sessions · Tokens" beneath, dot-
-separated) and the **Cache** tile (`.spend-overview__cache`: hit rate +
-saved amount). Bottom row: two unit-rate cells (`.spend-overview__stat`,
-built on the shared `model-row__detail-stat` label-over-value
-primitives, value at 20px/600) — **Blended $/1M** (window cost ÷ all
-tokens moved × 1M, every token at face value — unlike the by-model
-`$/1M` column's cache-discounted effective tokens, hence its "all tokens
-at face value" caption) and **Cost / session** (window cost ÷ sessions).
-Both are computed client-side from the `/api/state` usage totals.
-Unknown cost or a zero denominator renders "—", never 0 — including the
-all-models-unknown case where the estimator pins every cost to zero
-(the window total is then unknown, not free). Collapses to one column
-below 900px (four stacked cells). Per-source attribution lives in each
-by-model row's expandable detail, not the overview.
+`.spend-overview` → mobile-first, hierarchy carried by type rather than by
+boxing individual cells. The **Total cost** hero
+(`.spend-overview__total`) spans full width on its own surface (the only
+boxed cell): mono total cost in `clamp(44px, 13vw, 56px)` (57.6px at
+1440px), then muted dot-separated "Sessions · Tokens". Below it the
+**Cache** cell (`.spend-overview__cache`) takes a full-width band — hit
+rate, then `saved $X` with only the amount in `--success` green
+(`.spend-hero__saved`; the words around it stay muted so the accent never
+outranks the hero) and "at model input rates" trailing on the same line.
+The two unit-rate cells (`.spend-overview__stat`) share the last row,
+split by a vertical hairline: **Blended $/1M** (window cost ÷ all tokens
+moved × 1M, every token at face value — unlike the by-model `$/1M`
+column's cache-discounted effective tokens, hence its "all tokens at face
+value" caption) and **Cost / session** (window cost ÷ sessions), values in
+`clamp(24px, 6vw, 30px)` — about half the hero, which is what sets the
+ranking. Captions wrap here (`.spend-overview .kpi-caption`) because the
+qualifier is load-bearing and an ellipsis would eat it.
 
-Below the tiles, the **Lifetime to date** block (`.spend-lifetime`): five
-label-over-value stat lines — Commits, Tokens, Sessions, Top model (with
-its session count), Busiest day — in `.spend-lifetime__grid`, five across
-on desktop, two below 900px, stacked below 640px. The header states the
-actual first retained day ("since 15 Jun 2026"); the numbers are bounded
-by retention, never labelled "all time". Unknown values render "—".
+From 901px all four cells sit in one row on a `1.3fr 1fr 1fr 1fr` track,
+every cell flat with hairlines between — the hero keeps no box at desktop,
+because a lone bordered cell beside three unboxed siblings read as an
+unfinished edit, and at ~2× the supporting figures the type already says
+"headline". Both unit rates are computed client-side from the
+`/api/state` usage totals. Unknown cost or a zero denominator renders "—",
+never 0 — including the all-models-unknown case where the estimator pins
+every cost to zero (the window total is then unknown, not free).
+Per-source attribution lives in each by-model row's expandable detail, not
+the overview.
+
+Below the tiles, the **Lifetime to date** block (`.spend-lifetime`) sits
+in its own `--card-hover` surface — it switches time context (rolling
+window → everything retained), so the separation is structural: a 1px top
+hairline alone was invisible against near-black. Its header row
+(`.spend-lifetime__head`) puts the label left and the honest retention
+bound right (`--text-secondary`, not muted — it is meant to be read). The
+five stats — Commits, Tokens, Sessions, Top model (with its session
+count), Busiest day (date over token count) — render as a label-left /
+value-right list with a hairline under each on mobile, five across as
+label-over-value columns from 901px. Every row reserves its second line
+(`grid-template-rows: auto 16px`) so only the two detail rows carry text
+there and the rhythm stays even instead of one row reading as an orphan.
+The header states the actual first retained day ("since 15 Jun 2026"); the
+numbers are bounded by retention, never labelled "all time". Unknown
+values render "—".
 
 ### Tables
 

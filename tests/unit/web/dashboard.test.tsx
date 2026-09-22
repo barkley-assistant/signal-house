@@ -433,7 +433,9 @@ describe("AgentSpend", () => {
     expect(block?.textContent).toContain("3,915");
     expect(block?.textContent).toContain("MiniMax M3");
     expect(block?.textContent).toContain("1,057 sessions");
-    expect(block?.textContent).toContain("31 Aug · 505M");
+    // Date and magnitude now stack (value / sub) instead of one middot run.
+    expect(block?.textContent).toContain("31 Aug");
+    expect(block?.textContent).toContain("505M tokens");
   });
 
   test("lifetime lines render em-dash on missing data, never zero", () => {
