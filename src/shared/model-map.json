@@ -85,6 +85,7 @@
     { "machine": "agnes-25-flash", "label": "Agnes 2.5 Flash", "family": "Agnes AI" },
     { "machine": "agnes-image-25-flash", "label": "Agnes Image 2.5 Flash", "family": "Agnes AI" },
     { "machine": "agnes-video-25-flash", "label": "Agnes Video 2.5 Flash", "family": "Agnes AI" },
+    { "machine": "space-bunny", "label": "Space Bunny", "family": "Stealth", "aliases": ["space-bunny-free"] },
     { "machine": "big-pickle", "label": "Big Pickle", "family": "OpenCode" },
     { "machine": "auto", "label": "Auto", "family": "Openference" },
     { "machine": "unknown", "label": "Unknown" }
@@ -115,6 +116,7 @@
     { "prefix": "mimo", "family": "Xiaomi" },
     { "prefix": "step", "family": "StepFun" },
     { "prefix": "agnes", "family": "Agnes AI" },
+    { "prefix": "space-bunny", "family": "Stealth" },
     { "prefix": "grok", "family": "xAI" }
   ]
 }

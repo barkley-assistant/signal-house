@@ -72,6 +72,10 @@ describe("full fleet coverage — every model the operator uses maps to a clean 
     ["Agnes-2.5-Flash", "Agnes 2.5 Flash", "Agnes AI"],
     ["Agnes-Image-2.5-Flash", "Agnes Image 2.5 Flash", "Agnes AI"],
     ["Agnes-Video-2.5-Flash", "Agnes Video 2.5 Flash", "Agnes AI"],
+    // Stealth family — Space Bunny Free rolls up under the base.
+    ["Space Bunny", "Space Bunny", "Stealth"],
+    ["Space Bunny Free", "Space Bunny", "Stealth"],
+    ["space-bunny-free", "Space Bunny", "Stealth"],
   ];
   for (const [raw, label, family] of fleet) {
     test(`${raw} → "${label}" (${family})`, () => {
@@ -90,6 +94,7 @@ describe("modelFamily", () => {
     expect(modelFamily("mimo-v2.7-flash")).toBe("Xiaomi");
     expect(modelFamily("step-4-preview")).toBe("StepFun");
     expect(modelFamily("agnes-4.0")).toBe("Agnes AI");
+    expect(modelFamily("space-bunny-alpha")).toBe("Stealth");
     expect(modelFamily("o3-mini")).toBe("OpenAI");
   });
 
@@ -125,6 +130,9 @@ describe("model aliasing", () => {
     expect(modelLabel("Ox Alpha Free")).toBe("Ox Alpha");
     expect(modelFamily("Ox Alpha Free")).toBe("Stealth");
     expect(canonicalMachineKey("Ox Alpha Free")).toBe("ox-alpha");
+    expect(modelLabel("Space Bunny Free")).toBe("Space Bunny");
+    expect(modelFamily("Space Bunny Free")).toBe("Stealth");
+    expect(canonicalMachineKey("Space Bunny Free")).toBe("space-bunny");
   });
 
   test("900k variants roll up under their standard OpenAI model", () => {
