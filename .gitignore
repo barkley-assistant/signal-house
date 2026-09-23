@@ -28,3 +28,8 @@ worker-result.json
 # is expected to archive them, but the bridge is the safety net.
 /openspec/
 .codegraph/
+
+# Agent + browser tooling scratch rendered into the working tree; never
+# project files (plans/research dumps, Playwright console + snapshot logs).
+.hermes/
+.playwright-mcp/
