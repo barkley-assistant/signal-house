@@ -7,8 +7,24 @@
  * is built to disk (dist/public) instead. Recorded in the traceability doc.
  */
 
-import { existsSync, mkdirSync, cpSync, readdirSync } from "node:fs";
-import { resolve, normalize, join } from "node:path";
+import { existsSync, mkdirSync, cpSync, readdirSync, rmSync } from "node:fs";
+import { resolve, normalize, join, relative } from "node:path";
+
+/** Every file under `dir` as absolute paths. Throws when `dir` is absent —
+ *  callers decide whether a missing directory is an error or an empty set. */
+function walkFiles(dir: string): string[] {
+  const files: string[] = [];
+  const stack = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else files.push(full);
+    }
+  }
+  return files;
+}
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -26,6 +42,13 @@ const MIME: Record<string, string> = {
 /** Build the SPA to `publicDir` (dist/public). Idempotent. */
 export async function buildWebBundle(publicDir: string): Promise<void> {
   const root = resolve(import.meta.dir, "..", "..");
+  // Hashed names change every build, so writing alone never removed the
+  // previous build's output — 351 of 353 chunks were unreachable from
+  // index.html (385 MB) after seven weeks of builds. Snapshot the directory
+  // first and delete the difference once the new build has landed: clearing
+  // it up front would open a window where a running server cannot serve
+  // files it has already indexed.
+  const previous = existsSync(publicDir) ? walkFiles(publicDir) : [];
   mkdirSync(publicDir, { recursive: true });
   const result = await Bun.build({
     entrypoints: [resolve(root, "src/web/index.html")],
@@ -42,6 +65,23 @@ export async function buildWebBundle(publicDir: string): Promise<void> {
   // stable path. cpSync overwrites; directory merge keeps icons/ nested.
   const publicSrc = resolve(root, "src/web/public");
   if (existsSync(publicSrc)) cpSync(publicSrc, publicDir, { recursive: true });
+  // Sweep whatever this build did not produce. Diffing against a post-build
+  // listing would compare the directory with itself — those old files are
+  // still sitting in it — so index what was actually written instead: Bun's
+  // own outputs plus the verbatim PWA files copied above. Hashed chunks are
+  // cache-first on demand in sw.js and nothing precaches them by name, so
+  // dropping them cannot break boot.
+  const produced = new Set<string>(result.outputs.map((output) => output.path));
+  if (existsSync(publicSrc)) {
+    for (const src of walkFiles(publicSrc)) produced.add(join(publicDir, relative(publicSrc, src)));
+  }
+  // If the shell itself is unaccounted for the accounting is wrong, and
+  // sweeping would delete the site — skip it and leave the stale files.
+  if (produced.has(join(publicDir, "index.html"))) {
+    for (const file of previous) {
+      if (!produced.has(file)) rmSync(file, { force: true });
+    }
+  }
   // Surface warnings (side-effect-only imports, oversized chunks, etc.) so
   // they don't silently disappear from build output.
   for (const logLine of result.logs) {
@@ -61,24 +101,15 @@ let assetIndex: Set<string> | null = null;
 
 function setIndex(publicDir: string): Set<string> {
   if (assetIndex) return assetIndex;
-  const index = new Set<string>();
-  const stack = [publicDir];
-  while (stack.length > 0) {
-    const dir = stack.pop()!;
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return new Set(); // directory missing — no assets known yet
-    }
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else index.add(full);
-    }
+  let files: string[];
+  try {
+    files = walkFiles(publicDir);
+  } catch {
+    return new Set(); // directory missing — no assets known yet (uncached:
+    // a build that lands later must be able to re-walk)
   }
-  assetIndex = index;
-  return index;
+  assetIndex = new Set(files);
+  return assetIndex;
 }
 
 /** Serve a file from the built web bundle; null when not found. */
