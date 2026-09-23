@@ -78,6 +78,13 @@
     { "machine": "mimo-v26-flash", "label": "MiMo V2.6 Flash", "family": "Xiaomi" },
     { "machine": "mimo-v26-pro", "label": "MiMo V2.6 Pro", "family": "Xiaomi" },
     { "machine": "hy3", "label": "Hy3", "family": "Tencent" },
+    { "machine": "step-5-preview", "label": "Step 5 Preview", "family": "StepFun" },
+    { "machine": "step-35-flash", "label": "Step 3.5 Flash", "family": "StepFun" },
+    { "machine": "step-37-flash", "label": "Step 3.7 Flash", "family": "StepFun" },
+    { "machine": "agnes-30-flash", "label": "Agnes 3.0 Flash", "family": "Agnes AI" },
+    { "machine": "agnes-25-flash", "label": "Agnes 2.5 Flash", "family": "Agnes AI" },
+    { "machine": "agnes-image-25-flash", "label": "Agnes Image 2.5 Flash", "family": "Agnes AI" },
+    { "machine": "agnes-video-25-flash", "label": "Agnes Video 2.5 Flash", "family": "Agnes AI" },
     { "machine": "big-pickle", "label": "Big Pickle", "family": "OpenCode" },
     { "machine": "auto", "label": "Auto", "family": "Openference" },
     { "machine": "unknown", "label": "Unknown" }
@@ -106,6 +113,8 @@
     { "prefix": "omen", "family": "Stealth" },
     { "prefix": "llama", "family": "Meta" },
     { "prefix": "mimo", "family": "Xiaomi" },
+    { "prefix": "step", "family": "StepFun" },
+    { "prefix": "agnes", "family": "Agnes AI" },
     { "prefix": "grok", "family": "xAI" }
   ]
 }

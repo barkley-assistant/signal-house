@@ -61,6 +61,17 @@ describe("full fleet coverage — every model the operator uses maps to a clean 
     ["DeepSeek V4 Flash", "DeepSeek V4 Flash", "DeepSeek"],
     ["DeepSeek V4 Flash 0731", "DeepSeek V4 Flash", "DeepSeek"],
     ["Hy3", "Hy3", "Tencent"],
+    // StepFun (Step family) — the 5 Preview ships as "Step-5 Preview" from
+    // opencode; the 3.5/3.7 Flash rows arrive vendor-prefixed.
+    ["Step-5 Preview", "Step 5 Preview", "StepFun"],
+    ["step-5-preview", "Step 5 Preview", "StepFun"],
+    ["stepfun/step-3.5-flash", "Step 3.5 Flash", "StepFun"],
+    ["step-3.7-flash", "Step 3.7 Flash", "StepFun"],
+    // Agnes AI — text, image and video variants, dash-separated in the raw.
+    ["Agnes-3.0-Flash", "Agnes 3.0 Flash", "Agnes AI"],
+    ["Agnes-2.5-Flash", "Agnes 2.5 Flash", "Agnes AI"],
+    ["Agnes-Image-2.5-Flash", "Agnes Image 2.5 Flash", "Agnes AI"],
+    ["Agnes-Video-2.5-Flash", "Agnes Video 2.5 Flash", "Agnes AI"],
   ];
   for (const [raw, label, family] of fleet) {
     test(`${raw} → "${label}" (${family})`, () => {
@@ -77,6 +88,8 @@ describe("modelFamily", () => {
     expect(modelFamily("mistral-large")).toBe("Mistral");
     expect(modelFamily("llama-4")).toBe("Meta");
     expect(modelFamily("mimo-v2.7-flash")).toBe("Xiaomi");
+    expect(modelFamily("step-4-preview")).toBe("StepFun");
+    expect(modelFamily("agnes-4.0")).toBe("Agnes AI");
     expect(modelFamily("o3-mini")).toBe("OpenAI");
   });
 
