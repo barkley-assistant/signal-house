@@ -306,8 +306,8 @@ function DailyUsageChart() {
         backgroundColor: "transparent",
         color: [...CHART_PALETTE],
         grid: [
-          { left: 8, right: 28, top: 40, height: "36%", containLabel: true },
-          { left: 8, right: 28, top: "52%", bottom: 24, containLabel: true },
+          { left: 8, right: 28, top: 40, height: "38%", containLabel: true },
+          { left: 8, right: 28, top: "55%", bottom: 24, containLabel: true },
         ],
         tooltip: {
           ...COMMON_TOOLTIP,
@@ -398,8 +398,8 @@ function DailyUsageChart() {
             query: { maxWidth: 480 },
             option: {
               grid: [
-                { left: 8, right: 28, top: 40, height: "36%", containLabel: true },
-                { left: 8, right: 28, top: "52%", bottom: 24, containLabel: true },
+                { left: 8, right: 28, top: 40, height: "38%", containLabel: true },
+                { left: 8, right: 28, top: "55%", bottom: 24, containLabel: true },
               ],
               legend: { textStyle: { fontSize: 10 } },
             },
