@@ -330,6 +330,9 @@ function DailyUsageChart() {
         xAxis: [
           {
             type: "category",
+            // ECharts 6 requires explicit gridIndex — without it the second
+            // grid's axes associate incorrectly and its series never paint.
+            gridIndex: 0,
             // boundaryGap defaults to true for category axes, which insets the
             // first and last points by half a band on each side. That half-band
             // slack is the trailing whitespace at the latest date — set it false
@@ -342,6 +345,7 @@ function DailyUsageChart() {
           },
           {
             type: "category",
+            gridIndex: 1,
             boundaryGap: false,
             data: dates,
             axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort },
@@ -352,6 +356,7 @@ function DailyUsageChart() {
         yAxis: [
           {
             type: "value",
+            gridIndex: 0,
             min: 0,
             max: yMaxCost,
             axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, fontFamily: '"JetBrains Mono", monospace', formatter: (v: number) => `$${Math.round(v)}` },
@@ -359,6 +364,7 @@ function DailyUsageChart() {
           },
           {
             type: "value",
+            gridIndex: 1,
             min: 0,
             max: yMaxTokens,
             axisLabel: {
