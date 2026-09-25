@@ -317,9 +317,10 @@ table.data td.num, table.data th.num {
   font-family: var(--font-mono);
 }
 
-/* Attention queue scroll container: caps the visible list at roughly 8
-   rows and scrolls the rest. Slim scrollbar + bottom fade so the cap
-   reads as "there's more inside" instead of a clipped card. */
+/* Attention queue scroll container. The component sets an inline
+   max-height equal to the exact summed height of the first 8 rows so no
+   row is ever clipped mid-line; this CSS value is only the pre-measure
+   fallback. Slim scrollbar + scroll-aware tail fade (see component). */
 .att-scroll {
   max-height: min(480px, 62vh);
   overflow-y: auto;

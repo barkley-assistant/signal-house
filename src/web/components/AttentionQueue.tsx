@@ -19,6 +19,27 @@ export function AttentionQueue({ attention }: { attention: StatePayload["attenti
   // actual overflow state, not the list's static position.
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasMoreBelow, setHasMoreBelow] = useState(false);
+  // Cap the visible list at exactly 8 COMPLETE rows: a fixed max-height
+  // (e.g. min(480px, 62vh)) clips the 8th row mid-line because row height
+  // varies (stale captions, font metrics). Measure the first 8 rows and
+  // size the container to their exact summed height instead — the 9th row
+  // and beyond sit below the fold, revealed by scrolling.
+  const LIST_CAP = 8;
+  const [capHeight, setCapHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const rows = Array.from(el.querySelectorAll("li"));
+    const shown = rows.slice(0, LIST_CAP);
+    if (shown.length === 0) {
+      setCapHeight(null);
+      return;
+    }
+    const sum = shown.reduce((acc, r) => acc + r.getBoundingClientRect().height, 0);
+    // +1px guards subpixel rounding from clipping the last shown row.
+    setCapHeight(sum + 1);
+  }, [attention]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -47,6 +68,7 @@ export function AttentionQueue({ attention }: { attention: StatePayload["attenti
       <div
         ref={scrollRef}
         className="att-scroll"
+        style={capHeight !== null ? { maxHeight: capHeight } : undefined}
         tabIndex={0}
         aria-label={`Attention queue items, ${attention.length} total`}
       >
