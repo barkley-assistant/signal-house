@@ -9,7 +9,7 @@
  */
 
 import * as echarts from "echarts";
-import { CHART_PALETTE, hexWithAlpha } from "./chart-theme";
+import { CHART_PALETTE } from "./chart-theme";
 
 export interface CostTokenPoint {
   cost: number | null;
@@ -17,15 +17,17 @@ export interface CostTokenPoint {
   cacheRead: number | null;
 }
 
-/** Area-fill alphas follow the shared chart language: lead blue 0.10, the
- *  token series 0.08. Cache read deliberately has NO area — it is part of
- *  the token total, so a third translucent fill would just stack mud over
- *  the token area; a dashed line reads as the subordinate component.
+/** No area fills by design: on the shared single pane, the cost area
+ *  (0.10) and the token area (0.08) overlap into one greenish mud that
+ *  swallows the lines — clean dual-axis lines read better than stacked
+ *  translucency. Cache read keeps its dashed subordinate line. The
+ *  per-model mini chart shares this grammar at 220px, where fills would
+ *  be pure noise.
  *
- *  `axes` lets a caller split the trio across two grid panes (the main
- *  daily chart: cost on pane 0, tokens+cache on pane 1). The per-model
- *  mini chart keeps the defaults — a single pane with the shared dual
- *  axis, which is all a 220px panel can honestly hold. */
+ *  `axes` lets a caller split the trio across two grid panes (kept for
+ *  API symmetry with the older split-pane main chart; the per-model
+ *  mini chart uses the defaults — a single pane with the shared dual
+ *  axis, which is all a 220px panel can honestly hold). */
 export function costTokenSeries(
   points: ReadonlyArray<CostTokenPoint>,
   axes: { costX?: number; costY?: number; tokensX?: number; tokensY?: number } = {},
@@ -46,7 +48,6 @@ export function costTokenSeries(
       // The cost series is the hero of this panel: thickest line so it
       // survives the dual-axis muddle instead of hiding behind tokens.
       lineStyle: { color: CHART_PALETTE[0], width: 2.5 },
-      areaStyle: { color: hexWithAlpha(CHART_PALETTE[0], 0.1) },
     },
     {
       name: "Tokens",
@@ -57,7 +58,6 @@ export function costTokenSeries(
       smooth: 0.3,
       showSymbol: false,
       lineStyle: { color: CHART_PALETTE[1], width: 2 },
-      areaStyle: { color: hexWithAlpha(CHART_PALETTE[1], 0.08) },
     },
     {
       name: "Cache read",

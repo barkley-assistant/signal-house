@@ -269,9 +269,13 @@ function DailyUsageChart() {
       if (peaksRef.current === null) {
         const costPeak = points.reduce((m, p) => Math.max(m, p.cost ?? 0), 0);
         const tokensPeak = points.reduce((m, p) => Math.max(m, p.tokens ?? 0, p.cacheRead ?? 0), 0);
+        // 1.1× headroom keeps the lines off the very top edge of their
+        // axes — pegged peaks made the two series hug the ceiling and
+        // cross each other in the top band (operator: "adjust the side
+        // metrics slightly").
         peaksRef.current = {
-          cost: Math.max(1, niceCeil(costPeak)),
-          tokens: Math.max(1, niceCeil(tokensPeak)),
+          cost: Math.max(1, niceCeil(costPeak * 1.1)),
+          tokens: Math.max(1, niceCeil(tokensPeak * 1.1)),
         };
       }
       const yMaxCost = peaksRef.current.cost;
