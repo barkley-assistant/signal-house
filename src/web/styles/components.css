@@ -397,6 +397,27 @@
 .model-table {
   overflow-x: auto;
 }
+/* Show-more link under a capped by-model table — subtle, centered,
+   one click expands to the full sorted set. */
+.model-table__show-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 2px;
+}
+.model-table__show-more button {
+  background: none;
+  border: none;
+  padding: 4px 12px;
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.model-table__show-more button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  text-decoration: underline;
+}
 .model-table table.data {
 /* On narrow screens the 5 columns + sort buttons + mono numbers need
      more than ~330px; pin a minimum so the wrapper scrolls instead of

@@ -571,13 +571,18 @@ function readSortState(): SortState {
  *  sessions/tokens/cost sort descending, model sorts alphabetically.
  *  Clicking the active column again cycles (desc → asc → back to the
  *  tokens-descending default). Sort state persists across page loads
- *  via localStorage. */
+ *  via localStorage. When more than 15 models exist, the table shows
+ *  the top 15 and a "show more" link expands it to the full set. */
+const DEFAULT_VISIBLE_MODELS = 15;
+
 function ModelTable() {
   const { state } = useDash();
   const usage = state?.usage ?? null;
   const models = usage?.byModel ?? [];
   const [sort, setSort] = useState<SortState>(readSortState);
   const { key: sortKey, asc } = sort;
+  // Show-more cap: first N rows by current sort, one click expands all.
+  const [visibleCount, setVisibleCount] = useState(DEFAULT_VISIBLE_MODELS);
   // Mobile-only expand state: clicking a row toggles a detail panel below
   // it showing the full breakdown (Cache %, $/1M + the cost-efficiency
   // breakdown). Single-expand: tapping a different row collapses the
@@ -620,6 +625,7 @@ function ModelTable() {
       return asc ? av - bv : bv - av;
     });
   }
+  const shown = sorted.slice(0, visibleCount);
 
   const cycle = (key: Exclude<SortKey, null>) => {
     if (sortKey !== key) {
@@ -647,6 +653,7 @@ function ModelTable() {
       {models.length === 0 ? (
         <p className="state-label">No model-level data available</p>
       ) : (
+        <>
         <table className="data">
           <thead>
             <tr>
@@ -661,7 +668,7 @@ function ModelTable() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((m) => {
+            {shown.map((m) => {
               const rowKey = m.model;
               const isExpanded = expandedKey === rowKey;
               return (
@@ -773,6 +780,14 @@ function ModelTable() {
             })}
           </tbody>
         </table>
+        {sorted.length > visibleCount && (
+          <div className="model-table__show-more">
+            <button type="button" onClick={() => setVisibleCount(sorted.length)}>
+              Show more ({sorted.length - visibleCount} more)
+            </button>
+          </div>
+        )}
+      </>
       )}
     </div>
   );
