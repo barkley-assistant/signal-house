@@ -8,10 +8,27 @@
  * pinned by the unit test "stale row uses the warning dot class" below
  * so a future CSS or JSX refactor can't silently flip it back to blue.
  */
+import { useEffect, useRef, useState } from "react";
 import type { StatePayload } from "../state/store";
 import { formatRelative } from "../../shared/format";
 
 export function AttentionQueue({ attention }: { attention: StatePayload["attention"] }) {
+  // The tail fade should only hint at MORE content below — once scrolled to
+  // the bottom (or when the list fits), the last row must read at full
+  // opacity. Track it off the scroll container so the fade follows the
+  // actual overflow state, not the list's static position.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [hasMoreBelow, setHasMoreBelow] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setHasMoreBelow(el.scrollTop + el.clientHeight < el.scrollHeight - 8);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    return () => el.removeEventListener("scroll", update);
+  }, [attention.length]);
+
   if (attention.length === 0) {
     return (
       <section className="card" aria-label="Attention queue">
@@ -28,11 +45,15 @@ export function AttentionQueue({ attention }: { attention: StatePayload["attenti
     <section className="card" aria-label="Attention queue">
       <h2>Attention Queue</h2>
       <div
+        ref={scrollRef}
         className="att-scroll"
         tabIndex={0}
         aria-label={`Attention queue items, ${attention.length} total`}
       >
-        <ul className="att-scroll__list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        <ul
+          className={`att-scroll__list${hasMoreBelow ? " att-scroll__list--fade" : ""}`}
+          style={{ listStyle: "none", margin: 0, padding: 0 }}
+        >
           {attention.map((item) => (
           <li
             key={item.id}

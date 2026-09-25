@@ -330,8 +330,9 @@ table.data td.num, table.data th.num {
 }
 /* Fade the list tail so overflowing rows hint at more content below.
    Applied to the list (not the scroll container) so the scrollbar stays
-   fully visible. */
-.att-scroll__list {
+   fully visible. Only active while more content sits below — the
+   component toggles the modifier off at the bottom of the scroll. */
+.att-scroll__list--fade {
   -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
 }
