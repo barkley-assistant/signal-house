@@ -293,22 +293,18 @@ function DailyUsageChart() {
           { lazyUpdate: true }
         );
       };
-      // ECharts 5 indexes the top-level palette (not series.lineStyle.color)
-      // for legend swatches, so this order MUST match the series array order.
-      // Two panes: cost on top (its own $ scale — a ribbon skimming the
-      // baseline of a shared canvas read as noise), tokens+cache below.
-      // Panes share the x category via axisPointer.link, so hovering either
-      // highlights the same day in both.
+      // One shared pane: cost on the left axis ($), tokens+cache on the
+      // right axis (compact). Split panes shipped 2026-09-25 and were
+      // rejected by the operator — the single pane with both scales is
+      // the keeper. ECharts 6 needs explicit gridIndex on every axis
+      // (without it, extra-grid series silently never paint).
       const series: echarts.EChartsOption = {
         animation: true,
         animationDuration: 700,
         animationEasing: "cubicOut",
         backgroundColor: "transparent",
         color: [...CHART_PALETTE],
-        grid: [
-          { left: 8, right: 28, top: 40, height: "38%", containLabel: true },
-          { left: 8, right: 28, top: "55%", bottom: 24, containLabel: true },
-        ],
+        grid: { left: 8, right: 28, top: 40, bottom: 24, containLabel: true },
         tooltip: {
           ...COMMON_TOOLTIP,
           ...touchAwareTooltip(),
@@ -339,15 +335,6 @@ function DailyUsageChart() {
             // so the line's first/last points sit flush to both plot edges.
             boundaryGap: false,
             data: dates,
-            axisLabel: { show: false },
-            axisLine: { show: false },
-            axisTick: { show: false },
-          },
-          {
-            type: "category",
-            gridIndex: 1,
-            boundaryGap: false,
-            data: dates,
             axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort },
             axisLine: { lineStyle: { color: CHART_BORDER } },
             axisTick: { show: false },
@@ -364,7 +351,7 @@ function DailyUsageChart() {
           },
           {
             type: "value",
-            gridIndex: 1,
+            gridIndex: 0,
             min: 0,
             max: yMaxTokens,
             axisLabel: {
@@ -397,16 +384,14 @@ function DailyUsageChart() {
           {
             query: { maxWidth: 480 },
             option: {
-              grid: [
-                { left: 8, right: 28, top: 40, height: "38%", containLabel: true },
-                { left: 8, right: 28, top: "55%", bottom: 24, containLabel: true },
-              ],
+              grid: { left: 8, right: 28, top: 40, bottom: 24, containLabel: true },
               legend: { textStyle: { fontSize: 10 } },
             },
           },
         ],
-        // Cost pane 0, tokens+cache pane 1 (grid/xAxis/yAxis indexes above).
-        series: costTokenSeries(points, { costX: 0, costY: 0, tokensX: 1, tokensY: 1 }),
+        // Cost on the left axis, tokens+cache on the right — one shared pane,
+        // both series share the single xAxis.
+        series: costTokenSeries(points, { costX: 0, costY: 0, tokensX: 0, tokensY: 1 }),
       };
       chartRef.current?.setOption(series, true);
       chartRef.current?.on("legendselectchanged", onLegendToggle);

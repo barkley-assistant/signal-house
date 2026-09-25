@@ -102,8 +102,8 @@ export async function dailyModelShareHandler(deps: ApiDeps, req: Request): Promi
   const days = parseWindowDays(url.searchParams.get("days"));
   const to = url.searchParams.get("to") ?? utcDay();
   const from = url.searchParams.get("from") ?? utcDaysAgo(days);
-  const rawTop = Number(url.searchParams.get("top") ?? 5);
-  const top = Number.isFinite(rawTop) ? Math.min(12, Math.max(1, Math.round(rawTop))) : 5;
+  const rawTop = Number(url.searchParams.get("top") ?? 8);
+  const top = Number.isFinite(rawTop) ? Math.min(12, Math.max(1, Math.round(rawTop))) : 8;
   const costOpts: CostEstimationOpts = {
     rates: new Map(),
     enabled: deps.config.estimateCosts,

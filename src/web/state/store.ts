@@ -218,10 +218,11 @@ export interface ModelSharePoint {
 }
 
 /** Load the top-models-by-tokens daily share trend for the Agent Spend
- *  chart. Empty array on failure — the chart hides rather than erroring. */
+ *  chart (top 8 + Others rollup — the operator's pick for the overview).
+ *  Empty array on failure — the chart hides rather than erroring. */
 export async function loadModelShare(days: WindowDays): Promise<ModelSharePoint[]> {
   try {
-    const res = await fetchJson<{ points: ModelSharePoint[] }>(`/api/daily/model-share?days=${days}`);
+    const res = await fetchJson<{ points: ModelSharePoint[] }>(`/api/daily/model-share?days=${days}&top=8`);
     return res.points;
   } catch {
     return [];
