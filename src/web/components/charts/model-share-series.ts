@@ -12,7 +12,7 @@
  */
 
 import * as echarts from "echarts";
-import { familyColor, OTHERS_COLOR } from "../../../shared/model-colors";
+import { modelChartColors } from "../../../shared/model-colors";
 
 export interface ModelShareSeriesPoint {
   key: string;
@@ -54,15 +54,9 @@ export function modelShareSeries(points: ReadonlyArray<ModelShareSeriesDay>): Mo
   const models = points[0]?.models;
   if (!models || models.length === 0) return null;
 
-  // Per-family occurrence index — the second DeepSeek model gets the
-  // family's second shade, and so on.
-  const familyCount = new Map<string | null, number>();
-  const colors: string[] = [];
-  for (const m of models) {
-    const i = familyCount.get(m.family) ?? 0;
-    familyCount.set(m.family, i + 1);
-    colors.push(m.key === "__others__" ? OTHERS_COLOR : familyColor(m.family, i));
-  }
+  // First model per family keeps the family colour; repeats take the next
+  // free high-contrast ring colour (see model-colors.ts).
+  const colors = modelChartColors(models);
 
   const series = models.map((model, si) => ({
     name: model.label,

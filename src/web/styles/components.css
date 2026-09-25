@@ -393,9 +393,9 @@
   border-top: 1px solid var(--divider);
 }
 
-/* The two spend charts (cost/tokens + top models by tokens). Stacked by
-   default; side by side on desktop where each panel is wide enough for a
-   six-series legend without turning into spaghetti. */
+/* The two spend charts (cost/tokens + top models by tokens). Both full
+   width, stacked — the model-share chart needs the room for six lines and
+   a scrolling legend (side-by-side made the lines too squished to read). */
 .spend-charts {
   display: grid;
   grid-template-columns: 1fr;
@@ -403,12 +403,6 @@
   margin-top: 16px;
   margin-left: -1%;
   margin-right: -1%;
-}
-@media (min-width: 900px) {
-  .spend-charts {
-    grid-template-columns: 1fr 1fr;
-    gap: 0 24px;
-  }
 }
 
 /* Model table. */

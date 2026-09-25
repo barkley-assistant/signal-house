@@ -25,11 +25,14 @@ describe("modelShareSeries", () => {
     ];
     const built = modelShareSeries(points)!;
     expect(built.names).toEqual(["DeepSeek V4 Pro", "DeepSeek V4 Flash", "GPT 6 Sol", "Others"]);
-    // Same-family models get consecutive shades; palette order == series order
-    // so the top-level ECharts `color` array keeps legend swatches in sync.
-    expect(built.palette[0]).toBe("#38bdf8"); // DeepSeek shade 0
-    expect(built.palette[1]).toBe("#0ea5e9"); // DeepSeek shade 1
-    expect(built.palette[2]).toBe("#e2e8f0"); // OpenAI shade 0
+    // First model of each family keeps the family colour; a second
+    // same-family model takes the next free high-contrast ring colour —
+    // never another barely-different shade of the same hue. Palette order
+    // == series order so the top-level ECharts `color` array keeps legend
+    // swatches in sync.
+    expect(built.palette[0]).toBe("#38bdf8"); // DeepSeek family colour
+    expect(built.palette[1]).toBe("#f472b6"); // second DeepSeek → ring pink
+    expect(built.palette[2]).toBe("#e2e8f0"); // OpenAI family colour
     expect(built.palette[3]).toBe("#71717a"); // Others neutral
     expect(built.series).toHaveLength(4);
     expect(built.series[0]).toMatchObject({ name: "DeepSeek V4 Pro", type: "line" });
