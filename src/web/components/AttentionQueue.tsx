@@ -27,8 +27,13 @@ export function AttentionQueue({ attention }: { attention: StatePayload["attenti
   return (
     <section className="card" aria-label="Attention queue">
       <h2>Attention Queue</h2>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {attention.map((item) => (
+      <div
+        className="att-scroll"
+        tabIndex={0}
+        aria-label={`Attention queue items, ${attention.length} total`}
+      >
+        <ul className="att-scroll__list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {attention.map((item) => (
           <li
             key={item.id}
             className={`att-row${item.stale ? " att-row--stale" : ""}`}
@@ -49,7 +54,8 @@ export function AttentionQueue({ attention }: { attention: StatePayload["attenti
             {item.stale && <div className="kpi-caption">Stale · {item.ageDays}d old</div>}
           </li>
         ))}
-      </ul>
+        </ul>
+      </div>
     </section>
   );
 }
