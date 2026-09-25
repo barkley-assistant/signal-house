@@ -14,13 +14,16 @@
 import * as echarts from "echarts";
 import { modelChartColors } from "../../../shared/model-colors";
 
-/** Darken a hex colour by `factor` (0.72 → ~28% darker) for band-edge
- *  strokes — the same hue, clearly separated from the fill above it. */
-function darken(hex: string, factor: number): string {
+/** Lighten a hex colour toward white by `amount` (0..1, 0.45 → mix 45%
+ *  with white) for band-edge strokes — a LIGHT hairline on the dark
+ *  background reads as a crisp seam between adjacent bands, where a
+ *  darkened stroke (dark-on-dark) vanishes. */
+function lighten(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16);
-  const r = Math.round(((n >> 16) & 255) * factor);
-  const g = Math.round(((n >> 8) & 255) * factor);
-  const b = Math.round((n & 255) * factor);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
   return `#${(((r << 16) | (g << 8) | b).toString(16)).padStart(6, "0")}`;
 }
 
@@ -72,9 +75,9 @@ export function modelShareSeries(points: ReadonlyArray<ModelShareSeriesDay>): Mo
 
   const series = models.map((model, si) => {
     const fill = colors[si];
-    // The stroke is a darkened copy of the fill so adjacent bands keep a
+    // The stroke is a lightened copy of the fill so adjacent bands keep a
     // crisp edge instead of fusing into a muddy gradient where they meet.
-    const edge = darken(fill, 0.72);
+    const edge = lighten(fill, 0.45);
     return {
       name: model.label,
       type: "line" as const,
