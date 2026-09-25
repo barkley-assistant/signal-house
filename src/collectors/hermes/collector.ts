@@ -11,6 +11,11 @@
  * `started_at` is epoch SECONDS (contract #10 — never mix with opencode's ms).
  * Cost comes from the DB's own columns (actual ?? estimated); when the DB has
  * no cost telemetry the value stays null and the UI renders "—".
+ * Day token/cost totals derive from session_model_usage (the superset): the
+ * sessions row only carries main-task calls, while session_model_usage also
+ * records auxiliary work (background_review forks, vision, approval, title
+ * generation, compression) — so the day totals always equal the sum of their
+ * by-model rows. Sessions/messages counts stay on the sessions table.
  * Missing/locked/unsupported DB → degraded result, never a crash: one broken
  * profile DB is a warning, not a source failure.
  */
@@ -164,7 +169,22 @@ export class HermesCollector implements Collector<SourceData> {
     const byDay = [...byDayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
     for (const day of byDay) {
       const rows = modelsByDayMap.get(day.date);
-      if (rows) day.byModel = [...rows.values()].sort(byCostDesc);
+      if (rows) {
+        const modelRows = [...rows.values()].sort(byCostDesc);
+        day.byModel = modelRows;
+        // Day totals must equal the sum of their by-model rows. The sessions
+        // table only carries main-task tokens/cost; session_model_usage also
+        // records auxiliary work (background_review forks, vision, approval,
+        // title generation, compression — root-caused 2026-09-25). Deriving
+        // the day totals from the model rows keeps the hero / daily chart
+        // consistent with the by-model table by construction.
+        day.tokensInput = sumModelRows(modelRows, (r) => r.inputTokens);
+        day.tokensOutput = sumModelRows(modelRows, (r) => r.outputTokens);
+        day.tokensCacheRead = sumModelRows(modelRows, (r) => r.cacheReadTokens);
+        day.tokensCacheWrite = sumModelRows(modelRows, (r) => r.cacheWriteTokens);
+        day.tokensReasoning = sumModelRows(modelRows, (r) => r.reasoningTokens);
+        day.cost = sumModelRows(modelRows, (r) => r.cost);
+      }
     }
 
     const data = emptySourceData();
@@ -266,6 +286,11 @@ function queryModelBreakdownByDay(db: Database, sinceSec: number, nowSec: number
 /** Match the SQL grouping key: (model, billing_provider). */
 function modelKey(model: string, provider: string | null): string {
   return `${model}\u0000${provider ?? ""}`;
+}
+
+/** Null-safe sum of one field across model rows — null when every row is null. */
+function sumModelRows(rows: ModelUsageRow[], pick: (r: ModelUsageRow) => number | null): number | null {
+  return rows.reduce<number | null>((acc, r) => mergeNullSum(acc, pick(r)), null);
 }
 
 function mergeUsageDay(map: Map<string, UsageDay>, incoming: UsageDay): void {

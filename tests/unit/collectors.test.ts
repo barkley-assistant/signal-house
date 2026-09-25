@@ -138,6 +138,60 @@ describe("hermes collector", () => {
     expect(deepseek!.messages).toBeNull();
   });
 
+  test("day totals include auxiliary usage from session_model_usage (background_review etc.)", async () => {
+    // Regression (root-caused 2026-09-25): the sessions row only carries
+    // main-task tokens, while session_model_usage also records auxiliary
+    // work (background_review forks, vision, approval, title generation,
+    // compression). Day totals must equal the sum of their by-model rows —
+    // the hero / daily chart used to undercount by the aux volume.
+    const dbPath = join(dir, "hermes-aux.db");
+    const db = new Database(dbPath);
+    const nowSec = Math.floor(Date.now() / 1000);
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY, started_at REAL, ended_at REAL, model TEXT, billing_provider TEXT,
+        message_count INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER, reasoning_tokens INTEGER, estimated_cost_usd REAL, actual_cost_usd REAL
+      );
+      CREATE TABLE session_model_usage (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        billing_provider TEXT NOT NULL DEFAULT '',
+        api_call_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        actual_cost_usd REAL NOT NULL DEFAULT 0
+      );
+      -- session row: main-task only (100k in / 2k out / 500k cache)
+      INSERT INTO sessions VALUES ('s1', ${nowSec - 3600}, NULL, 'DeepSeek-V4-Flash-0731', 'custom', 10, 100000, 2000, 500000, 0, 0, 1.2, NULL);
+      -- main task usage row mirrors the session row
+      INSERT INTO session_model_usage VALUES ('s1', 'DeepSeek-V4-Flash-0731', 'custom', 20, 100000, 2000, 500000, 0, 0, 1.2, 0);
+      -- background_review fork: recorded ONLY in session_model_usage
+      INSERT INTO session_model_usage VALUES ('s1', 'GLM-5.3-Flash', 'custom', 10, 64000000, 400000, 3000000, 0, 0, 5.0, 0);
+    `);
+    db.close();
+    const collector = new HermesCollector(dbPath, 30);
+    const result = await collector.collect(new AbortController().signal);
+    const day = result.data!.usage!.byDay.find((d) => d.date === utcDay())!;
+    const modelRows = day.byModel!;
+    // Day totals == sum of by-model rows (aux included), not the sessions row.
+    expect(day.tokensInput).toBe(64_100_000);
+    expect(day.tokensOutput).toBe(402_000);
+    expect(day.tokensCacheRead).toBe(3_500_000);
+    expect(day.cost).toBeCloseTo(6.2, 5);
+    // Sessions/messages still come from the sessions table.
+    expect(day.sessions).toBe(1);
+    expect(day.messages).toBe(10);
+    // The window-wide byModel sees both models.
+    const byModel = result.data!.usage!.byModel;
+    expect(byModel.find((m) => m.model === "DeepSeek-V4-Flash-0731")!.cost).toBeCloseTo(1.2, 5);
+    expect(byModel.find((m) => m.model === "GLM-5.3-Flash")!.cost).toBeCloseTo(5.0, 5);
+  });
+
   test("byDay carries per-day model breakdowns (byModel on each day)", async () => {
     // The dashboard keeps its own 90-day by-model history in daily_metrics;
     // the collector must expose the per-day model breakdown so the
