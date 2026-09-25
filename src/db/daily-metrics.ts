@@ -77,6 +77,29 @@ export function backfillDaysForSource(db: Database, date: string, source: string
   return n;
 }
 
+/** Replace a day's per-model rows with the collector's current emission.
+ *  Model rows are the one metric family that can legitimately SHRINK between
+ *  refreshes: activity-split attribution moves a long-running session's
+ *  usage onto the days it actually happened, leaving stale rows behind for
+ *  models that no longer touch the day (phantom rows that broke the
+ *  hero == byModel invariant). Deletes model.* rows for (date, source) and
+ *  re-inserts the emitted set; days the collector emits NO model rows for
+ *  are left untouched so upstream-pruned history survives (same contract as
+ *  backfillDaysForSource). Non-model rows are preserved for backfill. */
+export function replaceDayModelsForSource(db: Database, date: string, source: string, rows: DailyWrite[]): number {
+  const modelRows = rows.filter((r) => r.metric.startsWith("model."));
+  if (modelRows.length === 0) return 0;
+  db.query("DELETE FROM daily_metrics WHERE date = ? AND source = ? AND metric LIKE 'model.%'").run(date, source);
+  const insert = db.query(
+    "INSERT INTO daily_metrics (date, source, metric, value, tags, observed_at) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const observedAt = Date.now();
+  for (const r of modelRows) {
+    insert.run(date, source, r.metric, r.value, JSON.stringify(r.tags), observedAt);
+  }
+  return modelRows.length;
+}
+
 export interface DailyQuery {
   from: string;
   to: string;

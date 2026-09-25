@@ -8,7 +8,7 @@ import { V1DatabaseRefusedError, ensureSchema, looksLikeV1Database } from "../..
 import { insertSnapshot, latestSnapshot, pruneSnapshots } from "../../src/db/snapshots";
 import { setLatestState, getLatestState, parsedLatestStates } from "../../src/db/latest-state";
 import { setRefreshMeta, getRefreshMeta, getRefreshMetaMany } from "../../src/db/refresh-meta";
-import { replaceDayForSource, backfillDaysForSource, queryDailyMetrics, queryDailyTrend, queryDailyModelTrend } from "../../src/db/daily-metrics";
+import { replaceDayForSource, backfillDaysForSource, replaceDayModelsForSource, queryDailyMetrics, queryDailyTrend, queryDailyModelTrend } from "../../src/db/daily-metrics";
 import { setPricingCachePath, resetPricingCache } from "../../src/server/model-pricing-fetcher";
 import { runRetention } from "../../src/db/retention";
 import { SCHEMA_VERSION } from "../../src/db/schema";
@@ -124,6 +124,37 @@ describe("database", () => {
     expect(queryDailyMetrics(db, { from: "2026-07-31", to: "2026-07-31", source: "hermes" }).length).toBe(1);
     // earlier day untouched (the replace only touches its own day)
     expect(queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes" }).length).toBe(2);
+    owner2.close();
+  });
+
+  test("daily_metrics: replaceDayModelsForSource deletes phantom model rows the collector no longer emits", () => {
+    const owner2 = openMemoryDatabase();
+    const db = owner2.db;
+    // previous pass emitted two models; day totals survive independently
+    backfillDaysForSource(db, "2026-07-30", "hermes", [
+      { date: "2026-07-30", metric: "tokens.input", value: 1000, tags: {} },
+      { date: "2026-07-30", metric: "model.tokens_input", value: 700, tags: { model: "Model-A" } },
+      { date: "2026-07-30", metric: "model.tokens_input", value: 300, tags: { model: "Model-B" } },
+      { date: "2026-07-30", metric: "model.sessions", value: 2, tags: { model: "Model-A" } },
+    ]);
+    // new pass: activity-split attribution moved Model-B's usage off this day
+    const n = replaceDayModelsForSource(db, "2026-07-30", "hermes", [
+      { date: "2026-07-30", metric: "model.tokens_input", value: 700, tags: { model: "Model-A" } },
+      { date: "2026-07-30", metric: "model.sessions", value: 1, tags: { model: "Model-A" } },
+    ]);
+    expect(n).toBe(2);
+    const rows = queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes" });
+    const models = rows.filter((r) => r.metric.startsWith("model."));
+    // Model-B phantom is gone; Model-A re-inserted; non-model rows untouched
+    expect(models.map((r) => r.tags.model)).toEqual(["Model-A", "Model-A"]);
+    expect(rows.find((r) => r.metric === "tokens.input")!.value).toBe(1000);
+
+    // no model emission → history stays intact (upstream-pruned day contract)
+    const before = queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes" }).length;
+    expect(replaceDayModelsForSource(db, "2026-07-30", "hermes", [
+      { date: "2026-07-30", metric: "tokens.input", value: 1000, tags: {} },
+    ])).toBe(0);
+    expect(queryDailyMetrics(db, { from: "2026-07-30", to: "2026-07-30", source: "hermes" }).length).toBe(before);
     owner2.close();
   });
 

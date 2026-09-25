@@ -20,7 +20,7 @@ import type { DatabaseOwner } from "../db/client";
 import { insertSnapshotIfChanged } from "../db/snapshots";
 import { setLatestState, getAllLatestState } from "../db/latest-state";
 import { setRefreshMeta } from "../db/refresh-meta";
-import { replaceDayForSource, backfillDaysForSource } from "../db/daily-metrics";
+import { replaceDayForSource, backfillDaysForSource, replaceDayModelsForSource } from "../db/daily-metrics";
 import { runRetention } from "../db/retention";
 import { deriveDailyRows } from "../metrics/daily";
 import { ensurePricingCacheFresh } from "../server/model-pricing-fetcher";
@@ -182,7 +182,10 @@ export async function runRefresh(ctx: RefreshContext, owner: LockOwner): Promise
             list.push(r);
             byDay.set(r.date, list);
           }
-          for (const [day, dayRows] of byDay) backfillDaysForSource(ctx.owner.db, day, result.source, dayRows);
+          for (const [day, dayRows] of byDay) {
+            replaceDayModelsForSource(ctx.owner.db, day, result.source, dayRows);
+            backfillDaysForSource(ctx.owner.db, day, result.source, dayRows);
+          }
         }
       }
 
