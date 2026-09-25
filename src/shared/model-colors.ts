@@ -39,7 +39,7 @@ export const FAMILY_FIRST_COLORS: Record<string, string> = {
  *  often both on screen, an early green repeat reads as a third blue-green. */
 export const FALLBACK_RING: readonly string[] = [
   "#f472b6", // pink
-  "#818cf8", // indigo
+  "#6366f1", // indigo (deep — a light indigo reads as cyan continuation)
   "#facc15", // yellow
   "#fb923c", // orange
   "#22d3ee", // cyan
