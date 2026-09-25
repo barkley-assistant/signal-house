@@ -780,11 +780,17 @@ function ModelTable() {
             })}
           </tbody>
         </table>
-        {sorted.length > visibleCount && (
+        {sorted.length > DEFAULT_VISIBLE_MODELS && (
           <div className="model-table__show-more">
-            <button type="button" onClick={() => setVisibleCount(sorted.length)}>
-              Show more ({sorted.length - visibleCount} more)
-            </button>
+            {visibleCount < sorted.length ? (
+              <button type="button" onClick={() => setVisibleCount(sorted.length)}>
+                Show more ({sorted.length - visibleCount} more)
+              </button>
+            ) : (
+              <button type="button" onClick={() => setVisibleCount(DEFAULT_VISIBLE_MODELS)}>
+                Show less
+              </button>
+            )}
           </div>
         )}
       </>
