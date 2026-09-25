@@ -26,6 +26,8 @@
     { "machine": "gpt-56-terra", "label": "GPT 5.6 Terra", "family": "OpenAI" },
     { "machine": "gpt-56-astra", "label": "GPT 5.6 Astra", "family": "OpenAI" },
     { "machine": "gpt-6-astra", "label": "GPT 6 Astra", "family": "OpenAI" },
+    { "machine": "gpt-6-luna", "label": "GPT 6 Luna", "family": "OpenAI" },
+    { "machine": "gpt-6-sol", "label": "GPT 6 Sol", "family": "OpenAI" },
     { "machine": "gpt-55", "label": "GPT 5.5", "family": "OpenAI" },
     { "machine": "gpt-55-pro", "label": "GPT 5.5 Pro", "family": "OpenAI" },
     { "machine": "gpt-54", "label": "GPT 5.4", "family": "OpenAI" },

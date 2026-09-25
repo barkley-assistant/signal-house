@@ -152,6 +152,20 @@ describe("model aliasing", () => {
     expect(canonicalMachineKey("Gpt 5.6 Astra 900k")).toBe("gpt-56-astra");
   });
 
+  test("GPT 6 Sol / Luna 900k variants resolve to their official GPT 6 entries (OpenAI)", () => {
+    // Hermes reports the 900k-context variants (root-caused 2026-09-25);
+    // they must display as the official GPT 6 model without the suffix.
+    expect(modelLabel("gpt-6-sol-900k")).toBe("GPT 6 Sol");
+    expect(modelFamily("gpt-6-sol-900k")).toBe("OpenAI");
+    expect(canonicalMachineKey("gpt-6-sol-900k")).toBe("gpt-6-sol");
+    expect(modelLabel("gpt-6-luna-900k")).toBe("GPT 6 Luna");
+    expect(modelFamily("gpt-6-luna-900k")).toBe("OpenAI");
+    expect(canonicalMachineKey("gpt-6-luna-900k")).toBe("gpt-6-luna");
+    expect(modelLabel("gpt-6-astra-900k")).toBe("GPT 6 Astra");
+    expect(modelFamily("gpt-6-astra-900k")).toBe("OpenAI");
+    expect(canonicalMachineKey("gpt-6-astra-900k")).toBe("gpt-6-astra");
+  });
+
   test("900k variant whose base is not in the map keeps its own fallback row", () => {
     expect(modelLabel("Some Future Model 900k")).toBe("Some Future Model 900k");
     expect(modelFamily("Some Future Model 900k")).toBeNull();

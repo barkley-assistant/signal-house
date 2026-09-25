@@ -365,6 +365,31 @@ describe("mergeModelRows cache preservation", () => {
     expect(sol?.costSource).toBe("estimated");
     expect(sol?.cost).toBeCloseTo(4, 6);
   });
+
+  test("GPT 6 900k rows price from the canonical base rates when the map only has the base key", () => {
+    // Production reality (2026-09-25): the rates map carries the canonical
+    // base keys (gpt-6-sol, gpt-6-luna) — never a -900k entry. The lookup
+    // must fall back to the -900k-stripped base so gpt-6-sol-900k prices
+    // at $4/$15 instead of rendering cost $0 / costSource unknown.
+    const rates = new Map([
+      ["gpt-6-sol", { input: 4, output: 15, cacheRead: 0.4 }],
+      ["gpt-6-luna", { input: 0.2, output: 0.75, cacheRead: 0.02 }],
+    ]);
+    const rows = [
+      { model: "gpt-6-sol-900k", provider: null, source: "hermes", sessions: 6, messages: null, inputTokens: 500_000, outputTokens: 10_000, cacheReadTokens: 100_000, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+      { model: "gpt-6-luna-900k", provider: null, source: "hermes", sessions: 2, messages: null, inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, cost: null },
+    ];
+    const merged = mergeModelRows(rows, { rates, enabled: true });
+    const sol = merged.find((m) => m.machineKey === "gpt-6-sol")!;
+    const luna = merged.find((m) => m.machineKey === "gpt-6-luna")!;
+    expect(sol.model).toBe("GPT 6 Sol");
+    expect(sol.family).toBe("OpenAI");
+    expect(sol.costSource).toBe("estimated");
+    // (4·0.5 + 15·0.01 + 0.4·0.1) per-1M math
+    expect(sol.cost).toBeCloseTo(2 + 0.15 + 0.04, 6);
+    expect(luna.costSource).toBe("estimated");
+    expect(luna.cost).toBeCloseTo(0.2, 6);
+  });
 });
 
 describe("computeAggregates privacy filtering", () => {

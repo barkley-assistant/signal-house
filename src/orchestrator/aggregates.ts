@@ -476,6 +476,18 @@ function rowTokens(row: { inputTokens: number | null; outputTokens: number | nul
   return sum([row.inputTokens, row.outputTokens, row.cacheReadTokens, row.cacheWriteTokens, row.reasoningTokens]);
 }
 
+/** Rate lookup for a row's machine key: exact key first, then the
+ *  date-snapshot-stripped base, then the -900k context-variant base
+ *  (gpt-6-sol-900k prices against gpt-6-sol — the provider lists the
+ *  base, not the 900k variant). */
+function lookupRates(costOpts: CostEstimationOpts, rawKey: string): ModelRates | undefined {
+  return (
+    costOpts.rates.get(rawKey) ??
+    costOpts.rates.get(stripDateSnapshot(rawKey)) ??
+    (rawKey.endsWith("-900k") ? costOpts.rates.get(rawKey.slice(0, -"-900k".length)) : undefined)
+  );
+}
+
 /** Cost derivation + rate-sheet capture for ONE row.
  *
  *  estimateCosts=true:  recompute cost from tokens × rates; "estimated" if
@@ -504,7 +516,7 @@ function priceRow(
     // resolver's lookup order (D1). The rates map is keyed by FULL
     // machine key (dated keys survive the parser), so a dated row must
     // hit its own dated entry before the base.
-    const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
+    const rates = lookupRates(costOpts, rawKey);
     if (rates && (rates.input > 0 || rates.output > 0)) {
       rowRates = rates;
       rowCost = costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
@@ -554,7 +566,7 @@ function sourceCostSlice(
   distributeByShare: boolean,
 ): number {
   if (costOpts.enabled && rowCostSource !== "unknown" && rowCostSource !== "skipped") {
-    const rates = costOpts.rates.get(rawKey) ?? costOpts.rates.get(stripDateSnapshot(rawKey));
+    const rates = lookupRates(costOpts, rawKey);
     if (rates && (rates.input > 0 || rates.output > 0)) {
       return costFromTokens(inputTokens, outputTokens, cacheReadTokens, rates);
     }
