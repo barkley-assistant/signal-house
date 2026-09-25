@@ -15,7 +15,11 @@
  * sessions row only carries main-task calls, while session_model_usage also
  * records auxiliary work (background_review forks, vision, approval, title
  * generation, compression) — so the day totals always equal the sum of their
- * by-model rows. Sessions/messages counts stay on the sessions table.
+ * by-model rows. When hermes records a usage row's activity window
+ * (first_seen → last_seen), the row is split across the UTC days it was
+ * active in (time-weighted) — long-running sessions attribute their tokens
+ * to the days they were actually spent, not the session's start day.
+ * Sessions/messages counts stay on the sessions table (start-day).
  * Missing/locked/unsupported DB → degraded result, never a crash: one broken
  * profile DB is a warning, not a source failure.
  */
@@ -33,7 +37,7 @@ import type {
 } from "../../shared/types";
 import { emptySourceData } from "../../shared/types";
 import { mergeNullSum } from "../../shared/math";
-import { utcDaysAgo } from "../../shared/dates";
+import { utcDaysAgo, utcDay } from "../../shared/dates";
 import { dayToUsageDay, modelBreakdownByDay, modelToModelUsageRow, type UsageColumns } from "../usage-mappers";
 
 export class HermesCollector implements Collector<SourceData> {
@@ -134,7 +138,8 @@ export class HermesCollector implements Collector<SourceData> {
         }
 
         for (const day of queryUsageByDay(db, sinceSec, nowSec)) mergeUsageDay(byDayMap, day);
-        for (const [date, rows] of queryModelBreakdownByDay(db, sinceSec, nowSec)) {
+        const supportsSpans = hasUsageSpans(db);
+        for (const [date, rows] of queryModelBreakdownByDay(db, sinceSec, nowSec, supportsSpans)) {
           for (const row of rows) mergeModelIntoDayMap(modelsByDayMap, date, row);
         }
         for (const row of queryModelBreakdown(db, sinceSec, nowSec)) mergeModelIntoMap(byModelMap, row);
@@ -166,6 +171,25 @@ export class HermesCollector implements Collector<SourceData> {
       };
     }
 
+    // Days may exist in the model breakdown without any session STARTED that
+    // day — a long-running session's usage spans into them (activity-split
+    // attribution). Emit those days too, with no session/message counts, so
+    // the daily_metrics history covers every day the models actually worked.
+    for (const date of modelsByDayMap.keys()) {
+      if (!byDayMap.has(date)) {
+        byDayMap.set(date, {
+          date,
+          sessions: 0,
+          messages: null,
+          tokensInput: null,
+          tokensOutput: null,
+          tokensCacheRead: null,
+          tokensCacheWrite: null,
+          tokensReasoning: null,
+          cost: null,
+        });
+      }
+    }
     const byDay = [...byDayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
     for (const day of byDay) {
       const rows = modelsByDayMap.get(day.date);
@@ -245,6 +269,34 @@ FROM session_model_usage
 WHERE session_id IN (SELECT id FROM sessions WHERE started_at >= ? AND started_at < ?)
 GROUP BY model, billing_provider ORDER BY cost DESC NULLS LAST`;
 
+/** Same breakdown grouped by UTC day — feeds signal-house's own per-day
+ *  per-model history (daily_metrics), which accumulates 90 days of by-model
+ *  data regardless of upstream retention.
+ *
+ *  Two modes, chosen per-DB by schema detection (hasUsageSpans):
+ *  - Span mode (hermes with first_seen/last_seen): each usage row is split
+ *    across the UTC days it was active in, time-weighted, so a long-running
+ *    session's tokens land on the days they were actually spent rather than
+ *    the session's start day.
+ *  - Legacy mode (older schemas without the span columns): the whole row is
+ *    attributed to the session's start day, as before. */
+const MODEL_SPAN_SQL = `
+SELECT u.session_id AS session_id,
+       u.model AS model,
+       u.billing_provider AS provider,
+       s.started_at AS session_started_at,
+       u.first_seen AS first_seen,
+       u.last_seen AS last_seen,
+       u.input_tokens AS input_tokens,
+       u.output_tokens AS output_tokens,
+       u.reasoning_tokens AS reasoning_tokens,
+       u.cache_read_tokens AS cache_read_tokens,
+       u.cache_write_tokens AS cache_write_tokens,
+       COALESCE(NULLIF(u.actual_cost_usd, 0), u.estimated_cost_usd) AS cost
+FROM session_model_usage u
+JOIN sessions s ON s.id = u.session_id
+WHERE s.started_at >= ? AND s.started_at < ?`;
+
 /** Same breakdown grouped by UTC session day — feeds signal-house's own
  *  per-day per-model history (daily_metrics), which accumulates 90 days of
  *  by-model data regardless of upstream retention. */
@@ -278,9 +330,182 @@ function queryModelBreakdown(db: Database, sinceSec: number, nowSec: number): Mo
 }
 
 /** Per-UTC-day model rows, keyed by day — the per-day breakdown the
- *  orchestrator persists into daily_metrics. */
-function queryModelBreakdownByDay(db: Database, sinceSec: number, nowSec: number): Map<string, ModelUsageRow[]> {
-  return modelBreakdownByDay(db.query(MODEL_BY_DAY_SQL).all(sinceSec, nowSec) as unknown as Array<Record<string, unknown>>, COLUMNS);
+ *  orchestrator persists into daily_metrics. Uses span mode when the DB's
+ *  session_model_usage carries first_seen/last_seen, legacy grouping
+ *  otherwise. */
+function queryModelBreakdownByDay(
+  db: Database,
+  sinceSec: number,
+  nowSec: number,
+  supportsSpans: boolean,
+): Map<string, ModelUsageRow[]> {
+  if (!supportsSpans) {
+    return modelBreakdownByDay(db.query(MODEL_BY_DAY_SQL).all(sinceSec, nowSec) as unknown as Array<Record<string, unknown>>, COLUMNS);
+  }
+  const raw = db.query(MODEL_SPAN_SQL).all(sinceSec, nowSec) as unknown as Array<Record<string, unknown>>;
+  const byDay = new Map<string, Map<string, ModelUsageRow>>();
+  // Distinct session count per (day, model, provider): the same session can
+  // contribute several usage rows (model switches, task splits) and pieces on
+  // several days — it must count ONCE per day it was active on, not once per
+  // row or per piece.
+  const seenSessions = new Map<string, Set<string>>();
+  for (const r of raw) {
+    for (const piece of splitModelUsageByDay(spanFromRow(r))) {
+      mergeModelIntoDayMap(byDay, piece.day, piece.row);
+      const key = `${piece.day}\u0000${modelKey(piece.row.model, piece.row.provider)}`;
+      let set = seenSessions.get(key);
+      if (!set) {
+        set = new Set();
+        seenSessions.set(key, set);
+      }
+      set.add(piece.sessionId);
+    }
+  }
+  const out = new Map<string, ModelUsageRow[]>();
+  for (const [day, rows] of byDay) {
+    const list: ModelUsageRow[] = [];
+    for (const [key, row] of rows) {
+      list.push({ ...row, sessions: seenSessions.get(`${day}\u0000${key}`)?.size ?? 0 });
+    }
+    list.sort(byCostDesc);
+    out.set(day, list);
+  }
+  return out;
+}
+
+/** True when the DB's session_model_usage has the span columns hermes uses
+ *  to bound a usage row's activity window (first_seen → last_seen). */
+function hasUsageSpans(db: Database): boolean {
+  try {
+    const cols = db.query("PRAGMA table_info(session_model_usage)").all() as Array<{ name: string }>;
+    return cols.some((c) => c.name === "first_seen") && cols.some((c) => c.name === "last_seen");
+  } catch {
+    return false;
+  }
+}
+
+/** Raw span-mode SQL row → ModelUsageSpan. */
+function spanFromRow(r: Record<string, unknown>): ModelUsageSpan {
+  return {
+    sessionId: String(r.session_id),
+    model: (r.model as string | null) ?? "unknown",
+    provider: (r.provider as string | null) ?? null,
+    sessionStartedAt: Number(r.session_started_at),
+    firstSeen: (r.first_seen as number | null) ?? null,
+    lastSeen: (r.last_seen as number | null) ?? null,
+    inputTokens: (r.input_tokens as number | null) ?? null,
+    outputTokens: (r.output_tokens as number | null) ?? null,
+    reasoningTokens: (r.reasoning_tokens as number | null) ?? null,
+    cacheReadTokens: (r.cache_read_tokens as number | null) ?? null,
+    cacheWriteTokens: (r.cache_write_tokens as number | null) ?? null,
+    cost: (r.cost as number | null) ?? null,
+  };
+}
+
+/** One usage row's activity window, as read from hermes's DB. */
+export interface ModelUsageSpan {
+  sessionId: string;
+  model: string;
+  provider: string | null;
+  /** Session start (epoch SECONDS) — fallback day when spans are missing. */
+  sessionStartedAt: number;
+  /** Epoch SECONDS (contract #10, never ms). */
+  firstSeen: number | null;
+  lastSeen: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  cost: number | null;
+}
+
+/** A split piece of a usage row: the (day, session) it belongs to plus the
+ *  row fragment. `sessions` is always 0 here — distinct session counts are
+ *  applied by the caller after de-duplicating per (day, model). */
+export interface ModelUsagePiece {
+  day: string;
+  sessionId: string;
+  row: ModelUsageRow;
+}
+
+/** Split a usage row across the UTC days its activity window overlaps,
+ *  time-weighted. Rows that never span a day boundary (the common case)
+ *  return one piece with the full values; rows without span columns fall
+ *  back to the session's start day. Token/cost totals are conserved exactly:
+ *  fractions are rounded and the last piece absorbs the rounding remainder.
+ *  Without per-call timestamps this is the honest estimate — hermes only
+ *  records the aggregate window (first_seen → last_seen) per row. */
+export function splitModelUsageByDay(span: ModelUsageSpan): ModelUsagePiece[] {
+  const fallbackDay = utcDay(new Date(span.sessionStartedAt * 1000));
+  const first = span.firstSeen;
+  const last = span.lastSeen;
+  if (first == null || last == null || last <= first) {
+    return [{ day: fallbackDay, sessionId: span.sessionId, row: spanRow(span) }];
+  }
+  const spanSec = last - first;
+  const bounds: Array<{ day: string; start: number; end: number }> = [];
+  let cursor = first;
+  while (cursor < last) {
+    const dayStart = Math.floor(cursor / 86_400) * 86_400;
+    const dayEnd = dayStart + 86_400;
+    const end = Math.min(last, dayEnd);
+    bounds.push({ day: utcDay(new Date(cursor * 1000)), start: cursor, end });
+    cursor = end;
+  }
+  const fractions = bounds.map((b) => (b.end - b.start) / spanSec);
+  const cols: Array<[keyof ModelUsageRow, number | null, number]> = [
+    ["inputTokens", span.inputTokens, 1],
+    ["outputTokens", span.outputTokens, 1],
+    ["reasoningTokens", span.reasoningTokens, 1],
+    ["cacheReadTokens", span.cacheReadTokens, 1],
+    ["cacheWriteTokens", span.cacheWriteTokens, 1],
+    ["cost", span.cost, 100],
+  ];
+  const splitCols = new Map(cols.map(([col, total, unit]) => [col, splitProportional(total, fractions, unit)]));
+  return bounds.map((b, i) => ({
+    day: b.day,
+    sessionId: span.sessionId,
+    row: {
+      model: span.model,
+      provider: span.provider,
+      sessions: 0,
+      messages: null,
+      inputTokens: splitCols.get("inputTokens")![i],
+      outputTokens: splitCols.get("outputTokens")![i],
+      cacheReadTokens: splitCols.get("cacheReadTokens")![i],
+      cacheWriteTokens: splitCols.get("cacheWriteTokens")![i],
+      reasoningTokens: splitCols.get("reasoningTokens")![i],
+      cost: splitCols.get("cost")![i],
+    },
+  }));
+}
+
+/** Whole-row values for the no-span fallback (used when the row never
+ *  crosses a day boundary or the DB lacks span columns). */
+function spanRow(span: ModelUsageSpan): ModelUsageRow {
+  return {
+    model: span.model,
+    provider: span.provider,
+    sessions: 0,
+    messages: null,
+    inputTokens: span.inputTokens,
+    outputTokens: span.outputTokens,
+    cacheReadTokens: span.cacheReadTokens,
+    cacheWriteTokens: span.cacheWriteTokens,
+    reasoningTokens: span.reasoningTokens,
+    cost: span.cost,
+  };
+}
+
+/** Round `total * fraction` per piece (to `unit` granularity); the last
+ *  piece absorbs the rounding remainder so the pieces always sum to exactly
+ *  `total`. Null totals split into nulls (unknown stays unknown). */
+function splitProportional(total: number | null, fractions: number[], unit = 1): Array<number | null> {
+  if (total == null) return fractions.map(() => null);
+  const parts = fractions.map((f) => Math.round(total * f * unit) / unit);
+  parts[parts.length - 1] += total - parts.reduce((a, b) => a + b, 0);
+  return parts;
 }
 
 /** Match the SQL grouping key: (model, billing_provider). */

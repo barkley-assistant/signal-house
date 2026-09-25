@@ -8,7 +8,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HermesCollector } from "../../src/collectors/hermes/collector";
+import { HermesCollector, splitModelUsageByDay, type ModelUsageSpan } from "../../src/collectors/hermes/collector";
 import { OpencodeCollector } from "../../src/collectors/opencode/collector";
 import { GitCollector, parseRemote, sanitizeRemoteUrl } from "../../src/collectors/git/collector";
 import { mergeTargets, extractGithubTargets } from "../../src/collectors/github/collector";
@@ -239,6 +239,141 @@ describe("hermes collector", () => {
     // carry its per-day model breakdown.
     expect(byDay.length).toBeGreaterThan(0);
     expect(byDay.every((d) => d.byModel !== undefined && d.byModel!.length > 0)).toBe(true);
+  });
+
+  test("splitModelUsageByDay splits multi-day rows time-weighted and conserves totals", () => {
+    // 2025-01-01T06:00:00Z → 2025-01-02T06:00:00Z: 18h on Jan 1, 6h on Jan 2.
+    const span: ModelUsageSpan = {
+      sessionId: "s9",
+      model: "DeepSeek-V4-Pro-0813",
+      provider: "custom",
+      sessionStartedAt: 1735711200,
+      firstSeen: 1735711200,
+      lastSeen: 1735797600,
+      inputTokens: 1000,
+      outputTokens: 200,
+      reasoningTokens: 0,
+      cacheReadTokens: 400,
+      cacheWriteTokens: 0,
+      cost: 10,
+    };
+    const pieces = splitModelUsageByDay(span);
+    expect(pieces).toHaveLength(2);
+    expect(pieces[0].day).toBe("2025-01-01");
+    expect(pieces[1].day).toBe("2025-01-02");
+    expect(pieces[0].row.inputTokens).toBe(750);
+    expect(pieces[1].row.inputTokens).toBe(250);
+    expect(pieces[0].row.cost).toBeCloseTo(7.5, 5);
+    expect(pieces[1].row.cost).toBeCloseTo(2.5, 5);
+    // totals conserved exactly (to the rounding unit)
+    for (const col of ["inputTokens", "outputTokens", "reasoningTokens", "cacheReadTokens", "cacheWriteTokens", "cost"] as const) {
+      const sum = pieces.reduce((a, p) => a + (p.row[col] ?? 0), 0);
+      expect(sum).toBeCloseTo((span[col] ?? 0) as number, 5);
+    }
+    // pieces carry sessions=0 — the caller applies distinct session counts
+    expect(pieces.every((p) => p.row.sessions === 0)).toBe(true);
+    expect(pieces.every((p) => p.sessionId === "s9")).toBe(true);
+  });
+
+  test("splitModelUsageByDay falls back to the session start day without spans", () => {
+    const span: ModelUsageSpan = {
+      sessionId: "s1",
+      model: "M",
+      provider: null,
+      sessionStartedAt: 1735689600, // 2025-01-01T00:00:00Z
+      firstSeen: null,
+      lastSeen: null,
+      inputTokens: 5,
+      outputTokens: 5,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      cost: 1,
+    };
+    const pieces = splitModelUsageByDay(span);
+    expect(pieces).toHaveLength(1);
+    expect(pieces[0].day).toBe("2025-01-01");
+    expect(pieces[0].row.inputTokens).toBe(5);
+    expect(pieces[0].row.cost).toBe(1);
+  });
+
+  test("long-running session usage is attributed to the days it was active on", async () => {
+    // A session STARTED yesterday whose usage window spans into today: the
+    // tokens must land on both days (split by activity), today must appear
+    // even though no session started today, and the day totals must still
+    // equal the sum of their by-model rows.
+    const dbPath = join(dir, "hermes-spans.db");
+    const db = new Database(dbPath);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const DAY = 86_400;
+    const todayStart = Math.floor(nowSec / DAY) * DAY;
+    const yStart = todayStart - DAY;
+    // first_seen: yesterday 06:00 UTC, last_seen: now — spans the boundary
+    const first = yStart + 6 * 3600;
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY, started_at REAL, ended_at REAL, model TEXT, billing_provider TEXT,
+        message_count INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER, reasoning_tokens INTEGER, estimated_cost_usd REAL, actual_cost_usd REAL
+      );
+      CREATE TABLE session_model_usage (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        billing_provider TEXT NOT NULL DEFAULT '',
+        task TEXT NOT NULL DEFAULT '',
+        api_call_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        actual_cost_usd REAL NOT NULL DEFAULT 0,
+        first_seen REAL NOT NULL DEFAULT 0,
+        last_seen REAL NOT NULL DEFAULT 0
+      );
+      INSERT INTO sessions VALUES ('long', ${yStart + 2 * 3600}, NULL, 'DeepSeek-V4-Pro-0813', 'custom', 50, 0, 0, 0, 0, 0, 0, NULL);
+      -- two usage rows for the same session+model: 100k + 50k input tokens
+      INSERT INTO session_model_usage VALUES ('long', 'DeepSeek-V4-Pro-0813', 'custom', '', 100, 100000, 10000, 0, 0, 0, 10, 0, ${first}, ${nowSec});
+      INSERT INTO session_model_usage VALUES ('long', 'DeepSeek-V4-Pro-0813', 'custom', 'background_review', 10, 50000, 5000, 0, 0, 0, 5, 0, ${first + 3600}, ${nowSec - 3600});
+    `);
+    db.close();
+    const collector = new HermesCollector(dbPath, 30);
+    const result = await collector.collect(new AbortController().signal);
+    expect(result.ok).toBe(true);
+    const byDay = result.data!.usage!.byDay;
+    const yesterday = byDay.find((d) => d.date === utcDaysAgo(1))!;
+    const today = byDay.find((d) => d.date === utcDay())!;
+
+    // Both days carry the model, with pieces that sum to the full row totals.
+    expect(yesterday).toBeDefined();
+    expect(today).toBeDefined();
+    const yPro = yesterday.byModel!.find((m) => m.model === "DeepSeek-V4-Pro-0813")!;
+    const tPro = today.byModel!.find((m) => m.model === "DeepSeek-V4-Pro-0813")!;
+    expect(yPro).toBeDefined();
+    expect(tPro).toBeDefined();
+    const inSum = yPro.inputTokens! + tPro.inputTokens!;
+    const outSum = yPro.outputTokens! + tPro.outputTokens!;
+    const costSum = yPro.cost! + tPro.cost!;
+    expect(inSum).toBe(150000); // both rows' input conserved
+    expect(outSum).toBe(15000);
+    expect(costSum).toBeCloseTo(15, 5);
+    // each piece is between 0 and the total (sanity on the split direction)
+    expect(yPro.inputTokens!).toBeGreaterThan(0);
+    expect(tPro.inputTokens!).toBeGreaterThan(0);
+    // day totals still equal their by-model sums (hero invariant)
+    expect(yesterday.tokensInput).toBe(yPro.inputTokens);
+    expect(yesterday.cost).toBeCloseTo(yPro.cost!, 5);
+    expect(today.tokensInput).toBe(tPro.inputTokens);
+    expect(today.cost).toBeCloseTo(tPro.cost!, 5);
+    // today has NO session that started today → 0 sessions, no messages
+    expect(today.sessions).toBe(0);
+    expect(today.messages).toBeNull();
+    // the session counts ONCE per (day, model) despite two usage rows
+    expect(yPro.sessions).toBe(1);
+    expect(tPro.sessions).toBe(1);
+    // yesterday counts the session in sessions.total (start-day attribution)
+    expect(yesterday.sessions).toBe(1);
   });
 
   test("merges per-profile state.dbs and skips dot-named stale copies", async () => {
