@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, Fragment } from "react";
 import { motion } from "framer-motion";
 import * as echarts from "echarts";
-import { useDash, loadTrend, loadModelTrend, type ModelTrendPoint } from "../state/store";
+import { useDash, loadTrend, loadModelTrend, loadModelShare, type ModelTrendPoint, type ModelSharePoint } from "../state/store";
 import type { WindowDays } from "../../shared/window";
 import type { LifetimeStats } from "../../metrics/lifetime";
 import type { UsageAggregate } from "../../orchestrator/aggregates";
@@ -24,6 +24,7 @@ import { readLegendSelection, persistLegendSelection } from "./charts/legend-sto
 import { fmtDayShort, fmtDayFull, fmtDayWithYear } from "./charts/chart-dates";
 import { CHART_PALETTE, CHART_MUTED, CHART_AXIS_LABEL, CHART_BORDER, CHART_SPLIT_LINE, CHART_TOOLTIP_BG, COMMON_TOOLTIP } from "./charts/chart-theme";
 import { costTokenSeries } from "./charts/cost-token-series";
+import { modelShareSeries } from "./charts/model-share-series";
 import { useEChart } from "./charts/use-echart";
 
 /** Cost count-up on mount — the figure ticks 0 → value over ~900ms.
@@ -216,7 +217,10 @@ export function AgentSpend() {
           </div>
           <LifetimeBlock lifetime={lifetime} />
           <hr className="spend-divider" />
-          <DailyUsageChart />
+          <div className="spend-charts">
+            <DailyUsageChart />
+            <ModelShareChart />
+          </div>
           <ModelTable />
         </>
       )}
@@ -386,10 +390,146 @@ function DailyUsageChart() {
   }, [days]);
 
   return (
-    <div style={{ marginTop: 16, marginLeft: "-1%", marginRight: "-1%" }}>
+    <div className="spend-chart">
       <div className="kpi-tile__label" style={{ marginBottom: 8, paddingLeft: "1%", paddingRight: "1%" }}>Daily cost &amp; tokens</div>
       {loading && <div className="skeleton" style={{ height: 220 }} />}
       <div ref={ref} style={{ width: "98%", margin: "0 auto", height: 220 }} aria-label="Daily cost and token trend chart" />
+    </div>
+  );
+}
+
+/** Top models by window tokens — line chart of the top 5 models plus an
+ *  Others rollup, ranked by TOTAL tokens in the selected window. Same
+ *  ECharts grammar as the cost/token chart (flush edges, same axes), one
+ *  token axis, family-coloured lines via model-share-series. The chart
+ *  container stays mounted across windows (the useEChart hook inits once);
+ *  an empty window shows a centered caption over the blank canvas. */
+function ModelShareChart() {
+  const ref = useRef<HTMLDivElement>(null);
+  const chartRef = useEChart(ref);
+  const [loading, setLoading] = useState(true);
+  const [points, setPoints] = useState<ModelSharePoint[] | null>(null);
+  const days = useDash((s) => s.days);
+  // Latest requested window — lets a slow response for an older window be
+  // discarded when the user switches 30 → 7 → 90 quickly.
+  const requestedDaysRef = useRef(days);
+  // Axis peak frozen per window like the sibling chart: deliberate window
+  // change rescales, the 30s poll within a window must not.
+  const peakRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    requestedDaysRef.current = days;
+    peakRef.current = null;
+  }, [days]);
+
+  useEffect(() => {
+    let disposed = false;
+    void loadModelShare(days).then((pts) => {
+      if (disposed || !chartRef.current || requestedDaysRef.current !== days) return;
+      setPoints(pts);
+      const built = modelShareSeries(pts);
+      if (!built) {
+        setLoading(false);
+        return;
+      }
+      if (peakRef.current === null) {
+        const peak = pts.reduce((m, p) => Math.max(m, ...p.models.map((x) => x.tokens)), 0);
+        peakRef.current = Math.max(1, niceCeil(peak));
+      }
+      const option: echarts.EChartsOption = {
+        animation: true,
+        animationDuration: 700,
+        animationEasing: "cubicOut",
+        backgroundColor: "transparent",
+        // Legend swatches read the top-level palette by series order —
+        // modelShareSeries returns it already aligned with its series.
+        color: [...built.palette],
+        grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
+        tooltip: {
+          ...COMMON_TOOLTIP,
+          ...touchAwareTooltip(),
+          axisPointer: { lineStyle: { color: "#2c3038" } },
+          formatter: (params: unknown) => {
+            const arr = params as Array<{ axisValue: string; seriesName: string; value: number; marker: string }>;
+            if (!arr.length) return "";
+            const full = fmtDayFull(arr[0].axisValue);
+            const rows = arr
+              .filter((p) => (p.value as number) > 0)
+              .sort((a, b) => (b.value as number) - (a.value as number))
+              .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${formatCompact(p.value as number)}</b>`);
+            return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
+          },
+        },
+        xAxis: {
+          type: "category",
+          boundaryGap: false,
+          data: pts.map((p) => p.date),
+          axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort },
+          axisLine: { lineStyle: { color: CHART_BORDER } },
+          axisTick: { show: false },
+        },
+        yAxis: {
+          type: "value",
+          min: 0,
+          max: peakRef.current,
+          axisLabel: {
+            color: CHART_AXIS_LABEL,
+            fontSize: 10,
+            fontFamily: '"JetBrains Mono", monospace',
+            formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
+          },
+          splitLine: { lineStyle: { color: CHART_SPLIT_LINE } },
+        },
+        legend: {
+          // Scroll legend: half-width panels with 6 series and long model
+          // names would wrap and collide with the grid — one scrolling row
+          // keeps the layout stable.
+          type: "scroll",
+          data: built.names,
+          orient: "horizontal",
+          top: 0,
+          right: 8,
+          icon: "circle",
+          itemWidth: 8,
+          itemHeight: 8,
+          itemGap: 12,
+          textStyle: { color: CHART_MUTED, fontSize: 11 },
+        },
+        media: [
+          {
+            query: { maxWidth: 480 },
+            option: {
+              grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
+              legend: { textStyle: { fontSize: 10 } },
+            },
+          },
+        ],
+        series: built.series,
+      };
+      chartRef.current?.setOption(option, true);
+      setLoading(false);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [days]);
+
+  // [] = loaded but no model rows in the window: keep the container mounted
+  // (the useEChart hook inits once) and caption the blank canvas.
+  const noData = points !== null && points.length === 0;
+
+  return (
+    <div className="spend-chart">
+      <div className="kpi-tile__label" style={{ marginBottom: 8, paddingLeft: "1%", paddingRight: "1%" }}>Top models by tokens</div>
+      {loading && !noData && <div className="skeleton" style={{ height: 220 }} />}
+      <div style={{ position: "relative", width: "98%", margin: "0 auto", height: 220 }}>
+        <div ref={ref} style={{ width: "100%", height: "100%" }} aria-label="Top models by token trend chart" />
+        {noData && (
+          <p className="state-label" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            No model telemetry in this window
+          </p>
+        )}
+      </div>
     </div>
   );
 }

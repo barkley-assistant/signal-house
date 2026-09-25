@@ -8,7 +8,7 @@ import { V1DatabaseRefusedError, ensureSchema, looksLikeV1Database } from "../..
 import { insertSnapshot, latestSnapshot, pruneSnapshots } from "../../src/db/snapshots";
 import { setLatestState, getLatestState, parsedLatestStates } from "../../src/db/latest-state";
 import { setRefreshMeta, getRefreshMeta, getRefreshMetaMany } from "../../src/db/refresh-meta";
-import { replaceDayForSource, backfillDaysForSource, replaceDayModelsForSource, queryDailyMetrics, queryDailyTrend, queryDailyModelTrend } from "../../src/db/daily-metrics";
+import { replaceDayForSource, backfillDaysForSource, replaceDayModelsForSource, queryDailyMetrics, queryDailyTrend, queryDailyModelTrend, queryDailyModelShare } from "../../src/db/daily-metrics";
 import { setPricingCachePath, resetPricingCache } from "../../src/server/model-pricing-fetcher";
 import { runRetention } from "../../src/db/retention";
 import { SCHEMA_VERSION } from "../../src/db/schema";
@@ -348,6 +348,79 @@ describe("getRefreshMetaMany batch reader", () => {
       const trend = await queryDailyModelTrend(db, "gpt-56-luna-20250815", date, date, { rates: new Map(), enabled: true });
       expect(trend).toHaveLength(1);
       expect(trend[0].cost).toBeCloseTo(2.0 + 12.0, 6); // dated rate (2.0/12.0), not the base (1.0/6.0)
+      owner2.close();
+    });
+  });
+
+  describe("queryDailyModelShare top-N rollup", () => {
+    test("ranks by window tokens, rolls the rest into Others, 0-fills every day", async () => {
+      const owner2 = openMemoryDatabase();
+      const db = owner2.db;
+      // replaceDayForSource wipes the (date, source) day, so every day's
+      // rows must be written in ONE call per date.
+      const days = new Map<string, Array<{ date: string; metric: string; value: number; tags: { model: string } }>>();
+      const seed: Array<{ date: string; model: string; input: number; output: number }> = [
+        { date: "2026-09-01", model: "DeepSeek-V4-Pro", input: 1_000_000, output: 500_000 },
+        { date: "2026-09-01", model: "deepseek-v4-flash", input: 300_000, output: 100_000 },
+        { date: "2026-09-01", model: "gpt-6-sol-900k", input: 200_000, output: 100_000 },
+        { date: "2026-09-01", model: "kimi-k2.7-code", input: 100_000, output: 50_000 },
+        { date: "2026-09-01", model: "GLM-5.2", input: 90_000, output: 10_000 },
+        { date: "2026-09-01", model: "mimo-v2.5", input: 80_000, output: 10_000 },
+        { date: "2026-09-02", model: "DeepSeek-V4-Pro", input: 2_000_000, output: 1_000_000 },
+        { date: "2026-09-02", model: "gpt-6-sol", input: 1_000_000, output: 500_000 },
+        { date: "2026-09-02", model: "GLM-5.2", input: 500_000, output: 100_000 },
+        { date: "2026-09-03", model: "DeepSeek-V4-Pro", input: 1_000_000, output: 1_000_000 },
+        { date: "2026-09-03", model: "mimo-v2.5", input: 400_000, output: 100_000 },
+      ];
+      for (const row of seed) {
+        const list = days.get(row.date) ?? [];
+        list.push(
+          { date: row.date, metric: "model.tokens_input", value: row.input, tags: { model: row.model } },
+          { date: row.date, metric: "model.tokens_output", value: row.output, tags: { model: row.model } },
+        );
+        days.set(row.date, list);
+      }
+      for (const [date, rows] of days) {
+        replaceDayForSource(db, date, "hermes", rows);
+      }
+
+      const points = await queryDailyModelShare(db, "2026-09-01", "2026-09-03", { rates: new Map(), enabled: false }, 5);
+      expect(points).toHaveLength(3);
+
+      // Window totals: pro 6.5M > gpt-6-sol 1.8M > glm 0.7M > mimo 0.59M > flash 0.4M; kimi 0.15M → Others.
+      const keys = points[0].models.map((m) => m.key);
+      expect(keys).toEqual(["deepseek-v4-pro", "gpt-6-sol", "glm-52", "mimo-v25", "deepseek-v4-flash", "__others__"]);
+
+      // Labels/families resolve through the model map — including the 900k
+      // spelling, which must roll up to the base GPT 6 Sol entry.
+      const sol = points[0].models[1];
+      expect(sol.label).toBe("GPT 6 Sol");
+      expect(sol.family).toBe("OpenAI");
+      expect(points[0].models[0].family).toBe("DeepSeek");
+      expect(points[0].models[5].label).toBe("Others");
+      expect(points[0].models[5].family).toBeNull();
+
+      // Day 1: pro 1.5M, sol 300k, glm 100k, mimo 90k, flash 400k, others(kimi) 150k.
+      expect(points[0].models.map((m) => m.tokens)).toEqual([1_500_000, 300_000, 100_000, 90_000, 400_000, 150_000]);
+      // Day 2: pro 3M, sol 1.5M (bare spelling merged with the 900k key), glm 600k; flash/mimo/kimi idle → 0.
+      expect(points[1].models.map((m) => m.tokens)).toEqual([3_000_000, 1_500_000, 600_000, 0, 0, 0]);
+      // Day 3: pro 2M, mimo 500k; the rest idle → 0.
+      expect(points[2].models.map((m) => m.tokens)).toEqual([2_000_000, 0, 0, 500_000, 0, 0]);
+      owner2.close();
+    });
+
+    test("no Others series when everything fits in the top N", async () => {
+      const owner2 = openMemoryDatabase();
+      const db = owner2.db;
+      replaceDayForSource(db, "2026-09-01", "hermes", [
+        { date: "2026-09-01", metric: "model.tokens_input", value: 1_000_000, tags: { model: "deepseek-v4-pro" } },
+        { date: "2026-09-01", metric: "model.tokens_input", value: 100_000, tags: { model: "gpt-6-sol" } },
+      ]);
+      const points = await queryDailyModelShare(db, "2026-09-01", "2026-09-02", { rates: new Map(), enabled: false }, 5);
+      expect(points).toHaveLength(2);
+      expect(points[0].models.map((m) => m.key)).toEqual(["deepseek-v4-pro", "gpt-6-sol"]);
+      // The idle second day still carries both series 0-filled.
+      expect(points[1].models.map((m) => m.tokens)).toEqual([0, 0]);
       owner2.close();
     });
   });

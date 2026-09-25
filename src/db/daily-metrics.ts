@@ -10,7 +10,7 @@
 import type { Database } from "bun:sqlite";
 import type { CostEstimationOpts, DailyWrite } from "../shared/types";
 import { costFromTokens, usageSourceClause } from "../shared/types";
-import { canonicalMachineKey, machineKey, stripDateSnapshot } from "../shared/models";
+import { canonicalMachineKey, machineKey, modelFamily, modelLabel, stripDateSnapshot } from "../shared/models";
 import { utcDayRange } from "../shared/dates";
 import { fetchAllRates, type ModelRates } from "../server/model-pricing";
 
@@ -380,6 +380,156 @@ export async function queryDailyModelTrend(
         cacheRead: t.cacheRead,
       };
     });
+}
+
+/**
+ * Per-model daily token trend for the "most used models" chart. Ranks every
+ * canonical model key by TOTAL tokens in the window, keeps the top N as
+ * individual series and rolls the remainder into an "Others" series — the
+ * same window shape /api/daily/spend and /api/daily/model speak.
+ *
+ * Every returned day carries ALL series (0-filled), so the client paints
+ * lines across the full window without day-presence special-casing. Series
+ * order is the rank order (highest window tokens first), Others last when
+ * it has any tokens at all.
+ *
+ * Labels/families come from the shared model map (modelLabel/modelFamily),
+ * so the chart's legend matches the by-model table's display names.
+ */
+export interface ModelShareEntry {
+  /** Canonical machine key — stable across spellings/date-snapshot variants. */
+  key: string;
+  /** Friendly display label from the model map. */
+  label: string;
+  /** Family label (DeepSeek, OpenAI, …) or null for the Others rollup. */
+  family: string | null;
+  tokens: number;
+}
+
+export interface ModelSharePoint {
+  date: string;
+  models: ModelShareEntry[];
+}
+
+export async function queryDailyModelShare(
+  db: Database,
+  from: string,
+  to: string,
+  costOpts: CostEstimationOpts,
+  topN: number,
+): Promise<ModelSharePoint[]> {
+  const perModelRows = db
+    .query(
+      `SELECT date,
+              json_extract(tags, '$.model') AS model,
+              SUM(CASE WHEN metric = 'model.tokens_input'       THEN value END) AS inputTokens,
+              SUM(CASE WHEN metric = 'model.tokens_output'      THEN value END) AS outputTokens,
+              SUM(CASE WHEN metric = 'model.tokens_cache_read'  THEN value END) AS cacheReadTokens,
+              SUM(CASE WHEN metric = 'model.tokens_cache_write' THEN value END) AS cacheWriteTokens,
+              SUM(CASE WHEN metric = 'model.tokens_reasoning'   THEN value END) AS reasoningTokens
+       FROM daily_metrics
+       WHERE date >= ? AND date <= ?
+         AND ${usageSourceClause()}
+         AND metric LIKE 'model.tokens_%'
+       GROUP BY date, json_extract(tags, '$.model')`,
+    )
+    .all(from, to) as Array<{
+      date: string;
+      model: string | null;
+      inputTokens: number | null;
+      outputTokens: number | null;
+      cacheReadTokens: number | null;
+      cacheWriteTokens: number | null;
+      reasoningTokens: number | null;
+    }>;
+
+  // Per (date, canonical key) token sums. Keys may span several raw
+  // spellings; the first spelling seen provides the label/family (all
+  // spellings of one key resolve to the same map entry).
+  const byDateKey = new Map<string, Map<string, { tokens: number; raw: string }>>();
+  for (const row of perModelRows) {
+    if (!row.model) continue;
+    const key = canonicalMachineKey(row.model);
+    const tokens =
+      (row.inputTokens ?? 0) +
+      (row.outputTokens ?? 0) +
+      (row.cacheReadTokens ?? 0) +
+      (row.cacheWriteTokens ?? 0) +
+      (row.reasoningTokens ?? 0);
+    let byKey = byDateKey.get(row.date);
+    if (!byKey) {
+      byKey = new Map();
+      byDateKey.set(row.date, byKey);
+    }
+    const acc = byKey.get(key);
+    if (acc) {
+      acc.tokens += tokens;
+    } else {
+      byKey.set(key, { tokens, raw: row.model });
+    }
+  }
+
+  // Window totals per key — the ranking the user asked for ("most used
+  // models by total token" over the selected window).
+  const windowTotals = new Map<string, number>();
+  for (const byKey of byDateKey.values()) {
+    for (const [key, acc] of byKey) {
+      windowTotals.set(key, (windowTotals.get(key) ?? 0) + acc.tokens);
+    }
+  }
+  const ranked = [...windowTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([key]) => key);
+  const rankedSet = new Set(ranked);
+
+  // Representative raw spelling per ranked key (first day encountered).
+  const rawByKey = new Map<string, string>();
+  for (const day of [...byDateKey.keys()].sort()) {
+    const byKey = byDateKey.get(day)!;
+    for (const key of ranked) {
+      const acc = byKey.get(key);
+      if (acc && !rawByKey.has(key)) rawByKey.set(key, acc.raw);
+    }
+  }
+
+  // Every day carries every series, 0-filled where a model was inactive.
+  const days = utcDayRange(from, to);
+  const othersTokens = new Map<string, number>();
+  const points: ModelSharePoint[] = days.map((day) => {
+    const byKey = byDateKey.get(day) ?? new Map<string, { tokens: number; raw: string }>();
+    const models: ModelShareEntry[] = ranked.map((key) => {
+      const acc = byKey.get(key);
+      return {
+        key,
+        label: modelLabel(rawByKey.get(key) ?? key),
+        family: modelFamily(rawByKey.get(key) ?? key),
+        tokens: acc?.tokens ?? 0,
+      };
+    });
+    let others = 0;
+    for (const [key, acc] of byKey) {
+      if (!rankedSet.has(key)) others += acc.tokens;
+    }
+    othersTokens.set(day, others);
+    if (others > 0) {
+      models.push({ key: "__others__", label: "Others", family: null, tokens: others });
+    }
+    return { date: day, models };
+  });
+
+  // If "Others" has tokens at all, keep its series on every day (0 on days
+  // where nothing fell outside the top N) so the line spans the window.
+  const anyOthers = [...othersTokens.values()].some((t) => t > 0);
+  if (anyOthers) {
+    for (const point of points) {
+      if (!point.models.some((m) => m.key === "__others__")) {
+        point.models.push({ key: "__others__", label: "Others", family: null, tokens: othersTokens.get(point.date) ?? 0 });
+      }
+    }
+  }
+
+  return points;
 }
 
 /** All distinct (date, source) pairs that have ANY rows in range. */

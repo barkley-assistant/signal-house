@@ -12,7 +12,7 @@ import { json, jsonError } from "../shared/http";
 import { buildState } from "./build-state";
 import { buildDiagnostics } from "../diagnostics/sources";
 import { setRefreshMeta } from "../db/refresh-meta";
-import { queryDailyTrend, queryDailyModelTrend } from "../db/daily-metrics";
+import { queryDailyTrend, queryDailyModelTrend, queryDailyModelShare } from "../db/daily-metrics";
 import { utcDay, utcDaysAgo } from "../shared/dates";
 import { buildDeliveryTrend } from "../metrics/delivery";
 import { ensureHostMetricsFresh, getHostMetricsPoints } from "../server/host-metrics-fetcher";
@@ -90,6 +90,26 @@ export async function dailyModelTrendHandler(deps: ApiDeps, req: Request): Promi
     ? await queryDailyModelTrend(deps.db, key, from, to, costOpts)
     : [];
   return json(req, { key, from, to, days, points });
+}
+
+/** GET /api/daily/model-share — top-N models by window tokens plus an
+ *  Others rollup, per day. Powers the "most used models" line chart next
+ *  to the cost/token trend. Same window semantics as /api/daily/spend;
+ *  `top` defaults to 5 (clamped 1..12). Token-only: the ranking and the
+ *  chart are about usage volume, cost stays on the sibling charts. */
+export async function dailyModelShareHandler(deps: ApiDeps, req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const days = parseWindowDays(url.searchParams.get("days"));
+  const to = url.searchParams.get("to") ?? utcDay();
+  const from = url.searchParams.get("from") ?? utcDaysAgo(days);
+  const rawTop = Number(url.searchParams.get("top") ?? 5);
+  const top = Number.isFinite(rawTop) ? Math.min(12, Math.max(1, Math.round(rawTop))) : 5;
+  const costOpts: CostEstimationOpts = {
+    rates: new Map(),
+    enabled: deps.config.estimateCosts,
+  };
+  const points = await queryDailyModelShare(deps.db, from, to, costOpts, top);
+  return json(req, { top, from, to, days, points });
 }
 
 /** GET /api/daily/delivery — per-day CI pass-rate + commits + PRs-merged for the

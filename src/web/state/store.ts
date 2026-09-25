@@ -207,6 +207,27 @@ export async function loadModelTrend(days: WindowDays, key: string): Promise<Mod
   }
 }
 
+export interface ModelSharePoint {
+  date: string;
+  models: Array<{
+    key: string;
+    label: string;
+    family: string | null;
+    tokens: number;
+  }>;
+}
+
+/** Load the top-models-by-tokens daily share trend for the Agent Spend
+ *  chart. Empty array on failure — the chart hides rather than erroring. */
+export async function loadModelShare(days: WindowDays): Promise<ModelSharePoint[]> {
+  try {
+    const res = await fetchJson<{ points: ModelSharePoint[] }>(`/api/daily/model-share?days=${days}`);
+    return res.points;
+  } catch {
+    return [];
+  }
+}
+
 export interface DeliveryPoint {
   date: string;
   ci: {
