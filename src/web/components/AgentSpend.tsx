@@ -433,7 +433,13 @@ function ModelShareChart() {
         return;
       }
       if (peakRef.current === null) {
-        const peak = pts.reduce((m, p) => Math.max(m, ...p.models.map((x) => x.tokens)), 0);
+        // Stacked areas: the y-axis must span the day's TOTAL (the stack
+        // top), not the largest single model — otherwise the stack
+        // overflows the plot.
+        const peak = pts.reduce((m, p) => {
+          const dayTotal = p.models.reduce((s, x) => s + x.tokens, 0);
+          return Math.max(m, dayTotal);
+        }, 0);
         peakRef.current = Math.max(1, niceCeil(peak));
       }
       const option: echarts.EChartsOption = {
@@ -453,11 +459,16 @@ function ModelShareChart() {
             const arr = params as Array<{ axisValue: string; seriesName: string; value: number; marker: string }>;
             if (!arr.length) return "";
             const full = fmtDayFull(arr[0].axisValue);
+            const total = arr.reduce((s, p) => s + ((p.value as number) || 0), 0);
             const rows = arr
               .filter((p) => (p.value as number) > 0)
               .sort((a, b) => (b.value as number) - (a.value as number))
-              .map((p) => `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${formatCompact(p.value as number)}</b>`);
-            return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
+              .map((p) => {
+                const share = total > 0 ? (((p.value as number) / total) * 100).toFixed(1) : "0.0";
+                return `${p.marker} ${p.seriesName}: <b style="color:#e2e8f0">${formatCompact(p.value as number)}</b> <span style="color:#94a3b8">(${share}%)</span>`;
+              });
+            const totalRow = `<div style="border-top:1px solid #232732;margin:5px 0 0;padding-top:5px;color:#e2e8f0">Total: <b>${formatCompact(total)}</b></div>`;
+            return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}${totalRow}`;
           },
         },
         xAxis: {

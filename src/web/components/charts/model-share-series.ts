@@ -27,15 +27,17 @@ export interface ModelShareSeriesDay {
 }
 
 export interface ModelShareSeries {
-  /** One line series per model, in rank order (Others last). */
+  /** One stacked-area series per model, in rank order (Others last). */
   series: Array<{
     name: string;
     type: "line";
+    stack: "tokens";
     data: number[];
     smooth: number;
     showSymbol: boolean;
     lineStyle: { color: string; width: number };
     itemStyle: { color: string };
+    areaStyle: { color: string; opacity: number };
   }>;
   /** Palette in EXACT series order — set as the chart's top-level `color`
    *  so legend swatches match the lines. */
@@ -61,11 +63,17 @@ export function modelShareSeries(points: ReadonlyArray<ModelShareSeriesDay>): Mo
   const series = models.map((model, si) => ({
     name: model.label,
     type: "line" as const,
+    // Stacked areas: the top edge of the stack IS the window total, and
+    // each band shows its model's share without lines tangling. Rank order
+    // (biggest window total first) puts the dominant model on the stable
+    // bottom band.
+    stack: "tokens" as const,
     data: points.map((p) => p.models[si]?.tokens ?? 0),
     smooth: 0.3,
     showSymbol: false,
-    lineStyle: { color: colors[si], width: 2 },
+    lineStyle: { color: colors[si], width: 1.5 },
     itemStyle: { color: colors[si] },
+    areaStyle: { color: colors[si], opacity: 0.8 },
   }));
 
   return {

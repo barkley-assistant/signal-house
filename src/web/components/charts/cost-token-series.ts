@@ -17,8 +17,10 @@ export interface CostTokenPoint {
   cacheRead: number | null;
 }
 
-/** Area-fill alphas follow the shared chart language: lead blue 0.12, the
- *  other two 0.08. */
+/** Area-fill alphas follow the shared chart language: lead blue 0.10, the
+ *  token series 0.08. Cache read deliberately has NO area — it is part of
+ *  the token total, so a third translucent fill would just stack mud over
+ *  the token area; a dashed line reads as the subordinate component. */
 export function costTokenSeries(points: ReadonlyArray<CostTokenPoint>): NonNullable<echarts.EChartsOption["series"]> {
   return [
     {
@@ -27,8 +29,10 @@ export function costTokenSeries(points: ReadonlyArray<CostTokenPoint>): NonNulla
       data: points.map((p) => (p.cost === null ? null : Number(p.cost.toFixed(2)))),
       smooth: 0.3,
       showSymbol: false,
-      lineStyle: { color: CHART_PALETTE[0], width: 2 },
-      areaStyle: { color: hexWithAlpha(CHART_PALETTE[0], 0.12) },
+      // The cost series is the hero of this panel: thickest line so it
+      // survives the dual-axis muddle instead of hiding behind tokens.
+      lineStyle: { color: CHART_PALETTE[0], width: 2.5 },
+      areaStyle: { color: hexWithAlpha(CHART_PALETTE[0], 0.1) },
     },
     {
       name: "Tokens",
@@ -47,8 +51,7 @@ export function costTokenSeries(points: ReadonlyArray<CostTokenPoint>): NonNulla
       data: points.map((p) => p.cacheRead),
       smooth: 0.3,
       showSymbol: false,
-      lineStyle: { color: CHART_PALETTE[2], width: 2 },
-      areaStyle: { color: hexWithAlpha(CHART_PALETTE[2], 0.08) },
+      lineStyle: { color: CHART_PALETTE[2], width: 1.5, type: "dashed" },
     },
   ];
 }

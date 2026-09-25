@@ -35,10 +35,11 @@ describe("modelShareSeries", () => {
     expect(built.palette[2]).toBe("#e2e8f0"); // OpenAI family colour
     expect(built.palette[3]).toBe("#71717a"); // Others neutral
     expect(built.series).toHaveLength(4);
-    expect(built.series[0]).toMatchObject({ name: "DeepSeek V4 Pro", type: "line" });
+    expect(built.series[0]).toMatchObject({ name: "DeepSeek V4 Pro", type: "line", stack: "tokens" });
     expect(built.series[0].data).toEqual([1_000_000, 2_000_000]);
     expect(built.series[3].data).toEqual([150_000, 0]);
     expect(built.series[0].lineStyle?.color).toBe("#38bdf8");
+    expect(built.series[0].areaStyle).toEqual({ color: "#38bdf8", opacity: 0.8 });
   });
 
   test("returns null for an empty window", () => {
