@@ -32,11 +32,13 @@ export const FAMILY_FIRST_COLORS: Record<string, string> = {
 };
 
 /** High-contrast ring for same-family repeats. Order matters: earlier
- *  entries are picked first, skipping anything already used in the chart. */
+ *  entries are picked first, skipping anything already used in the chart.
+ *  Greens/teals are pushed late — with DeepSeek (cyan) and z.ai (teal)
+ *  often both on screen, an early green repeat reads as a third blue-green. */
 export const FALLBACK_RING: readonly string[] = [
   "#f472b6", // pink
   "#facc15", // yellow
-  "#4ade80", // green
+  "#c084fc", // violet
   "#fb923c", // orange
   "#22d3ee", // cyan
   "#a3e635", // lime
@@ -44,8 +46,8 @@ export const FALLBACK_RING: readonly string[] = [
   "#818cf8", // indigo
   "#e879f9", // fuchsia
   "#fbbf24", // amber
+  "#4ade80", // green
   "#2dd4bf", // teal
-  "#c084fc", // violet
 ];
 
 /** The Others rollup — a distinct neutral, darker than the OpenAI greys. */
