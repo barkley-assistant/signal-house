@@ -549,8 +549,9 @@ function ModelShareChart() {
   return (
     <div className="spend-chart">
       <div className="kpi-tile__label" style={{ marginBottom: 8, paddingLeft: "1%", paddingRight: "1%" }}>Top models by tokens</div>
-      {loading && !noData && <div className="skeleton" style={{ height: 220 }} />}
-      <div style={{ position: "relative", width: "98%", margin: "0 auto", height: 220 }}>
+      {loading && !noData && <div className="skeleton" style={{ height: 300 }} />}
+      {/* Same height as the cost chart — the two stacked charts should read as one column. */}
+      <div style={{ position: "relative", width: "98%", margin: "0 auto", height: 300 }}>
         <div ref={ref} style={{ width: "100%", height: "100%" }} aria-label="Top models by token trend chart" />
         {noData && (
           <p className="state-label" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
