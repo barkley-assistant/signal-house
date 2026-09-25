@@ -38,13 +38,13 @@ export const FAMILY_FIRST_COLORS: Record<string, string> = {
 export const FALLBACK_RING: readonly string[] = [
   "#f472b6", // pink
   "#facc15", // yellow
-  "#c084fc", // violet
+  "#818cf8", // indigo
   "#fb923c", // orange
   "#22d3ee", // cyan
   "#a3e635", // lime
   "#f87171", // red
-  "#818cf8", // indigo
   "#e879f9", // fuchsia
+  "#c084fc", // violet
   "#fbbf24", // amber
   "#4ade80", // green
   "#2dd4bf", // teal
