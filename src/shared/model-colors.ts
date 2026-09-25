@@ -17,7 +17,9 @@ export const FAMILY_FIRST_COLORS: Record<string, string> = {
   OpenAI: "#e2e8f0",
   Anthropic: "#fb923c",
   Qwen: "#a78bfa",
-  "z.ai": "#2dd4bf",
+  // z.ai deliberately NOT teal: DeepSeek owns cyan-blue, and the two
+  // families regularly sit adjacent in the stack — teal read as a second blue.
+  "z.ai": "#22c55e",
   Google: "#22d3ee",
   Moonshot: "#f472b6",
   Meta: "#818cf8",
