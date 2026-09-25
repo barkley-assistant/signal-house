@@ -10,7 +10,7 @@ export const CHART_GREEN = "#4ade80";
 export const CHART_MUTED = "#94a3b8";
 export const CHART_AXIS_LABEL = "#64748b";
 export const CHART_BORDER = "#232732";
-export const CHART_SPLIT_LINE = "rgba(35, 39, 50, 0.6)";
+export const CHART_SPLIT_LINE = "rgba(35, 39, 50, 0.85)";
 export const CHART_TOOLTIP_BG = "rgba(17, 19, 24, 0.96)";
 
 /** The shared accent palette in series order. ECharts 5 indexes the

@@ -38,7 +38,8 @@ describe("modelShareSeries", () => {
     expect(built.series[0]).toMatchObject({ name: "DeepSeek V4 Pro", type: "line", stack: "tokens" });
     expect(built.series[0].data).toEqual([1_000_000, 2_000_000]);
     expect(built.series[3].data).toEqual([150_000, 0]);
-    expect(built.series[0].lineStyle?.color).toBe("#38bdf8");
+    // Band edge strokes are darkened copies of the fill for crisp seams.
+    expect(built.series[0].lineStyle?.color).toBe("#2888b3");
     expect(built.series[0].areaStyle).toEqual({ color: "#38bdf8", opacity: 0.8 });
   });
 

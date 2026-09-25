@@ -668,7 +668,11 @@ describe("AgentSpend", () => {
     expect(option).toBeTruthy();
     // boundaryGap: false puts the first/last points flush to the plot edges;
     // the default (true) insets them by half a band, leaving the trailing gap.
-    expect((option?.xAxis as { boundaryGap?: boolean } | undefined)?.boundaryGap).toBe(false);
+    // The daily chart now splits cost/tokens across two x axes (one per
+    // pane) — every pane must keep the flush-edge contract.
+    const xAxes = option?.xAxis as Array<{ boundaryGap?: boolean }> | undefined;
+    expect(Array.isArray(xAxes)).toBe(true);
+    expect(xAxes?.every((x) => x.boundaryGap === false)).toBe(true);
   });
 });
 

@@ -295,13 +295,20 @@ function DailyUsageChart() {
       };
       // ECharts 5 indexes the top-level palette (not series.lineStyle.color)
       // for legend swatches, so this order MUST match the series array order.
+      // Two panes: cost on top (its own $ scale — a ribbon skimming the
+      // baseline of a shared canvas read as noise), tokens+cache below.
+      // Panes share the x category via axisPointer.link, so hovering either
+      // highlights the same day in both.
       const series: echarts.EChartsOption = {
         animation: true,
         animationDuration: 700,
         animationEasing: "cubicOut",
         backgroundColor: "transparent",
         color: [...CHART_PALETTE],
-        grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
+        grid: [
+          { left: 8, right: 28, top: 40, height: "36%", containLabel: true },
+          { left: 8, right: 28, top: "52%", bottom: 24, containLabel: true },
+        ],
         tooltip: {
           ...COMMON_TOOLTIP,
           ...touchAwareTooltip(),
@@ -319,18 +326,29 @@ function DailyUsageChart() {
             return `<div style="margin-bottom:4px;color:#e2e8f0;font-weight:600">${full}</div>${rows.join("<br/>")}`;
           },
         },
-        xAxis: {
-          type: "category",
-          // boundaryGap defaults to true for category axes, which insets the
-          // first and last points by half a band on each side. That half-band
-          // slack is the trailing whitespace at the latest date — set it false
-          // so the line's first/last points sit flush to both plot edges.
-          boundaryGap: false,
-          data: dates,
-          axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort },
-          axisLine: { lineStyle: { color: CHART_BORDER } },
-          axisTick: { show: false },
-        },
+        axisPointer: { link: [{ xAxisIndex: "all" }] },
+        xAxis: [
+          {
+            type: "category",
+            // boundaryGap defaults to true for category axes, which insets the
+            // first and last points by half a band on each side. That half-band
+            // slack is the trailing whitespace at the latest date — set it false
+            // so the line's first/last points sit flush to both plot edges.
+            boundaryGap: false,
+            data: dates,
+            axisLabel: { show: false },
+            axisLine: { show: false },
+            axisTick: { show: false },
+          },
+          {
+            type: "category",
+            boundaryGap: false,
+            data: dates,
+            axisLabel: { color: CHART_AXIS_LABEL, fontSize: 10, formatter: fmtDayShort },
+            axisLine: { lineStyle: { color: CHART_BORDER } },
+            axisTick: { show: false },
+          },
+        ],
         yAxis: [
           {
             type: "value",
@@ -349,7 +367,7 @@ function DailyUsageChart() {
               fontFamily: '"JetBrains Mono", monospace',
               formatter: (v: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v),
             },
-            splitLine: { show: false },
+            splitLine: { lineStyle: { color: CHART_SPLIT_LINE } },
           },
         ],
         legend: {
@@ -367,18 +385,22 @@ function DailyUsageChart() {
           textStyle: { color: CHART_MUTED, fontSize: 11 },
         },
         // Media queries: on narrow screens, shrink the label gutters so the
-        // dual-axis plot keeps as much width as possible (ECharts responsive
-        // pattern — see handbook "Responsive Mobile-End").
+        // panes keep as much width as possible (ECharts responsive pattern
+        // — see handbook "Responsive Mobile-End").
         media: [
           {
             query: { maxWidth: 480 },
             option: {
-              grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
+              grid: [
+                { left: 8, right: 28, top: 40, height: "36%", containLabel: true },
+                { left: 8, right: 28, top: "52%", bottom: 24, containLabel: true },
+              ],
               legend: { textStyle: { fontSize: 10 } },
             },
           },
         ],
-        series: costTokenSeries(points),
+        // Cost pane 0, tokens+cache pane 1 (grid/xAxis/yAxis indexes above).
+        series: costTokenSeries(points, { costX: 0, costY: 0, tokensX: 1, tokensY: 1 }),
       };
       chartRef.current?.setOption(series, true);
       chartRef.current?.on("legendselectchanged", onLegendToggle);
@@ -392,8 +414,8 @@ function DailyUsageChart() {
   return (
     <div className="spend-chart">
       <div className="kpi-tile__label" style={{ marginBottom: 8, paddingLeft: "1%", paddingRight: "1%" }}>Daily cost &amp; tokens</div>
-      {loading && <div className="skeleton" style={{ height: 220 }} />}
-      <div ref={ref} style={{ width: "98%", margin: "0 auto", height: 220 }} aria-label="Daily cost and token trend chart" />
+      {loading && <div className="skeleton" style={{ height: 300 }} />}
+      <div ref={ref} style={{ width: "98%", margin: "0 auto", height: 300 }} aria-label="Daily cost and token trend chart" />
     </div>
   );
 }
@@ -450,7 +472,7 @@ function ModelShareChart() {
         // Legend swatches read the top-level palette by series order —
         // modelShareSeries returns it already aligned with its series.
         color: [...built.palette],
-        grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
+        grid: { left: 8, right: 28, top: 48, bottom: 28, containLabel: true },
         tooltip: {
           ...COMMON_TOOLTIP,
           ...touchAwareTooltip(),
@@ -510,7 +532,7 @@ function ModelShareChart() {
           {
             query: { maxWidth: 480 },
             option: {
-              grid: { left: 8, right: 8, top: 48, bottom: 28, containLabel: true },
+              grid: { left: 8, right: 28, top: 48, bottom: 28, containLabel: true },
               legend: { textStyle: { fontSize: 10 } },
             },
           },

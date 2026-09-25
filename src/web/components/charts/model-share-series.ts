@@ -14,6 +14,16 @@
 import * as echarts from "echarts";
 import { modelChartColors } from "../../../shared/model-colors";
 
+/** Darken a hex colour by `factor` (0.72 → ~28% darker) for band-edge
+ *  strokes — the same hue, clearly separated from the fill above it. */
+function darken(hex: string, factor: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * factor);
+  const g = Math.round(((n >> 8) & 255) * factor);
+  const b = Math.round((n & 255) * factor);
+  return `#${(((r << 16) | (g << 8) | b).toString(16)).padStart(6, "0")}`;
+}
+
 export interface ModelShareSeriesPoint {
   key: string;
   label: string;
@@ -60,21 +70,27 @@ export function modelShareSeries(points: ReadonlyArray<ModelShareSeriesDay>): Mo
   // free high-contrast ring colour (see model-colors.ts).
   const colors = modelChartColors(models);
 
-  const series = models.map((model, si) => ({
-    name: model.label,
-    type: "line" as const,
-    // Stacked areas: the top edge of the stack IS the window total, and
-    // each band shows its model's share without lines tangling. Rank order
-    // (biggest window total first) puts the dominant model on the stable
-    // bottom band.
-    stack: "tokens" as const,
-    data: points.map((p) => p.models[si]?.tokens ?? 0),
-    smooth: 0.3,
-    showSymbol: false,
-    lineStyle: { color: colors[si], width: 1.5 },
-    itemStyle: { color: colors[si] },
-    areaStyle: { color: colors[si], opacity: 0.8 },
-  }));
+  const series = models.map((model, si) => {
+    const fill = colors[si];
+    // The stroke is a darkened copy of the fill so adjacent bands keep a
+    // crisp edge instead of fusing into a muddy gradient where they meet.
+    const edge = darken(fill, 0.72);
+    return {
+      name: model.label,
+      type: "line" as const,
+      // Stacked areas: the top edge of the stack IS the window total, and
+      // each band shows its model's share without lines tangling. Rank order
+      // (biggest window total first) puts the dominant model on the stable
+      // bottom band.
+      stack: "tokens" as const,
+      data: points.map((p) => p.models[si]?.tokens ?? 0),
+      smooth: 0.3,
+      showSymbol: false,
+      lineStyle: { color: edge, width: 1.5 },
+      itemStyle: { color: fill },
+      areaStyle: { color: fill, opacity: 0.8 },
+    };
+  });
 
   return {
     series,
